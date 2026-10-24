@@ -1,0 +1,16 @@
+name: Project setup
+
+# Creates the Projects of .github/projects.json that don't exist yet. Started by
+# hand once a new entry is on main.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  project-setup:
+    name: Project setup
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-project-setup.yml@main
+    secrets:
+      PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}

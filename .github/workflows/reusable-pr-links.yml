@@ -1,0 +1,80 @@
+name: PR Links
+
+# Reusable: fails a pull request whose title, description, commit messages or
+# comments link anywhere but GitHub and the owner's GitHub Pages site.
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
+        type: string
+        default: '"ubuntu-latest"'
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  github-links-only:
+    # Dependabot's descriptions and commit messages link to the release notes
+    # of each dependency.
+    # Skipping the job still reports the check as passed. A comment on an issue
+    # that is not a pull request is not checked.
+    if: >-
+      (github.event.pull_request.user.login || github.event.issue.user.login) != 'dependabot[bot]' &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request)
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    steps:
+      - name: Check PR title, description, commit messages and comments link only to GitHub
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // The texts are read as data from the API; they never reach a shell. The
+            // PR is fetched fresh, as a re-run of an older run would otherwise
+            // check the title and description it started with.
+            const pull_number = (context.payload.pull_request ?? context.payload.issue).number;
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number });
+            const body = pr.body || '';
+            // What GitHub turns into a link: a URL with a scheme, or one starting with www.
+            const link = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]"'`]+/gi;
+            const host = (url) => {
+              try {
+                return new URL(/^www\./i.test(url) ? `https://${url}` : url).hostname.toLowerCase();
+              } catch {
+                return '';
+              }
+            };
+            // The owner's GitHub Pages site, for demos and docs.
+            const pages = `${context.repo.owner.toLowerCase()}.github.io`;
+            const onGitHub = (h) =>
+              h === 'github.com' || h.endsWith('.github.com') || h.endsWith('.githubusercontent.com') ||
+              h === pages;
+
+            const linksOutside = (text, where) =>
+              text.split(/\r?\n/).flatMap((line, i) =>
+                [...line.matchAll(link)]
+                  .map(m => m[0])
+                  .filter(url => !onGitHub(host(url)))
+                  .map(url => `${where}, line ${i + 1}: ${url}`));
+
+            const everyPage = (list, params) => github.paginate(list, { ...context.repo, ...params, per_page: 100 });
+            const commits = await everyPage(github.rest.pulls.listCommits, { pull_number });
+            // The comments, the reviews and the comments on lines of the diff.
+            const comments = await everyPage(github.rest.issues.listComments, { issue_number: pull_number });
+            const reviews = await everyPage(github.rest.pulls.listReviews, { pull_number });
+            const reviewComments = await everyPage(github.rest.pulls.listReviewComments, { pull_number });
+            const hits = [
+              ...linksOutside(pr.title, 'title'),
+              ...linksOutside(body, 'description'),
+              ...commits.flatMap(c => linksOutside(c.commit.message, `commit ${c.sha.slice(0, 7)}`)),
+              ...comments.flatMap(c => linksOutside(c.body || '', `comment ${c.html_url}`)),
+              ...reviews.flatMap(r => linksOutside(r.body || '', `review ${r.html_url}`)),
+              ...reviewComments.flatMap(c => linksOutside(c.body || '', `review comment ${c.html_url}`))
+            ];
+
+            if (hits.length > 0) {
+              core.setFailed(`PR links outside GitHub; edit the title, description or comment, or reword the commits and the check re-runs:\n${hits.join('\n')}`);
+            } else {
+              console.log(`PR title, description, ${commits.length} commit message(s), ${comments.length} comment(s), ${reviews.length} review(s) and ${reviewComments.length} review comment(s) link only to GitHub.`);
+            }

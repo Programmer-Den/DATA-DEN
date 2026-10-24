@@ -1,0 +1,60 @@
+name: Bug report
+description: Something is broken, crashes, shows an error, or runs slowly.
+title: "[Bug] "
+labels: ["bugfix"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part is this about? The Issue labels workflow adds the matching Area label.
+      # The options are the names of the Area labels in .github/labels.json.
+      # Keep "not sure" last and raise the default with it, so an issue never
+      # lands in an area by accident.
+      options:
+        - repo
+        - not sure
+      default: 1
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Describe the problem in a sentence or two. Leave out passwords, tokens and personal info.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: e.g. v1.2.0 or a1b2c3d
+  - type: input
+    id: device
+    attributes:
+      label: Device and system
+      placeholder: e.g. Raspberry Pi 5 with Debian 12, Chrome on Windows 11
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Only the lines that matter.
+      render: text
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshot or video
+      description: Drag files here if you have any.

@@ -1,0 +1,36 @@
+name: Feature wish
+description: An idea or wish for something new, or a change to how something works.
+title: "[Wish] "
+labels: ["feature"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part is this about? The Issue labels workflow adds the matching Area label.
+      # The options are the names of the Area labels in .github/labels.json.
+      # Keep "not sure" last and raise the default with it, so an issue never
+      # lands in an area by accident.
+      options:
+        - repo
+        - not sure
+      default: 1
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it would make things better
+  - type: dropdown
+    id: importance
+    attributes:
+      label: How important is it to you
+      options:
+        - Nice to have
+        - Would really like it

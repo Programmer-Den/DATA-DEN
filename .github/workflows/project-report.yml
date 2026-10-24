@@ -1,0 +1,16 @@
+name: Project report
+
+# Prints what is on the boards of .github/projects.json to the run summary.
+# Started by hand.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  project-report:
+    name: Project report
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-project-report.yml@main
+    secrets:
+      PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}

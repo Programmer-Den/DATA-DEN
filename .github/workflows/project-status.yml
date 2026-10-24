@@ -1,0 +1,18 @@
+name: Project status
+
+# Puts each open PR into its Projects (.github/projects.json) with the status
+# In Progress. pull_request_target runs this file from main with the secret,
+# also for PRs from forks; the shared workflow never checks out the PR's code.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  project-status:
+    name: Project status
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-project-status.yml@main
+    secrets:
+      PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}

@@ -1,0 +1,2 @@
+# Findings gitleaks may skip, one fingerprint per line (commit:file:rule:line),
+# each with a comment saying why it is not a secret.

@@ -1,0 +1,20 @@
+# Gitleaks settings: gitleaks' own rules (private keys, cloud and API tokens
+# and so on) plus the settings that must never be committed. The CI workflow
+# runs it on every pull request and push to main.
+# Run locally: gitleaks git
+[extend]
+useDefault = true
+
+[[rules]]
+id = "settings-file"
+description = "A settings file; keep filled settings in a git-ignored .env"
+path = '''(^|/)(\.env|\.env\.[^/]*|[^/]+\.env)$'''
+[[rules.allowlists]]
+paths = ['''(^|/)\.env\.example$''']
+
+[[rules]]
+id = "filled-password"
+description = "A password or key has a value in a committed settings file; leave it empty"
+regex = '''(?m)^[ \t]*(?:export[ \t]+)?[A-Z0-9_]*(?:PASSWORD|KEY|TOKEN|SECRET)=[ \t]*([^\s#][^\r\n]*)'''
+path = '''\.env(\.[^/]*)?$'''
+keywords = ["password", "key", "token", "secret"]

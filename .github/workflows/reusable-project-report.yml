@@ -1,0 +1,117 @@
+name: Project report
+
+# Reusable: prints every Project listed in .github/projects.json with its items
+# (issue or PR, number, state, title) and their Status, then every open issue
+# and PR with the Projects it is in, to the log and the run summary.
+# Uses PROJECTS_TOKEN (a classic token with only the "project" scope), since
+# the workflow token can't read Projects of a user or an organization.
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
+        type: string
+        default: '"ubuntu-latest"'
+    secrets:
+      PROJECTS_TOKEN:
+        description: A classic token with only the "project" scope
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/projects.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Print the boards
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const wanted = JSON.parse(require('fs').readFileSync('.github/projects.json', 'utf8')).map(p => p.title);
+            const { user } = await github.graphql(`
+              query($owner: String!) {
+                user: repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectsV2(first: 100) { nodes { id number title public url } } } }
+              }`, { owner: context.repo.owner });
+            const byTitle = new Map(user.projectsV2.nodes.map(p => [p.title, p]));
+
+            let summary = '';
+            for (const title of wanted) {
+              const project = byTitle.get(title);
+              if (!project) {
+                console.log(`## ${title}: missing\n`);
+                summary += `## ${title}\n\nMissing.\n\n`;
+                continue;
+              }
+              const rows = [];
+              let cursor = null;
+              do {
+                const { node } = await github.graphql(`
+                  query($id: ID!, $cursor: String) {
+                    node(id: $id) {
+                      ... on ProjectV2 {
+                        items(first: 100, after: $cursor) {
+                          pageInfo { hasNextPage endCursor }
+                          nodes {
+                            isArchived
+                            status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
+                            content {
+                              __typename
+                              ... on Issue { number title state }
+                              ... on PullRequest { number title state }
+                              ... on DraftIssue { title }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }`, { id: project.id, cursor });
+                for (const item of node.items.nodes) {
+                  const c = item.content || {};
+                  const kind = { Issue: 'issue', PullRequest: 'PR', DraftIssue: 'draft' }[c.__typename] || 'item';
+                  rows.push(`| ${item.status?.name || 'No Status'} | ${kind} | ${c.number ? '#' + c.number : ''} | ${c.state || ''} | ${(c.title || '').replace(/\|/g, '/')}${item.isArchived ? ' (archived)' : ''} |`);
+                }
+                cursor = node.items.pageInfo.hasNextPage ? node.items.pageInfo.endCursor : null;
+              } while (cursor);
+              const head = `## ${title} (#${project.number}, ${project.public ? 'public' : 'private'}, ${rows.length} items)\n${project.url}\n`;
+              const table = rows.length ? `\n| Status | Type | Number | State | Title |\n| --- | --- | --- | --- | --- |\n${rows.join('\n')}\n` : '\nNo items.\n';
+              console.log(head + table);
+              summary += head + table + '\n';
+            }
+            // The boards' item lists can lag behind; each open issue and PR's own
+            // Project items are read straight from it, so this part is current.
+            let open = '## Open issues and PRs by Project\n\n| Type | Number | Title | Projects (Status) |\n| --- | --- | --- | --- |\n';
+            for (const kind of ['issues', 'pullRequests']) {
+              const { repository } = await github.graphql(`
+                query($owner: String!, $repo: String!) {
+                  repository(owner: $owner, name: $repo) {
+                    list: ${kind}(first: 100, states: OPEN, orderBy: { field: CREATED_AT, direction: DESC }) {
+                      nodes {
+                        number title
+                        projectItems(first: 30, includeArchived: true) {
+                          nodes {
+                            isArchived
+                            project { title }
+                            status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }`, { owner: context.repo.owner, repo: context.repo.repo });
+              for (const n of repository.list.nodes) {
+                const where = n.projectItems.nodes
+                  .map(i => `${i.project.title.replace(`${context.repo.repo}: `, '')} (${i.status?.name || 'No Status'}${i.isArchived ? ', archived' : ''})`)
+                  .join(', ') || 'none';
+                open += `| ${kind === 'issues' ? 'issue' : 'PR'} | #${n.number} | ${n.title.replace(/\|/g, '/')} | ${where} |\n`;
+              }
+            }
+            console.log(open);
+            summary += open;
+            await core.summary.addRaw(summary).write();
