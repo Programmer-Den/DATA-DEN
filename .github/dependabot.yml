@@ -12,19 +12,23 @@ updates:
         patterns:
           - "*"
 
-  # Add the ecosystems of this repository, for example:
-  # - package-ecosystem: gomod
-  #   directory: /backend
-  #   labels: [dependencies, server]
-  #   schedule:
-  #     interval: weekly
-  # - package-ecosystem: npm
-  #   directory: /frontend
-  #   labels: [dependencies, ui]
-  #   schedule:
-  #     interval: weekly
-  # - package-ecosystem: docker
-  #   directory: /
-  #   labels: [dependencies, install]
-  #   schedule:
-  #     interval: weekly
+  - package-ecosystem: gomod
+    directory: /backend
+    labels: [dependencies, server]
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /frontend
+    labels: [dependencies, ui]
+    schedule:
+      interval: weekly
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+  - package-ecosystem: docker
+    directory: /
+    labels: [dependencies, install]
+    schedule:
+      interval: weekly

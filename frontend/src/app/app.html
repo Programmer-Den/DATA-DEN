@@ -1,0 +1,10 @@
+<main>
+  <h1>DATA-DEN</h1>
+  @if (offline()) {
+    <p class="status">Server nicht erreichbar</p>
+  } @else if (version(); as version) {
+    <p class="status">Server läuft, Version {{ version }}</p>
+  } @else {
+    <p class="status">Verbinde …</p>
+  }
+</main>

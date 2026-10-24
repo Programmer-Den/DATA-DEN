@@ -4,11 +4,15 @@ This file provides guidance for AI agents (Claude, GPT, Copilot, etc.) working o
 
 ## Project Overview
 
-<!-- What the project is, in two or three sentences. -->
+DATA-DEN is a self-hosted NAS: a web interface to upload, download and manage files (pictures, documents, videos and more), installable as a PWA. The storage runs in an isolated Hyper-V VM on a Windows PC with two disks in RAID 1, and a Raspberry Pi in front of it is the only way in from outside, over HTTPS. This repository holds the web interface; the Pi's gateway is a task in rpi-setup.
 
 ## Tech Stack
 
-<!-- Languages, frameworks, formatters and linters. -->
+- `backend/`: Go (version in `go.mod`), one binary that serves the API and the embedded website; `gofmt`, golangci-lint (`.golangci.yml`), govulncheck
+- `frontend/`: Angular with TypeScript, tests with Vitest; Prettier and ESLint. `npm run build` writes into `backend/internal/web/files/build/`
+- `Dockerfile`: one distroless image for amd64 and arm64, cross-compiled
+- `runner/`: the two light self-hosted runners (Docker Desktop on the Windows PC)
+- UI text is German
 
 ## Code Style & Conventions
 
@@ -28,7 +32,8 @@ This file provides guidance for AI agents (Claude, GPT, Copilot, etc.) working o
 Before submitting changes:
 - Run `gitleaks git` (the secret check, with `.gitleaks.toml`)
 - Run `bash -n` and `shellcheck` on every changed shell script
-- <!-- The project's own tests, linters and builds. -->
+- Backend, in `backend/`: `gofmt -l .`, `golangci-lint run`, `go test ./...`, `go mod tidy -diff`
+- Frontend, in `frontend/`: `npm run format:check`, `npm run lint`, `npm test`, `npm run build`
 - Add tests for new code
 - Keep CI fast: every check that runs on a pull request should finish within a few minutes
 

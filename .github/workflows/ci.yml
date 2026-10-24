@@ -23,8 +23,128 @@ jobs:
   checks:
     name: Checks
     uses: Programmer-Den/repo-base/.github/workflows/reusable-checks.yml@main
-    # On a light self-hosted runner:
-    # with:
-    #   runs-on: '["self-hosted", "light"]'
+    with:
+      # The light runners once the repository variable is set (runner/README.md).
+      runs-on: ${{ vars.LIGHT_RUNNER || '"ubuntu-latest"' }}
 
-  # Add this repository's own lint, test and build jobs here.
+  # shellcheck and Docker come with GitHub's runner image, not the light runners.
+  lint:
+    name: Shell and workflow lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check shell scripts
+        run: |
+          set -euo pipefail
+          mapfile -t scripts < <(git ls-files '*.sh')
+          for f in "${scripts[@]}"; do bash -n "$f"; done
+          shellcheck --color=never "${scripts[@]}"
+
+      - name: Lint GitHub Actions workflows
+        run: |
+          docker run --rm -v "$PWD:/repo" --workdir /repo \
+            rhysd/actionlint:1.7.12 -no-color -oneline
+
+  backend:
+    name: Backend (Go)
+    runs-on: ${{ fromJSON(vars.LIGHT_RUNNER || '"ubuntu-latest"') }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "Run gofmt -w on these files:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          working-directory: backend
+
+      - name: Test
+        run: go test ./...
+
+      - name: Check go.mod and go.sum are tidy
+        run: go mod tidy -diff
+
+      # Only reports vulnerabilities in code the backend actually calls.
+      - name: Check dependencies for known vulnerabilities
+        run: go tool govulncheck ./...
+
+  frontend:
+    name: Frontend (Angular)
+    runs-on: ${{ fromJSON(vars.LIGHT_RUNNER || '"ubuntu-latest"') }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - name: Check dependencies for known vulnerabilities
+        run: npm audit --audit-level=high
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: Docker image (arm64 and amd64)
+    # Always on GitHub's runners: the light runners have no Docker. The
+    # Dockerfile cross-compiles, so arm64 needs no emulation.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Builds both architectures without pushing, to catch a broken image before merge.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The amd64 image again, from the cache, to start it and ask it for its health.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: data-den:ci
+          cache-from: type=gha
+
+      - name: Start it and check it answers
+        run: |
+          set -euo pipefail
+          docker run -d --name data-den -p 8080:8080 --read-only --cap-drop ALL data-den:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/health && curl -fsS http://localhost:8080/ | grep -q '<app-root'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs data-den
+          exit 1

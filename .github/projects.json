@@ -1,6 +1,6 @@
 [
   {
-    "title": "repo-base: All issues",
+    "title": "DATA-DEN: All issues",
     "label": null,
     "shortDescription": "Every issue and PR of this repository.",
     "readme": "## All issues\n\nEvery issue and PR of this repository. Use it for the big picture; an area can have its own Project too.\n\n### Labels\nEvery issue and PR has one **Change** label and one **Area** label. Optional: **Priority** (`high`, `medium`, `low`) and **Status** (`needs-info`, `duplicate`, `wontfix`).\n\n### Status\n- **Todo**: new or agreed, not started\n- **In progress**: someone is on it\n- **Done**: fixed or shipped\n"

@@ -13,8 +13,11 @@ body:
       # lands in an area by accident.
       options:
         - repo
+        - server
+        - ui
+        - install
         - not sure
-      default: 1
+      default: 4
     validations:
       required: true
   - type: textarea

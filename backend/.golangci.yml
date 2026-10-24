@@ -1,0 +1,21 @@
+version: "2"
+
+linters:
+  # The standard set (errcheck, govet, ineffassign, staticcheck, unused) plus
+  # linters that catch real bugs or keep the code easy to read.
+  default: standard
+  enable:
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nolintlint
+    - revive
+    - unconvert
+
+formatters:
+  # gofumpt is a stricter gofmt; goimports keeps imports grouped and sorted.
+  # `golangci-lint fmt` rewrites files, `golangci-lint run` reports them.
+  enable:
+    - gofumpt
+    - goimports
