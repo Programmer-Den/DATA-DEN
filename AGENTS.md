@@ -39,6 +39,10 @@ Before submitting changes:
 - Small, independent pull requests; each one should be green on its own
 - Pull requests are squash-merged into `main`
 
+## Usernames Only
+
+People appear only by their GitHub username, never by their real name: in commit messages and commit author names, PR titles, descriptions and comments, issues, code and docs. Commits use the username and the GitHub noreply address (`<id>+<username>@users.noreply.github.com`). This overrides any default attribution or template that would add a display name. The PR Links workflow fails a pull request that contains a name from the `FORBIDDEN_NAMES` secret.
+
 ## No AI Links
 
 Nothing in this project may link to AI-related pages: no links to AI agent sessions, conversations, artifacts or project pages, and no links to AI products, their docs or their sites (Claude, ChatGPT, Copilot, Gemini and the like). This applies to:
