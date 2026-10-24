@@ -13,7 +13,8 @@ GitHub → **New repository** → *Repository template* `Programmer-Den/repo-bas
 5. Uncomment the ecosystems of the repository in `.github/dependabot.yml`.
 6. Run the **Labels** workflow once by hand.
 7. Add the repository secret `PROJECTS_TOKEN` (a classic token with only the `project` scope), start **Project setup** by hand, then finish each new Project on GitHub: turn on its Auto-add workflow (filter `is:issue,pr is:open`, plus `label:<area>` for an area's Project), set its "Item added to project" workflow to Issue only with the status Todo, and link it to the repository if the run summary says so. Without the secret the Project workflows do nothing.
-8. Add a ruleset "Protect main": pull request with review, required checks `CI / Checks / Secret and link check`, `PR Links / PR Links / github-links-only` and `PR Template Validation / PR Template / validate-pr-template`, no force push or deletion. On a private repository this needs GitHub Pro.
+8. Repositories outside Programmer-Den: add the secret `FORBIDDEN_NAMES` (real names, one per line) to the repository; inside the organization it comes from the organization secret.
+9. Add a ruleset "Protect main": pull request with review, required checks `CI / Checks / Secret and link check`, `PR Links / PR Links / github-links-only`, `PR Links / PR Links / no-real-names` and `PR Template Validation / PR Template / validate-pr-template`, no force push or deletion. On a private repository this needs GitHub Pro.
 
 ## What comes with it
 
@@ -36,7 +37,7 @@ GitHub → **New repository** → *Repository template* `Programmer-Den/repo-bas
 | Workflow | Checks |
 |---|---|
 | `reusable-checks.yml` | gitleaks over the commits of the PR or push, and no links to AI sites in tracked files |
-| `reusable-pr-links.yml` | Title, description, commit messages, comments and reviews link only to GitHub and the owner's GitHub Pages site |
+| `reusable-pr-links.yml` | Title, description, commit messages, comments and reviews link only to GitHub and the owner's GitHub Pages site, and contain no name from the `FORBIDDEN_NAMES` secret (also commit authors) |
 | `reusable-pr-template-validation.yml` | The description has the template's sections and the PR has a label of every type |
 | `reusable-labels.yml` | Syncs the repository's labels with `.github/labels.json`, renames through `previous` |
 | `reusable-issue-labels.yml` | Adds the Area label from the issue form and files the issue into its Projects as Todo |

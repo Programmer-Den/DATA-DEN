@@ -1,7 +1,9 @@
 name: PR Links
 
 # Reusable: fails a pull request whose title, description, commit messages or
-# comments link anywhere but GitHub and the owner's GitHub Pages site.
+# comments link anywhere but GitHub and the owner's GitHub Pages site, or name
+# a person by a name listed in the FORBIDDEN_NAMES secret (people appear only
+# by their GitHub username).
 on:
   workflow_call:
     inputs:
@@ -9,6 +11,10 @@ on:
         description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
         type: string
         default: '"ubuntu-latest"'
+    secrets:
+      FORBIDDEN_NAMES:
+        description: Names that must never appear, one per line, such as a real first and last name
+        required: false
 
 permissions:
   contents: read
@@ -77,4 +83,55 @@ jobs:
               core.setFailed(`PR links outside GitHub; edit the title, description or comment, or reword the commits and the check re-runs:\n${hits.join('\n')}`);
             } else {
               console.log(`PR title, description, ${commits.length} commit message(s), ${comments.length} comment(s), ${reviews.length} review(s) and ${reviewComments.length} review comment(s) link only to GitHub.`);
+            }
+
+  no-real-names:
+    # The names live in a secret, so the list itself is never published. Fork
+    # and Dependabot PRs get no secrets; for them the check says so and passes.
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    steps:
+      - name: Check PR title, description, commits and comments name people only by username
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FORBIDDEN_NAMES: ${{ secrets.FORBIDDEN_NAMES }}
+        with:
+          script: |
+            const names = (process.env.FORBIDDEN_NAMES || '')
+              .split(/\r?\n/).map(n => n.trim().toLowerCase()).filter(Boolean);
+            if (names.length === 0) {
+              core.notice('FORBIDDEN_NAMES is not set or not available to this run; names are not checked.');
+              return;
+            }
+            // The texts are read as data from the API; they never reach a shell.
+            const pull_number = (context.payload.pull_request ?? context.payload.issue).number;
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number });
+            const everyPage = (list, params) => github.paginate(list, { ...context.repo, ...params, per_page: 100 });
+            const commits = await everyPage(github.rest.pulls.listCommits, { pull_number });
+            const comments = await everyPage(github.rest.issues.listComments, { issue_number: pull_number });
+            const reviews = await everyPage(github.rest.pulls.listReviews, { pull_number });
+            const reviewComments = await everyPage(github.rest.pulls.listReviewComments, { pull_number });
+
+            // Only where a name was found is reported, never the name: the log is
+            // public in a public repository.
+            const places = [
+              ['title', pr.title],
+              ['description', pr.body || ''],
+              ...commits.flatMap(c => [
+                [`commit ${c.sha.slice(0, 7)} message`, c.commit.message],
+                [`commit ${c.sha.slice(0, 7)} author`, `${c.commit.author?.name} ${c.commit.author?.email}`],
+                [`commit ${c.sha.slice(0, 7)} committer`, `${c.commit.committer?.name} ${c.commit.committer?.email}`]
+              ]),
+              ...comments.map(c => [`comment ${c.html_url}`, c.body || '']),
+              ...reviews.map(r => [`review ${r.html_url}`, r.body || '']),
+              ...reviewComments.map(c => [`review comment ${c.html_url}`, c.body || ''])
+            ];
+            const hits = places
+              .filter(([, text]) => names.some(name => (text || '').toLowerCase().includes(name)))
+              .map(([where]) => where);
+
+            if (hits.length > 0) {
+              core.setFailed(`A name from FORBIDDEN_NAMES appears in the PR; use the GitHub username instead. Edit the text, or reword or re-author the commits (git config user.name <username>, user.email <id>+<username>@users.noreply.github.com):\n${hits.join('\n')}`);
+            } else {
+              console.log(`No listed name in the title, description, ${commits.length} commit(s), ${comments.length} comment(s), ${reviews.length} review(s) and ${reviewComments.length} review comment(s).`);
             }
