@@ -92,7 +92,9 @@ jobs:
               .split(/\r?\n/).map(line => line.trim()).filter(Boolean);
             for (const type of requiredTypes) {
               const names = types.get(type) || [];
-              if (!names.some(name => prLabels.has(name))) {
+              if (names.length === 0) {
+                problems.push(`The repository has no "${type}" labels yet. Run the Labels workflow on main to create them from .github/labels.json.`);
+              } else if (!names.some(name => prLabels.has(name))) {
                 problems.push(`PR has no "${type}" label. Add one of: ${names.join(', ')}.`);
               }
             }
