@@ -1,0 +1,20 @@
+name: Labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.json
+      - .github/workflows/labels.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  labels:
+    name: Labels
+    permissions:
+      contents: read
+      issues: write
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-labels.yml@main

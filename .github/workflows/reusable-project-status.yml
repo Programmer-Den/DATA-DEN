@@ -1,0 +1,107 @@
+name: Project status
+
+# Reusable: puts each open PR into the Projects of .github/projects.json that
+# have no label or one of the PR's labels, with the status In Progress. Issues
+# are left to each Project's built-in workflows and the Issue labels workflow.
+# Needs PROJECTS_TOKEN: a classic token with only the "project" scope, since
+# the workflow token can't reach Projects of a user or an organization. Without it the workflow
+# does nothing.
+#
+# Call it from pull_request_target, which runs the caller from main with the
+# secret, also for PRs from forks. It never checks out or runs the PR's code;
+# it only reads the event's labels and node id.
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
+        type: string
+        default: '"ubuntu-latest"'
+    secrets:
+      PROJECTS_TOKEN:
+        description: A classic token with only the "project" scope
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  in-progress:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    env:
+      HAS_TOKEN: ${{ secrets.PROJECTS_TOKEN != '' }}
+    steps:
+      - if: env.HAS_TOKEN != 'true'
+        run: echo "::notice::PROJECTS_TOKEN is not set, so the PR's Project status is left alone."
+      - if: env.HAS_TOKEN == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/projects.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Set the PR to In Progress
+        if: env.HAS_TOKEN == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const wanted = JSON.parse(require('fs').readFileSync('.github/projects.json', 'utf8'));
+            const pr = context.payload.pull_request;
+            const labels = new Set(pr.labels.map(l => l.name));
+            const titles = new Set(wanted.filter(p => p.label === null || labels.has(p.label)).map(p => p.title));
+
+            const { user } = await github.graphql(`
+              query($owner: String!) {
+                # A user or an organization: both own Projects.
+                user: repositoryOwner(login: $owner) {
+                  ... on ProjectV2Owner {
+                    projectsV2(first: 100) {
+                      nodes {
+                        id title
+                        field(name: "Status") {
+                          ... on ProjectV2SingleSelectField { id options { id name } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`, { owner: context.repo.owner });
+
+            for (const project of user.projectsV2.nodes.filter(p => titles.has(p.title))) {
+              const status = project.field;
+              const inProgress = status?.options.find(o => o.name.toLowerCase() === 'in progress');
+              if (!inProgress) {
+                core.warning(`"${project.title}" has no Status option "In Progress"; skipped.`);
+                continue;
+              }
+              // Adding a PR that is already in the Project returns its existing item.
+              const { addProjectV2ItemById: { item } } = await github.graphql(`
+                mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                    item { id isArchived fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } }
+                  }
+                }`, { projectId: project.id, contentId: pr.node_id });
+              // Adding an archived item returns it still archived, so bring it back.
+              if (item.isArchived) {
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!) {
+                    unarchiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) { item { id } }
+                  }`, { projectId: project.id, itemId: item.id });
+                console.log(`Unarchived #${pr.number} in ${project.title}`);
+              }
+              // Only move it out of no status or Todo, so a status set by hand stays.
+              const current = item.fieldValueByName?.name;
+              if (current && current.toLowerCase() !== 'todo') {
+                console.log(`#${pr.number} stays ${current} in ${project.title}`);
+                continue;
+              }
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) { projectV2Item { id } }
+                }`, { projectId: project.id, itemId: item.id, fieldId: status.id, optionId: inProgress.id });
+              console.log(`#${pr.number} is In Progress in ${project.title}`);
+            }

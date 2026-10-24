@@ -1,0 +1,16 @@
+name: PR Template Validation
+
+on:
+  pull_request:
+    # "labeled" and "unlabeled" re-run the label check when the labels change.
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+  workflow_dispatch:
+
+permissions:
+  issues: read
+  pull-requests: read
+
+jobs:
+  pr-template:
+    name: PR Template
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-pr-template-validation.yml@main

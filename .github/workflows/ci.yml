@@ -1,0 +1,30 @@
+name: CI
+
+# Pull requests always run this workflow: "Checks / Secret and link check" is a
+# required check on main, and the secret check covers docs too. Pushes to main
+# skip changes that cannot break anything checked here.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE*', '.claude/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Only cancel superseded PR runs; let pushes to main finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Checks
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-checks.yml@main
+    # On a light self-hosted runner:
+    # with:
+    #   runs-on: '["self-hosted", "light"]'
+
+  # Add this repository's own lint, test and build jobs here.

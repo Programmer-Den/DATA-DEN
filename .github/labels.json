@@ -1,0 +1,14 @@
+[
+  { "name": "feature", "color": "2da44e", "description": "Change: a wish or idea (issue) or something new (PR)" },
+  { "name": "bugfix", "color": "e4572e", "description": "Change: something is broken (issue) or a fix for it (PR)" },
+  { "name": "documentation", "color": "0075ca", "description": "Change: only the docs, README or AGENTS.md (PR)" },
+  { "name": "maintenance", "color": "0e8a8a", "description": "Change: refactor, cleanup or tooling, nothing the user sees (PR)" },
+  { "name": "dependencies", "color": "57606a", "description": "Change: updates a dependency (PR)" },
+  { "name": "repo", "color": "5b7a99", "description": "Area: CI, workflows, repo checks and project docs" },
+  { "name": "high", "color": "c2410c", "description": "Priority: do this first" },
+  { "name": "medium", "color": "f97316", "description": "Priority: do this soon" },
+  { "name": "low", "color": "fed7aa", "description": "Priority: do this when there is time" },
+  { "name": "needs-info", "color": "6e7781", "description": "Status: waiting for more details from the reporter" },
+  { "name": "duplicate", "color": "8c959f", "description": "Status: already reported in another issue" },
+  { "name": "wontfix", "color": "afb8c1", "description": "Status: will not be changed" }
+]

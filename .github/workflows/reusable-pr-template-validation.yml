@@ -1,0 +1,106 @@
+name: PR Template Validation
+
+# Reusable: the pull request description has the sections of the PR template,
+# and the pull request has a label of every required type (.github/labels.json).
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
+        type: string
+        default: '"ubuntu-latest"'
+      required-sections:
+        description: Headings the description must have, one per line
+        type: string
+        default: |
+          ## Summary
+          ## Checklist
+          ## Testing
+      required-label-types:
+        description: Label groups the pull request needs a label of, one per line
+        type: string
+        default: |
+          Change
+          Area
+
+permissions:
+  issues: read
+  pull-requests: read
+
+jobs:
+  validate-pr-template:
+    # Dependabot writes its own PR description, not ours. Skipping the job
+    # (rather than not running the workflow) still reports this required check
+    # as passed, so Dependabot PRs can merge once the rest of CI is green.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    steps:
+      - name: Check PR body matches template and has a label of each type
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          REQUIRED_SECTIONS: ${{ inputs.required-sections }}
+          REQUIRED_LABEL_TYPES: ${{ inputs.required-label-types }}
+        with:
+          script: |
+            // The PR is fetched fresh, as a re-run of an older run would otherwise
+            // check the description and labels it started with. A manual run
+            // checks the open pull request of its branch.
+            let pull_number = context.payload.pull_request?.number;
+            if (!pull_number) {
+              const branch = context.ref.replace('refs/heads/', '');
+              const { data } = await github.rest.pulls.list({
+                ...context.repo,
+                head: `${context.repo.owner}:${branch}`,
+                state: 'open'
+              });
+              if (!data[0]) {
+                core.setFailed(`No open pull request for the branch ${branch}.`);
+                return;
+              }
+              pull_number = data[0].number;
+            }
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number });
+            const problems = [];
+
+            const body = pr.body || '';
+            const requiredSections = process.env.REQUIRED_SECTIONS
+              .split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+
+            const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const heading = (section) => new RegExp(`^${escape(section)}(?: |\r?$|:|\n)`, 'm');
+            const missing = requiredSections.filter(section => !heading(section).test(body));
+            if (missing.length > 0) {
+              problems.push(`PR description is missing required sections: ${missing.join(', ')}. Please use the PR template.`);
+            }
+
+            // A label's type is the first word of its description, such as
+            // "Change" or "Area" (.github/labels.json). The pull request needs
+            // at least one label of every required type; Priority and Status
+            // are optional.
+            const labelType = (label) => (label.description || '').trim().split(/[\s:]/)[0];
+            const repoLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              ...context.repo,
+              per_page: 100
+            });
+            const types = new Map();
+            for (const label of repoLabels) {
+              const type = labelType(label);
+              if (type) types.set(type, [...(types.get(type) || []), label.name]);
+            }
+            const prLabels = new Set(pr.labels.map(label => label.name));
+            const requiredTypes = process.env.REQUIRED_LABEL_TYPES
+              .split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            for (const type of requiredTypes) {
+              const names = types.get(type) || [];
+              if (names.length === 0) {
+                problems.push(`The repository has no "${type}" labels yet. Run the Labels workflow on main to create them from .github/labels.json.`);
+              } else if (!names.some(name => prLabels.has(name))) {
+                problems.push(`PR has no "${type}" label. Add one of: ${names.join(', ')}.`);
+              }
+            }
+
+            if (problems.length > 0) {
+              core.setFailed(problems.join('\n'));
+            } else {
+              console.log('PR template validation passed.');
+            }

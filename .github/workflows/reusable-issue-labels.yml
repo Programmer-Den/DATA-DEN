@@ -1,0 +1,134 @@
+name: Issue labels
+
+# Reusable: adds the Area label to issues filed through the forms in
+# .github/ISSUE_TEMPLATE, from the answer to their Area dropdown, and removes
+# any other Area label. The forms set the Change label themselves. The
+# dropdown's options are the names of the Area labels in .github/labels.json;
+# any other answer, such as "not sure", adds nothing.
+# Then, with PROJECTS_TOKEN (a classic token with only the "project" scope), it
+# adds the issue to the Projects of .github/projects.json that have no label or
+# its Area label, with the status Todo: the Projects' built-in Auto-add misses
+# labels added by this workflow's own token. Every issue goes to the Projects
+# without a label, also without an area.
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
+        type: string
+        default: '"ubuntu-latest"'
+      issue:
+        description: Issue number, for a run by hand
+        type: string
+        default: ''
+    secrets:
+      PROJECTS_TOKEN:
+        description: A classic token with only the "project" scope
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  area-label:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    env:
+      HAS_TOKEN: ${{ secrets.PROJECTS_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/labels.json
+            .github/projects.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Label the issue with its area
+        id: label
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ISSUE: ${{ inputs.issue }}
+        with:
+          script: |
+            const labels = JSON.parse(require('fs').readFileSync('.github/labels.json', 'utf8'));
+            const areas = new Set(labels
+              .filter(l => (l.description || '').trim().split(/[\s:]/)[0] === 'Area')
+              .map(l => l.name));
+            // The body is read as data from the event; it never reaches a shell.
+            const issue = context.payload.issue
+              || (await github.rest.issues.get({ ...context.repo, issue_number: Number(process.env.ISSUE) })).data;
+            const match = /^### Area\s*\r?\n\s*\r?\n(.+)$/m.exec(issue.body || '');
+            const answer = match && match[1].trim();
+            const label = areas.has(answer) ? answer : '';
+            core.setOutput('label', label);
+            core.setOutput('node_id', issue.node_id);
+            core.setOutput('number', issue.number);
+            if (!label) {
+              console.log('No area picked in the form; no label to add.');
+              return;
+            }
+            const stale = issue.labels.map(l => l.name).filter(n => areas.has(n) && n !== label);
+            for (const name of stale) {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number: issue.number, name });
+            }
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: issue.number, labels: [label] });
+            console.log(`Labelled #${issue.number} with ${label}`);
+      - name: Add the issue to its Projects
+        if: env.HAS_TOKEN == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          LABEL: ${{ steps.label.outputs.label }}
+          NODE_ID: ${{ steps.label.outputs.node_id }}
+          NUMBER: ${{ steps.label.outputs.number }}
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const wanted = JSON.parse(require('fs').readFileSync('.github/projects.json', 'utf8'));
+            const titles = new Set(wanted.filter(p => p.label === null || p.label === process.env.LABEL).map(p => p.title));
+            const issue = { node_id: process.env.NODE_ID, number: process.env.NUMBER };
+
+            const { user } = await github.graphql(`
+              query($owner: String!) {
+                # A user or an organization: both own Projects.
+                user: repositoryOwner(login: $owner) {
+                  ... on ProjectV2Owner {
+                    projectsV2(first: 100) {
+                      nodes {
+                        id title
+                        field(name: "Status") {
+                          ... on ProjectV2SingleSelectField { id options { id name } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }`, { owner: context.repo.owner });
+
+            for (const project of user.projectsV2.nodes.filter(p => titles.has(p.title))) {
+              // Adding an issue that is already in the Project returns its existing item.
+              const { addProjectV2ItemById: { item } } = await github.graphql(`
+                mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                    item { id isArchived fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } }
+                  }
+                }`, { projectId: project.id, contentId: issue.node_id });
+              // Adding an archived item returns it still archived, so bring it back.
+              if (item.isArchived) {
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!) {
+                    unarchiveProjectV2Item(input: { projectId: $projectId, itemId: $itemId }) { item { id } }
+                  }`, { projectId: project.id, itemId: item.id });
+                console.log(`Unarchived #${issue.number} in ${project.title}`);
+              }
+              console.log(`Added #${issue.number} to ${project.title}`);
+              // Give it Todo only when it has no status yet, so a status set by hand stays.
+              const todo = project.field?.options.find(o => o.name.toLowerCase() === 'todo');
+              if (!todo || item.fieldValueByName) continue;
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId, itemId: $itemId, fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) { projectV2Item { id } }
+                }`, { projectId: project.id, itemId: item.id, fieldId: project.field.id, optionId: todo.id });
+            }

@@ -1,0 +1,77 @@
+name: Project setup
+
+# Reusable: creates each Project in .github/projects.json that doesn't exist yet,
+# with its short description and README, and makes it public (view-only for
+# everyone but the owner). Projects that already exist are left as they are.
+# Then it tries to link each new Project to the repo, which may need more than
+# the "project" scope; if it can't, it says so and the Project is linked by hand.
+# Uses PROJECTS_TOKEN (a classic token with only the "project" scope), since the
+# workflow token can't create Projects of a user or an organization. The Project's Auto-add and
+# "Item added to project" workflows can't be set from outside, so they are
+# still turned on by hand (see README).
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
+        type: string
+        default: '"ubuntu-latest"'
+    secrets:
+      PROJECTS_TOKEN:
+        description: A classic token with only the "project" scope
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/projects.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Create the missing Projects
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ secrets.PROJECTS_TOKEN }}
+          script: |
+            const wanted = JSON.parse(require('fs').readFileSync('.github/projects.json', 'utf8'));
+            const { owner, repo } = context.repo;
+            const { user, repository } = await github.graphql(`
+              query($owner: String!, $repo: String!) {
+                user: repositoryOwner(login: $owner) { id ... on ProjectV2Owner { projectsV2(first: 100) { nodes { title } } } }
+                repository(owner: $owner, name: $repo) { id }
+              }`, { owner, repo });
+            const existing = new Set(user.projectsV2.nodes.map(p => p.title));
+
+            let summary = '';
+            for (const p of wanted) {
+              if (existing.has(p.title)) continue;
+              const { createProjectV2 } = await github.graphql(`
+                mutation($ownerId: ID!, $title: String!) {
+                  createProjectV2(input: { ownerId: $ownerId, title: $title }) { projectV2 { id url } }
+                }`, { ownerId: user.id, title: p.title });
+              const { id, url } = createProjectV2.projectV2;
+              await github.graphql(`
+                mutation($projectId: ID!, $shortDescription: String!, $readme: String!) {
+                  updateProjectV2(input: { projectId: $projectId, shortDescription: $shortDescription, readme: $readme, public: true }) {
+                    projectV2 { id }
+                  }
+                }`, { projectId: id, shortDescription: p.shortDescription, readme: p.readme });
+              let linked = 'linked to the repo';
+              try {
+                await github.graphql(`
+                  mutation($projectId: ID!, $repositoryId: ID!) {
+                    linkProjectV2ToRepository(input: { projectId: $projectId, repositoryId: $repositoryId }) { repository { id } }
+                  }`, { projectId: id, repositoryId: repository.id });
+              } catch (error) {
+                linked = 'not linked to the repo (link it by hand)';
+                core.warning(`${p.title}: ${error.message}`);
+              }
+              console.log(`Created ${p.title}, public, ${linked}: ${url}`);
+              summary += `- [${p.title}](${url}): public, ${linked}\n`;
+            }
+            await core.summary.addRaw(summary ? `## Created\n\n${summary}` : 'Every Project already exists.\n').write();

@@ -1,0 +1,26 @@
+name: Issue labels
+
+# Adds the Area label from the issue form's Area dropdown and files the issue
+# into its Projects (.github/projects.json) with the status Todo. Run it by hand
+# with an issue number to file an older issue again.
+on:
+  issues:
+    types: [opened, edited]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  issue-labels:
+    name: Issue labels
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-issue-labels.yml@main
+    with:
+      issue: ${{ inputs.issue || '' }}
+    secrets:
+      PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}

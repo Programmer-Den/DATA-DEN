@@ -1,0 +1,28 @@
+name: PR Links
+
+on:
+  pull_request:
+    # "edited" re-runs the check when the title or description changes and
+    # "synchronize" when commits are pushed, so removing the link turns it green
+    # again.
+    types: [opened, edited, reopened, synchronize]
+  # A new or edited comment or review is checked at once. These runs do not
+  # show as a check on the pull request, so they cannot block its merge; the
+  # run of the pull request itself checks the comments too, at its next push
+  # or edit.
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  pr-links:
+    name: PR Links
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-pr-links.yml@main

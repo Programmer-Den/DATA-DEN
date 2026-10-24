@@ -1,0 +1,88 @@
+name: Checks
+
+# Reusable: the secret check and the AI link check, for every repository.
+# A repository adds its own lint and test jobs next to the call.
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner labels as JSON, such as '"ubuntu-latest"' or '["self-hosted", "light"]'
+        type: string
+        default: '"ubuntu-latest"'
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Secret and link check
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gitleaks reads the commits of the pull request or push.
+          fetch-depth: 0
+
+      # The newest gitleaks release, checked against its published checksums.
+      # Only curl, tar and sha256sum are needed, so it also runs on a light
+      # self-hosted runner without gh or Docker.
+      - name: Install gitleaks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) arch=x64 ;;
+            aarch64|arm64) arch=arm64 ;;
+            *) echo "No gitleaks build for $(uname -m)" >&2; exit 1 ;;
+          esac
+          api() { curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$@"; }
+          tag="$(api https://api.github.com/repos/gitleaks/gitleaks/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')"
+          [ -n "$tag" ] || { echo "Could not read the newest gitleaks release" >&2; exit 1; }
+          file="gitleaks_${tag#v}_linux_${arch}.tar.gz"
+          sums="gitleaks_${tag#v}_checksums.txt"
+          base="https://github.com/gitleaks/gitleaks/releases/download/$tag"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$file"
+          curl -fsSLO "$base/$sums"
+          grep " $file\$" "$sums" | sha256sum -c -
+          tar -xzf "$file" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # Scans the commits of the pull request or push (all of them on a manual
+      # run) with .gitleaks.toml and .gitleaksignore.
+      - name: No settings, keys or passwords committed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) range="$BASE..$HEAD" ;;
+            push) [[ "$BEFORE" =~ ^0+$ ]] && range="$GITHUB_SHA" || range="$BEFORE..$GITHUB_SHA" ;;
+            *) range='' ;;
+          esac
+          gitleaks git --no-banner --redact -v ${range:+--log-opts="$range"}
+
+      # AGENTS.md ("No AI Links") keeps links to AI products, their docs and
+      # agent sessions out of code, code comments and documentation. This looks
+      # in every text file git tracks for the addresses of those sites and their
+      # subdomains, with or without https://.
+      - name: No links to AI sites
+        run: |
+          set -euo pipefail
+          # Dots are escaped, so this file does not match its own list.
+          sites='claude\.(ai|com)|anthropic\.com|openai\.com|chatgpt\.com|(gemini|bard|aistudio)\.google\.com'
+          sites+='|copilot\.microsoft\.com|github\.com/(features/)?copilot|docs\.github\.com/[^[:space:]]*copilot'
+          sites+='|perplexity\.ai|mistral\.ai|x\.ai|grok\.com|deepseek\.com|poe\.com|character\.ai'
+          # Start of the line or a character that cannot be part of a host name or
+          # an e-mail address, then any subdomains, so look-alikes such as
+          # notclaude.ai and addresses such as a Co-Authored-By trailer's do not count.
+          pattern="(^|[^a-z0-9.@-])([a-z0-9-]+\.)*($sites)([^a-z0-9-]|$)"
+          if hits=$(git grep -nIiE -e "$pattern"); then
+            while IFS= read -r hit; do printf '[FAIL] %s\n' "$hit" >&2; done <<< "$hits"
+            echo 'Found links to AI sites; AGENTS.md ("No AI Links") keeps them out of the repository.' >&2
+            exit 1
+          fi
+          echo '[PASS] No links to AI sites in tracked files.'
