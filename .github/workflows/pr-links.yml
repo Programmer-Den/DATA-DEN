@@ -25,6 +25,6 @@ permissions:
 jobs:
   pr-links:
     name: PR Links
-    uses: Programmer-Den/repo-base/.github/workflows/reusable-pr-links.yml@claude/project-thread-8tinhg
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-pr-links.yml@main
     secrets:
       FORBIDDEN_NAMES: ${{ secrets.FORBIDDEN_NAMES }}
