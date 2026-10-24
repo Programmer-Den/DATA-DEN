@@ -13,6 +13,6 @@ permissions:
 jobs:
   project-status:
     name: Project status
-    uses: Programmer-Den/repo-base/.github/workflows/reusable-project-status.yml@claude/project-thread-8tinhg
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-project-status.yml@main
     secrets:
       PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}

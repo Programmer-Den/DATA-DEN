@@ -13,4 +13,4 @@ permissions:
 jobs:
   pr-template:
     name: PR Template
-    uses: Programmer-Den/repo-base/.github/workflows/reusable-pr-template-validation.yml@claude/project-thread-8tinhg
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-pr-template-validation.yml@main

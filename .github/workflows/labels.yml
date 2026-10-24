@@ -17,4 +17,4 @@ jobs:
     permissions:
       contents: read
       issues: write
-    uses: Programmer-Den/repo-base/.github/workflows/reusable-labels.yml@claude/project-thread-8tinhg
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-labels.yml@main
