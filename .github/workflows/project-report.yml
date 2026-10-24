@@ -11,6 +11,6 @@ permissions:
 jobs:
   project-report:
     name: Project report
-    uses: Programmer-Den/repo-base/.github/workflows/reusable-project-report.yml@main
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-project-report.yml@claude/project-thread-8tinhg
     secrets:
       PROJECTS_TOKEN: ${{ secrets.PROJECTS_TOKEN }}

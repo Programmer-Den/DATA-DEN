@@ -22,7 +22,7 @@ concurrency:
 jobs:
   checks:
     name: Checks
-    uses: Programmer-Den/repo-base/.github/workflows/reusable-checks.yml@main
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-checks.yml@claude/project-thread-8tinhg
     # On a light self-hosted runner:
     # with:
     #   runs-on: '["self-hosted", "light"]'

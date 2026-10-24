@@ -19,7 +19,7 @@ permissions:
 jobs:
   issue-labels:
     name: Issue labels
-    uses: Programmer-Den/repo-base/.github/workflows/reusable-issue-labels.yml@main
+    uses: Programmer-Den/repo-base/.github/workflows/reusable-issue-labels.yml@claude/project-thread-8tinhg
     with:
       issue: ${{ inputs.issue || '' }}
     secrets:
