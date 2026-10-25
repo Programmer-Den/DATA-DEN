@@ -1,2 +1,9 @@
 .env
 !.env.example
+
+# Editor and IDE files
+.idea/
+.vscode/
+
+# Built website, embedded into the Go binary at build time
+backend/internal/web/files/build/

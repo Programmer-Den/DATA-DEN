@@ -1,0 +1,56 @@
+# Two light self-hosted GitHub Actions runners for DATA-DEN, as Linux containers
+# under Docker Desktop on the Windows PC. Setup: runner/README.md
+#
+#   powershell -ExecutionPolicy Bypass -File runner/register-runner.ps1   (once, asks for the token)
+#   docker compose -f runner/runner.compose.yaml logs -f
+#   docker compose -f runner/runner.compose.yaml down                     (stop)
+#
+# Neither container gets the Docker socket or a folder of the PC, only the
+# read-only cleanup script, so a job cannot reach other containers or volumes.
+
+name: data-den-runner
+
+x-light: &light
+  image: myoung34/github-runner:ubuntu-noble
+  restart: unless-stopped
+  environment: &light-env
+    RUNNER_SCOPE: repo
+    REPO_URL: https://github.com/Programmer-Den/DATA-DEN
+    LABELS: linux,light
+    # Only needed for the first registration; afterwards it lives in the volume.
+    RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+    RUNNER_WORKDIR: /tmp/runner/work
+    CONFIGURED_ACTIONS_RUNNER_FILES_DIR: /runner/data
+    DISABLE_AUTOMATIC_DEREGISTRATION: "true"
+    # Deletes the checkout after every job (the runner calls .sh files with bash).
+    ACTIONS_RUNNER_HOOK_JOB_COMPLETED: /opt/data-den/runner-cleanup.sh
+  configs:
+    - source: runner-cleanup
+      target: /opt/data-den/runner-cleanup.sh
+
+services:
+  runner-light-1:
+    <<: *light
+    container_name: data-den-runner-light-1
+    environment:
+      <<: *light-env
+      RUNNER_NAME: data-den-light-1
+    volumes:
+      - runner-light-1-data:/runner/data
+
+  runner-light-2:
+    <<: *light
+    container_name: data-den-runner-light-2
+    environment:
+      <<: *light-env
+      RUNNER_NAME: data-den-light-2
+    volumes:
+      - runner-light-2-data:/runner/data
+
+configs:
+  runner-cleanup:
+    file: ./runner-cleanup.sh
+
+volumes:
+  runner-light-1-data:
+  runner-light-2-data:

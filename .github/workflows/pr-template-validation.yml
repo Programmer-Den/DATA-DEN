@@ -14,3 +14,5 @@ jobs:
   pr-template:
     name: PR Template
     uses: Programmer-Den/repo-base/.github/workflows/reusable-pr-template-validation.yml@main
+    with:
+      runs-on: ${{ vars.LIGHT_RUNNER || '"ubuntu-latest"' }}
