@@ -32,7 +32,7 @@ expect 2 'Usage' ./setup-firewall.sh 192.168.1.20 10.0.0.1
 for bad in 256.1.1.1 192.168.1 192.168.1.020x '192.168.1.20 tcp dport 1-65535' 'x/g;s/y' ''; do
 	expect 2 'not an IPv4 address' ./setup-firewall.sh "$bad"
 done
-expect 0 'ip saddr 192.168.1.20 tcp dport { 22, 443 } accept' ./setup-firewall.sh --print 192.168.1.20
+expect 0 'ip saddr 192.168.1.20 tcp dport { 22, 8443 } accept' ./setup-firewall.sh --print 192.168.1.20
 
 if ./setup-firewall.sh --print 10.0.0.5 | grep -q '@PI_ADDRESS@'; then
 	echo '[FAIL] setup-firewall.sh --print left @PI_ADDRESS@ in the rules' >&2

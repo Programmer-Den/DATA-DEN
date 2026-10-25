@@ -16,7 +16,7 @@ flowchart LR
   through and mirrored. Windows itself does not see the disks, and only the
   Pi can reach the VM. Setup: [vm/README.md](vm/README.md).
 - **DATA-DEN:** this repository, the web interface and its API, as one
-  Docker image running in the VM.
+  Docker image running in the VM: [deploy/README.md](deploy/README.md).
 
 The server serves the website, `/api/health`, the login, the folder view,
 downloads and uploads.
@@ -41,6 +41,7 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
+| `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
 A login lasts 7 days, in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie;
 sessions live in memory, so a restart logs out. After 5 failed logins from

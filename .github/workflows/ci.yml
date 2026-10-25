@@ -154,6 +154,8 @@ jobs:
           docker run -d --name data-den -p 8080:8080 --read-only --cap-drop ALL data-den:ci
           for _ in $(seq 1 30); do
             if curl -fsS http://localhost:8080/api/health && curl -fsS http://localhost:8080/ | grep -q '<app-root'; then
+              # The image's own HEALTHCHECK command
+              docker exec data-den /data-den healthcheck
               exit 0
             fi
             sleep 1
