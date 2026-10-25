@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 )
 
 // Config is what the server needs to run.
@@ -16,6 +18,8 @@ type Config struct {
 	Files fs.FS
 	// Version is reported by /api/health.
 	Version string
+	// Auth adds the login API; nil leaves it out.
+	Auth *auth.Auth
 }
 
 // New returns the handler for the website and the API.
@@ -24,6 +28,9 @@ func New(cfg Config) http.Handler {
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": cfg.Version})
 	})
+	if cfg.Auth != nil {
+		cfg.Auth.Register(mux)
+	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
