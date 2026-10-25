@@ -1,0 +1,20 @@
+# DATA-DEN in the storage VM. Guide: deploy/README.md
+services:
+  data-den:
+    image: ghcr.io/programmer-den/data-den:main
+    restart: unless-stopped
+    # The host's network, not a published port: Docker's rules for published
+    # ports would skip the VM's nftables, which only let the Pi in.
+    network_mode: host
+    env_file: .env
+    environment:
+      LISTEN_ADDR: ':8443'
+      DATA_DEN_DATA_DIR: /data
+      DATA_DEN_TLS_CERT: /tls/cert.pem
+      DATA_DEN_TLS_KEY: /tls/key.pem
+    volumes:
+      - /srv/data-den:/data
+      - ./tls:/tls:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']

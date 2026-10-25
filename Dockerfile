@@ -29,4 +29,6 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
 FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=backend /out/data-den /data-den
 EXPOSE 8080
+# No shell or curl in the image, so the program checks itself.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s CMD ["/data-den", "healthcheck"]
 ENTRYPOINT ["/data-den"]

@@ -6,7 +6,7 @@ and the runner containers never see them. Only the Pi gets into the VM.
 
 ```mermaid
 flowchart LR
-    pi["Raspberry Pi"] -- "443, 22" --> acl["Hyper-V port ACLs"]
+    pi["Raspberry Pi"] -- "8443, 22" --> acl["Hyper-V port ACLs"]
     acl --> nft["nftables in the VM"]
     nft --> vm["Debian VM<br/>/srv/data-den on RAID 1"]
 ```
@@ -87,6 +87,8 @@ sudo vm/setup-firewall.sh 192.168.1.20       # the Pi's address
 `setup-raid.sh` shows both disks and asks you to type `DATA-DEN` before it
 erases them. The first resync of 4 TB takes several hours; the mirror can be
 used meanwhile. Check it with `cat /proc/mdstat`.
+
+Then start DATA-DEN in the VM: [deploy/README.md](../deploy/README.md).
 
 ## Check that it worked
 
