@@ -75,3 +75,33 @@ describe('formatSize', () => {
     expect(formatSize(4 * 1024 ** 4)).toBe('4 TB');
   });
 });
+
+describe('Files upload', () => {
+  it('uploads picked files into the open folder and shows them', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(Files);
+    http.expectOne('/api/files?path=/').flush({ path: '/', entries: [photos] });
+    await fixture.whenStable();
+
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      'input[type=file][multiple]',
+    )!;
+    const picked = [new File([], 'neu.txt')];
+    Object.defineProperty(input, 'files', { value: Object.assign(picked, { item: () => null }) });
+    input.dispatchEvent(new Event('change'));
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const start = http.expectOne('/api/uploads');
+    expect(start.request.body).toEqual({ path: '/neu.txt', size: 0 });
+    start.flush({ id: 'u1', offset: 0 });
+    await new Promise((resolve) => setTimeout(resolve));
+
+    http.expectOne('/api/files?path=/').flush({ path: '/', entries: [photos, notes] });
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('fertig');
+    http.verify();
+  });
+});

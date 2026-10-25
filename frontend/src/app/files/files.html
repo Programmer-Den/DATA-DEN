@@ -1,49 +1,87 @@
-<nav class="crumbs" aria-label="Ordnerpfad">
-  @for (crumb of crumbs(); track crumb.path; let last = $last) {
-    @if (last) {
-      <span aria-current="page">{{ crumb.name }}</span>
-    } @else {
-      <button type="button" class="link" (click)="open(crumb.path)">{{ crumb.name }}</button>
-      <span aria-hidden="true">/</span>
+<section
+  class="drop"
+  [class.dragging]="dragging()"
+  (dragover)="dragOver($event)"
+  (dragleave)="dragging.set(false)"
+  (drop)="drop($event)"
+>
+  <nav class="crumbs" aria-label="Ordnerpfad">
+    @for (crumb of crumbs(); track crumb.path; let last = $last) {
+      @if (last) {
+        <span aria-current="page">{{ crumb.name }}</span>
+      } @else {
+        <button type="button" class="link" (click)="open(crumb.path)">{{ crumb.name }}</button>
+        <span aria-hidden="true">/</span>
+      }
     }
+  </nav>
+
+  @if (error(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
   }
-</nav>
 
-@if (error(); as error) {
-  <p class="error" role="alert">{{ error }}</p>
-}
-
-@if (entries(); as entries) {
-  @if (entries.length === 0) {
-    <p class="empty">Dieser Ordner ist leer.</p>
-  } @else {
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">Name</th>
-          <th scope="col" class="size">Größe</th>
-          <th scope="col">Geändert</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (entry of entries; track entry.name) {
+  @if (entries(); as entries) {
+    @if (entries.length === 0) {
+      <p class="empty">Dieser Ordner ist leer.</p>
+    } @else {
+      <table>
+        <thead>
           <tr>
-            <td>
-              @if (entry.dir) {
-                <button type="button" class="link" (click)="open(child(entry))">
-                  📁 {{ entry.name }}
-                </button>
-              } @else {
-                <a [href]="downloadUrl(entry)" download>{{ entry.name }}</a>
-              }
-            </td>
-            <td class="size">{{ entry.dir ? '' : formatSize(entry.size) }}</td>
-            <td>{{ modified(entry) }}</td>
+            <th scope="col">Name</th>
+            <th scope="col" class="size">Größe</th>
+            <th scope="col">Geändert</th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (entry of entries; track entry.name) {
+            <tr>
+              <td>
+                @if (entry.dir) {
+                  <button type="button" class="link" (click)="open(child(entry))">
+                    📁 {{ entry.name }}
+                  </button>
+                } @else {
+                  <a [href]="downloadUrl(entry)" download>{{ entry.name }}</a>
+                }
+              </td>
+              <td class="size">{{ entry.dir ? '' : formatSize(entry.size) }}</td>
+              <td>{{ modified(entry) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  } @else if (!error()) {
+    <p>Lade …</p>
   }
-} @else if (!error()) {
-  <p>Lade …</p>
-}
+
+  <div class="upload">
+    <label class="button">
+      Dateien hochladen
+      <input type="file" multiple (change)="pick($event)" />
+    </label>
+    <label class="button">
+      Ordner hochladen
+      <input type="file" webkitdirectory (change)="pick($event)" />
+    </label>
+    <span class="hint">oder Dateien und Ordner hierher ziehen</span>
+  </div>
+
+  @if (uploader.items().length > 0) {
+    <ul class="uploads" aria-label="Uploads">
+      @for (item of uploader.items(); track item.id) {
+        <li>
+          <span class="name">{{ item.path }}</span>
+          <progress max="100" [value]="percent(item)"></progress>
+          <span class="state">
+            {{ item.status === 'lädt hoch' ? percent(item) + ' %' : item.status }}
+            @if (item.error) {
+              : {{ item.error }}
+            }
+          </span>
+        </li>
+      }
+    </ul>
+    <button type="button" (click)="uploader.clearDone()">Fertige ausblenden</button>
+  }
+</section>

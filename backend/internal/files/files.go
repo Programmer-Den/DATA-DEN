@@ -34,7 +34,8 @@ type Listing struct {
 
 // Files serves the data directory.
 type Files struct {
-	root *os.Root
+	root    *os.Root
+	uploads uploads
 }
 
 // Open opens the data directory dir.
@@ -43,7 +44,7 @@ func Open(dir string) (*Files, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Files{root: root}, nil
+	return &Files{root: root, uploads: uploads{byID: map[string]*upload{}}}, nil
 }
 
 // Close releases the data directory.
@@ -51,11 +52,12 @@ func (f *Files) Close() error {
 	return f.root.Close()
 }
 
-// Register adds /api/files and /api/download to mux, behind require (the
-// login check).
+// Register adds /api/files, /api/download and /api/uploads to mux, behind
+// require (the login check).
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
+	f.registerUploads(mux, require)
 }
 
 func (f *Files) list(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +89,9 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 			// Symlinks, devices and the like are not offered.
 			continue
 		}
+		if name == "." && info.Name() == uploadDir {
+			continue
+		}
 		entry := Entry{Name: info.Name(), Dir: info.IsDir(), Modified: info.ModTime().UTC()}
 		if !entry.Dir {
 			entry.Size = info.Size()
@@ -113,6 +118,10 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 func (f *Files) download(w http.ResponseWriter, r *http.Request) {
 	name, ok := relative(w, r.URL.Query().Get("path"))
 	if !ok {
+		return
+	}
+	if name == uploadDir || strings.HasPrefix(name, uploadDir+"/") {
+		writeError(w, http.StatusNotFound, "Nicht gefunden")
 		return
 	}
 	file, err := f.root.Open(name)

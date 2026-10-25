@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
+import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
 
 export interface Entry {
   name: string;
@@ -56,6 +57,9 @@ export class Files {
     ];
   });
   protected readonly formatSize = formatSize;
+  protected readonly uploader = inject(Uploader);
+  /** True while files are dragged over the page. */
+  protected readonly dragging = signal(false);
 
   constructor() {
     this.open('/');
@@ -82,5 +86,43 @@ export class Files {
 
   protected modified(entry: Entry): string {
     return date.format(new Date(entry.modified));
+  }
+
+  protected percent(item: UploadItem): number {
+    return item.size === 0 ? 100 : Math.floor((item.loaded / item.size) * 100);
+  }
+
+  protected pick(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files?.length) {
+      void this.start(pickedJobs(input.files, this.path()));
+    }
+    // The same files can be picked again after an error.
+    input.value = '';
+  }
+
+  protected dragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.dragging.set(true);
+  }
+
+  protected async drop(event: DragEvent): Promise<void> {
+    event.preventDefault();
+    this.dragging.set(false);
+    if (event.dataTransfer) {
+      // Read before the first await: the browser empties the DataTransfer
+      // once the drop handler returns.
+      const jobs = droppedJobs(event.dataTransfer, this.path());
+      await this.start(await jobs);
+    }
+  }
+
+  private async start(jobs: Job[]): Promise<void> {
+    const folder = this.path();
+    await this.uploader.upload(jobs);
+    // Shows the new files if the folder is still open.
+    if (this.path() === folder) {
+      this.open(folder);
+    }
   }
 }
