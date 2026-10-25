@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 )
 
 func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder {
@@ -65,5 +67,16 @@ func TestSiteNotBuilt(t *testing.T) {
 	h := New(Config{Files: fstest.MapFS{}})
 	if rec := get(t, h, "/"); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("status %d, want 503", rec.Code)
+	}
+}
+
+func TestLoginAPI(t *testing.T) {
+	a, err := auth.New(auth.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(Config{Files: fstest.MapFS{}, Auth: a})
+	if rec := get(t, h, "/api/session"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("/api/session without login: status %d, want 401", rec.Code)
 	}
 }

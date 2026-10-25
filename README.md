@@ -18,8 +18,34 @@ flowchart LR
 - **DATA-DEN:** this repository, the web interface and its API, as one
   Docker image running in the VM.
 
-This is the skeleton: the server answers `/api/health` and serves the
-website. Login, uploads and the file view follow.
+So far the server serves the website, `/api/health` and the login. Uploads
+and the file view follow.
+
+## Login
+
+One account. Its password is stored only as a bcrypt hash:
+
+```bash
+cd backend && go run ./cmd/data-den hash-password       # or: docker run --rm -i data-den hash-password
+```
+
+Type the password and put the printed hash into the settings, for example a
+`.env` next to the compose file (`.env.example` lists them). Put the hash in
+single quotes there, `DATA_DEN_PASSWORD_HASH='$2a$12$...'`, or Docker
+Compose reads its `$` signs as variables.
+
+| Setting | Meaning |
+|---|---|
+| `DATA_DEN_USERNAME` | The account's name |
+| `DATA_DEN_PASSWORD_HASH` | The hash from `hash-password`; without it nobody can log in |
+| `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
+| `LISTEN_ADDR` | Where the server listens, default `:8080` |
+
+A login lasts 7 days, in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie;
+sessions live in memory, so a restart logs out. After 5 failed logins from
+one address within 15 minutes, that address waits until the 15 minutes are
+over. Each failed login is logged as `login failed ip=<address>` for
+fail2ban on the Pi.
 
 ## Development
 
@@ -28,7 +54,7 @@ Needs Go (version in `backend/go.mod`) and Node (version in
 
 ```bash
 cd frontend && npm ci && npm run build   # builds the website into the backend
-cd ../backend && go run ./cmd/data-den   # http://localhost:8080
+cd ../backend && DATA_DEN_USERNAME=me DATA_DEN_PASSWORD_HASH='<hash>' go run ./cmd/data-den   # http://localhost:8080
 ```
 
 For live reload of the website, run `npm start` in `frontend/` next to the
