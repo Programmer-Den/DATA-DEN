@@ -14,7 +14,7 @@ flowchart LR
   and forwards to the storage VM, nothing else (rpi-setup task `dataden`).
 - **Storage VM:** a Debian VM on the Windows PC with both disks passed
   through and mirrored. Windows itself does not see the disks, and only the
-  Pi can reach the VM.
+  Pi can reach the VM. Setup: [vm/README.md](vm/README.md).
 - **DATA-DEN:** this repository, the web interface and its API, as one
   Docker image running in the VM.
 

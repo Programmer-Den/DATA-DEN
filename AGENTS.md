@@ -12,6 +12,7 @@ DATA-DEN is a self-hosted NAS: a web interface to upload, download and manage fi
 - `frontend/`: Angular with TypeScript, tests with Vitest; Prettier and ESLint. `npm run build` writes into `backend/internal/web/files/build/`
 - `Dockerfile`: one distroless image for amd64 and arm64, cross-compiled
 - `runner/`: the two light self-hosted runners (Docker Desktop on the Windows PC)
+- `vm/`: the storage VM, PowerShell for Hyper-V and Bash for the Debian VM; PSScriptAnalyzer and shellcheck
 - UI text is German
 
 ## Code Style & Conventions
@@ -31,7 +32,8 @@ DATA-DEN is a self-hosted NAS: a web interface to upload, download and manage fi
 
 Before submitting changes:
 - Run `gitleaks git` (the secret check, with `.gitleaks.toml`)
-- Run `bash -n` and `shellcheck` on every changed shell script
+- Run `bash -n` and `shellcheck` on every changed shell script, and `Invoke-ScriptAnalyzer` on every changed PowerShell script
+- VM scripts: `vm/test-vm-scripts.sh`
 - Backend, in `backend/`: `gofmt -l .`, `golangci-lint run`, `go test ./...`, `go mod tidy -diff`
 - Frontend, in `frontend/`: `npm run format:check`, `npm run lint`, `npm test`, `npm run build`
 - Add tests for new code

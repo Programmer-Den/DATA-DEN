@@ -41,6 +41,18 @@ jobs:
           for f in "${scripts[@]}"; do bash -n "$f"; done
           shellcheck --color=never "${scripts[@]}"
 
+      - name: Test the VM scripts
+        run: vm/test-vm-scripts.sh
+
+      # PowerShell and PSScriptAnalyzer come with GitHub's runner image.
+      - name: Lint PowerShell scripts
+        shell: pwsh
+        run: |
+          Import-Module PSScriptAnalyzer -ErrorAction Stop
+          $findings = Invoke-ScriptAnalyzer -Path . -Recurse
+          $findings | Format-Table -AutoSize | Out-String -Width 200
+          if ($findings) { exit 1 }
+
       - name: Lint GitHub Actions workflows
         run: |
           docker run --rm -v "$PWD:/repo" --workdir /repo \
