@@ -18,8 +18,8 @@ flowchart LR
 - **DATA-DEN:** this repository, the web interface and its API, as one
   Docker image running in the VM.
 
-So far the server serves the website, `/api/health`, the login, the folder
-view and downloads. Uploads follow.
+The server serves the website, `/api/health`, the login, the folder view,
+downloads and uploads.
 
 ## Login
 
@@ -57,6 +57,16 @@ goes through Go's `os.Root`, so neither `..` nor a symlink reaches anything
 outside the data directory; symlinks are not listed at all. In Docker the
 server runs as user 65532, so the data directory has to belong to it:
 `sudo chown -R 65532:65532 /srv/data-den`.
+
+Uploads take many files or whole folders at once, picked with the two
+buttons or dragged onto the page, into the open folder. Three files upload
+at a time, each with its own progress bar. Every file goes in chunks of
+8 MB (`/api/uploads`); a failed chunk is sent again from where the server
+stands, so a broken connection costs at most one chunk. Folders in the path
+are created, and an existing file is never overwritten: the upload stops
+with "Datei existiert bereits". Unfinished chunks wait in
+`.data-den-uploads/` in the data directory, which the folder view hides; a
+restart of the server removes them.
 
 ## Development
 

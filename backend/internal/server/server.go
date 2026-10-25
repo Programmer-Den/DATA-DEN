@@ -42,6 +42,8 @@ func New(cfg Config) http.Handler {
 			}
 			mux.HandleFunc("GET /api/files", cfg.Auth.Require(missing))
 			mux.HandleFunc("GET /api/download", cfg.Auth.Require(missing))
+			mux.HandleFunc("/api/uploads/", cfg.Auth.Require(missing))
+			mux.HandleFunc("POST /api/uploads", cfg.Auth.Require(missing))
 		}
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

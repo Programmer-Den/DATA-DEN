@@ -25,3 +25,7 @@ main {
   font-size: 0.8rem;
   opacity: 0.6;
 }
+
+.status button {
+  margin-left: 0.5rem;
+}
