@@ -1,0 +1,49 @@
+<nav class="crumbs" aria-label="Ordnerpfad">
+  @for (crumb of crumbs(); track crumb.path; let last = $last) {
+    @if (last) {
+      <span aria-current="page">{{ crumb.name }}</span>
+    } @else {
+      <button type="button" class="link" (click)="open(crumb.path)">{{ crumb.name }}</button>
+      <span aria-hidden="true">/</span>
+    }
+  }
+</nav>
+
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (entries(); as entries) {
+  @if (entries.length === 0) {
+    <p class="empty">Dieser Ordner ist leer.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col" class="size">Größe</th>
+          <th scope="col">Geändert</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (entry of entries; track entry.name) {
+          <tr>
+            <td>
+              @if (entry.dir) {
+                <button type="button" class="link" (click)="open(child(entry))">
+                  📁 {{ entry.name }}
+                </button>
+              } @else {
+                <a [href]="downloadUrl(entry)" download>{{ entry.name }}</a>
+              }
+            </td>
+            <td class="size">{{ entry.dir ? '' : formatSize(entry.size) }}</td>
+            <td>{{ modified(entry) }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+} @else if (!error()) {
+  <p>Lade …</p>
+}

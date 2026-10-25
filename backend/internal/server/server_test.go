@@ -80,3 +80,33 @@ func TestLoginAPI(t *testing.T) {
 		t.Errorf("/api/session without login: status %d, want 401", rec.Code)
 	}
 }
+
+func TestFilesWithoutDataDirectory(t *testing.T) {
+	hash, err := auth.HashPassword("richtig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := auth.New(auth.Config{Username: "chriszly", PasswordHash: hash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(Config{Files: fstest.MapFS{}, Auth: a})
+
+	login := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"chriszly","password":"richtig"}`))
+	login.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, login)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login: status %d", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/files?path=/", nil)
+	for _, c := range rec.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("/api/files without data directory: status %d, want 503", rec.Code)
+	}
+}

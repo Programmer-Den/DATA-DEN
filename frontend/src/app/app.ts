@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { AuthService, errorMessage } from './auth.service';
+import { Files } from './files/files';
 
 interface Health {
   status: string;
@@ -9,6 +10,7 @@ interface Health {
 
 @Component({
   selector: 'app-root',
+  imports: [Files],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

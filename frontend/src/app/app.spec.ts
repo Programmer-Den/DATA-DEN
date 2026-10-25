@@ -22,6 +22,8 @@ describe('App', () => {
     const req = http.expectOne('/api/session');
     if (session) {
       req.flush({ username: session });
+      await fixture.whenStable();
+      http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
     } else {
       req.flush({ error: 'Nicht angemeldet' }, { status: 401, statusText: 'Unauthorized' });
     }
@@ -60,7 +62,7 @@ describe('App', () => {
   it('asks to log in when there is no session', async () => {
     const fixture = await start(null);
     expect(page(fixture).querySelector('form')).not.toBeNull();
-    expect(page(fixture).textContent).not.toContain('Version');
+    expect(page(fixture).textContent).not.toContain('DATA-DEN 1.2.3');
   });
 
   it('logs in', async () => {
@@ -70,8 +72,10 @@ describe('App', () => {
     expect(req.request.body).toEqual({ username: 'chriszly', password: 'richtig' });
     req.flush({ username: 'chriszly' });
     await fixture.whenStable();
+    http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
+    await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Angemeldet als chriszly');
-    expect(page(fixture).textContent).toContain('Version 1.2.3');
+    expect(page(fixture).textContent).toContain('DATA-DEN 1.2.3');
   });
 
   it("shows the server's message when the login fails", async () => {
