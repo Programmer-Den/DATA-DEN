@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 )
 
 // Config is what the server needs to run.
@@ -20,6 +21,9 @@ type Config struct {
 	Version string
 	// Auth adds the login API; nil leaves it out.
 	Auth *auth.Auth
+	// Data is the data directory, served behind the login. Nil with Auth set
+	// means the directory is missing: its API answers 503.
+	Data *files.Files
 }
 
 // New returns the handler for the website and the API.
@@ -30,6 +34,15 @@ func New(cfg Config) http.Handler {
 	})
 	if cfg.Auth != nil {
 		cfg.Auth.Register(mux)
+		if cfg.Data != nil {
+			cfg.Data.Register(mux, cfg.Auth.Require)
+		} else {
+			missing := func(w http.ResponseWriter, _ *http.Request) {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Datenordner nicht verfügbar"})
+			}
+			mux.HandleFunc("GET /api/files", cfg.Auth.Require(missing))
+			mux.HandleFunc("GET /api/download", cfg.Auth.Require(missing))
+		}
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})

@@ -9,8 +9,9 @@
       Angemeldet als <strong>{{ user }}</strong>
       <button type="button" (click)="logout()">Abmelden</button>
     </p>
+    <app-files />
     @if (version(); as version) {
-      <p class="status">Server läuft, Version {{ version }}</p>
+      <p class="version">DATA-DEN {{ version }}</p>
     }
   } @else {
     <form class="login" (submit)="login($event, username.value, password.value)">

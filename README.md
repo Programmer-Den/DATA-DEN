@@ -18,8 +18,8 @@ flowchart LR
 - **DATA-DEN:** this repository, the web interface and its API, as one
   Docker image running in the VM.
 
-So far the server serves the website, `/api/health` and the login. Uploads
-and the file view follow.
+So far the server serves the website, `/api/health`, the login, the folder
+view and downloads. Uploads follow.
 
 ## Login
 
@@ -39,6 +39,7 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_USERNAME` | The account's name |
 | `DATA_DEN_PASSWORD_HASH` | The hash from `hash-password`; without it nobody can log in |
 | `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
+| `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 
 A login lasts 7 days, in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie;
@@ -46,6 +47,16 @@ sessions live in memory, so a restart logs out. After 5 failed logins from
 one address within 15 minutes, that address waits until the 15 minutes are
 over. Each failed login is logged as `login failed ip=<address>` for
 fail2ban on the Pi.
+
+## Files
+
+After the login the website shows the folders of the data directory, with a
+path bar to go back up; a click on a file downloads it. Downloads can be
+resumed (HTTP range requests), which matters for large videos. Every access
+goes through Go's `os.Root`, so neither `..` nor a symlink reaches anything
+outside the data directory; symlinks are not listed at all. In Docker the
+server runs as user 65532, so the data directory has to belong to it:
+`sudo chown -R 65532:65532 /srv/data-den`.
 
 ## Development
 

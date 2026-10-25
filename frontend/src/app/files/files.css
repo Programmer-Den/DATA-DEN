@@ -1,0 +1,38 @@
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: LinkText;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.size {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.error {
+  color: #c62828;
+}

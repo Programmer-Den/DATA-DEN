@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/version"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/web"
@@ -67,9 +68,19 @@ func run() error {
 	if os.Getenv("DATA_DEN_PASSWORD_HASH") == "" {
 		slog.Warn("no DATA_DEN_PASSWORD_HASH set, so nobody can log in; create one with: data-den hash-password")
 	}
+	dataDir := os.Getenv("DATA_DEN_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "/data"
+	}
+	data, err := files.Open(dataDir)
+	if err != nil {
+		slog.Warn("the data directory cannot be opened, so no files are served; set DATA_DEN_DATA_DIR", "dir", dataDir, "err", err)
+	} else {
+		defer func() { _ = data.Close() }()
+	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
