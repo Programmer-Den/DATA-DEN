@@ -99,4 +99,29 @@ describe('App', () => {
     await fixture.whenStable();
     expect(page(fixture).querySelector('form')).not.toBeNull();
   });
+
+  it('switches between the views', async () => {
+    const fixture = await start('chriszly');
+    const tab = (name: string) =>
+      [...page(fixture).querySelectorAll<HTMLButtonElement>('.tabs button')].find(
+        (b) => b.textContent?.trim() === name,
+      )!;
+    expect(tab('Dateien').getAttribute('aria-current')).toBe('page');
+
+    tab('Fotos').click();
+    await fixture.whenStable();
+    http.expectOne('/api/media?kind=photo').flush({ kind: 'photo', items: [] });
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('Keine Fotos gefunden');
+
+    tab('Dokumente').click();
+    await fixture.whenStable();
+    http.expectOne('/api/media?kind=document').flush({ kind: 'document', items: [] });
+    await fixture.whenStable();
+    expect(tab('Dokumente').getAttribute('aria-current')).toBe('page');
+
+    tab('Dateien').click();
+    await fixture.whenStable();
+    http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
+  });
 });

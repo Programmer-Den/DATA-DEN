@@ -1,6 +1,6 @@
 main {
-  max-width: 40rem;
-  margin: 4rem auto;
+  max-width: 64rem;
+  margin: 2rem auto;
   padding: 0 1rem;
 }
 
@@ -28,4 +28,27 @@ main {
 
 .status button {
   margin-left: 0.5rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.tabs button {
+  padding: 0.5rem 0.9rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tabs .active {
+  border-bottom-color: LinkText;
+  font-weight: 600;
 }

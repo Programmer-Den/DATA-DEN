@@ -9,7 +9,26 @@
       Angemeldet als <strong>{{ user }}</strong>
       <button type="button" (click)="logout()">Abmelden</button>
     </p>
-    <app-files />
+    <nav class="tabs" aria-label="Ansichten">
+      @for (tab of tabs; track tab.view) {
+        <button
+          type="button"
+          [class.active]="view() === tab.view"
+          [attr.aria-current]="view() === tab.view ? 'page' : null"
+          (click)="view.set(tab.view)"
+        >
+          {{ tab.name }}
+        </button>
+      }
+    </nav>
+    @switch (view()) {
+      @case ('files') {
+        <app-files />
+      }
+      @default {
+        <app-media [kind]="$any(view())" />
+      }
+    }
     @if (version(); as version) {
       <p class="version">DATA-DEN {{ version }}</p>
     }

@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Entry, Files, formatSize } from './files';
+import { Entry, Files } from './files';
 
 const photos: Entry = { name: 'Fotos', dir: true, size: 0, modified: '2026-10-25T10:00:00Z' };
 const notes: Entry = {
@@ -44,6 +44,38 @@ describe('Files', () => {
     expect(link.hasAttribute('download')).toBe(true);
   });
 
+  it('opens a file with a preview in the viewer', async () => {
+    page().querySelector<HTMLButtonElement>('tbody button')!.click();
+    http.expectOne('/api/files?path=/Fotos').flush({
+      path: '/Fotos',
+      entries: [
+        {
+          name: 'a.jpg',
+          dir: false,
+          size: 1,
+          modified: notes.modified,
+          kind: 'photo',
+          preview: true,
+        },
+        {
+          name: 'b.jpg',
+          dir: false,
+          size: 1,
+          modified: notes.modified,
+          kind: 'photo',
+          preview: true,
+        },
+      ],
+    });
+    await fixture.whenStable();
+    page().querySelectorAll<HTMLButtonElement>('tbody button')[1].click();
+    await fixture.whenStable();
+    expect(page().querySelector('app-viewer')?.textContent).toContain('2 / 2');
+    expect(page().querySelector('app-viewer img')?.getAttribute('src')).toBe(
+      '/api/view?path=%2FFotos%2Fb.jpg',
+    );
+  });
+
   it('opens a folder and goes back through the path bar', async () => {
     page().querySelector<HTMLButtonElement>('tbody button')!.click();
     http.expectOne('/api/files?path=/Fotos').flush({ path: '/Fotos', entries: [] });
@@ -64,15 +96,6 @@ describe('Files', () => {
       .flush({ error: 'Nicht gefunden' }, { status: 404, statusText: 'Not Found' });
     await fixture.whenStable();
     expect(page().querySelector('[role=alert]')?.textContent).toContain('Nicht gefunden');
-  });
-});
-
-describe('formatSize', () => {
-  it('picks a unit', () => {
-    expect(formatSize(0)).toBe('0 B');
-    expect(formatSize(1023)).toBe('1.023 B');
-    expect(formatSize(1572864)).toBe('1,5 MB');
-    expect(formatSize(4 * 1024 ** 4)).toBe('4 TB');
   });
 });
 

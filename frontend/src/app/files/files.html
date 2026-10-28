@@ -30,6 +30,7 @@
             <th scope="col">Name</th>
             <th scope="col" class="size">Größe</th>
             <th scope="col">Geändert</th>
+            <th scope="col"><span class="visually-hidden">Herunterladen</span></th>
           </tr>
         </thead>
         <tbody>
@@ -40,12 +41,27 @@
                   <button type="button" class="link" (click)="open(child(entry))">
                     📁 {{ entry.name }}
                   </button>
+                } @else if (entry.preview) {
+                  <button type="button" class="link" (click)="view(entry)">
+                    {{ entry.name }}
+                  </button>
                 } @else {
                   <a [href]="downloadUrl(entry)" download>{{ entry.name }}</a>
                 }
               </td>
               <td class="size">{{ entry.dir ? '' : formatSize(entry.size) }}</td>
               <td>{{ modified(entry) }}</td>
+              <td>
+                @if (!entry.dir) {
+                  <a
+                    class="download"
+                    [href]="downloadUrl(entry)"
+                    download
+                    [attr.aria-label]="entry.name + ' herunterladen'"
+                    >⬇</a
+                  >
+                }
+              </td>
             </tr>
           }
         </tbody>
@@ -85,3 +101,12 @@
     <button type="button" (click)="uploader.clearDone()">Fertige ausblenden</button>
   }
 </section>
+
+@if (viewing() !== null) {
+  <app-viewer
+    [items]="files()"
+    [index]="viewing()!"
+    (indexChange)="viewing.set($event)"
+    (closed)="viewing.set(null)"
+  />
+}

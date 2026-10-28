@@ -1,0 +1,110 @@
+<div class="bar">
+  <input
+    type="search"
+    placeholder="Suchen"
+    aria-label="Suchen"
+    [value]="search()"
+    (input)="filter($any($event.target).value)"
+  />
+  @if (items(); as items) {
+    <span class="count">{{ found().length }} von {{ items.length }}</span>
+  }
+</div>
+
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+} @else if (items() === null) {
+  <p>Lade …</p>
+} @else if (found().length === 0) {
+  <p class="empty">
+    @switch (kind()) {
+      @case ('photo') {
+        Keine Fotos gefunden.
+      }
+      @case ('video') {
+        Keine Videos gefunden.
+      }
+      @default {
+        Keine Dokumente gefunden.
+      }
+    }
+  </p>
+} @else {
+  @switch (kind()) {
+    @case ('photo') {
+      @for (month of months(); track month.name) {
+        <h2>{{ month.name }}</h2>
+        <ul class="photos">
+          @for (entry of month.items; track entry.item.path) {
+            <li>
+              <button type="button" [title]="entry.item.path" (click)="open.set(entry.index)">
+                <img [src]="viewUrl(entry.item.path)" [alt]="entry.item.name" loading="lazy" />
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    }
+    @case ('video') {
+      <ul class="videos">
+        @for (item of shown(); track item.path; let i = $index) {
+          <li>
+            <button type="button" (click)="open.set(i)">
+              <span class="play" aria-hidden="true">▶</span>
+              <span class="title">{{ item.name }}</span>
+              <span class="meta">{{ folder(item) }} · {{ formatSize(item.size) }}</span>
+              <span class="meta">{{ date(item) }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+    @default {
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Ordner</th>
+            <th scope="col" class="size">Größe</th>
+            <th scope="col">Geändert</th>
+            <th scope="col"><span class="visually-hidden">Herunterladen</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of shown(); track item.path; let i = $index) {
+            <tr>
+              <td>
+                <button type="button" class="link" (click)="open.set(i)">{{ item.name }}</button>
+              </td>
+              <td>{{ folder(item) }}</td>
+              <td class="size">{{ formatSize(item.size) }}</td>
+              <td>{{ date(item) }}</td>
+              <td>
+                <a
+                  [href]="downloadUrl(item.path)"
+                  download
+                  [attr.aria-label]="item.name + ' herunterladen'"
+                  >⬇</a
+                >
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  }
+  @if (found().length > shown().length) {
+    <button type="button" class="more" (click)="limit.set(limit() + page)">
+      Mehr anzeigen ({{ found().length - shown().length }} weitere)
+    </button>
+  }
+}
+
+@if (open() !== null) {
+  <app-viewer
+    [items]="found()"
+    [index]="open()!"
+    (indexChange)="open.set($event)"
+    (closed)="open.set(null)"
+  />
+}

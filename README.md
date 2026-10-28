@@ -51,8 +51,14 @@ fail2ban on the Pi.
 
 ## Files
 
-After the login the website shows the folders of the data directory, with a
-path bar to go back up; a click on a file downloads it. Downloads can be
+After the login the website has four tabs. **Dateien** shows the folders of
+the data directory, with a path bar to go back up; a click on a photo, video,
+song, PDF or text file opens it in the viewer, other files and the ⬇ link
+download it. **Fotos** shows every photo as a gallery by month, **Videos**
+every video, **Dokumente** every document with its folder; all newest first,
+with a search over the path and 120 at a time. The viewer goes through the
+list with ‹ › or the arrow keys, plays videos with seeking, shows PDFs in a
+frame and text files up to 1 MB, and closes with Escape. Downloads can be
 resumed (HTTP range requests), which matters for large videos. Every access
 goes through Go's `os.Root`, so neither `..` nor a symlink reaches anything
 outside the data directory; symlinks are not listed at all. In Docker the

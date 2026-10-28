@@ -91,3 +91,7 @@ td {
 .uploads progress {
   width: 100%;
 }
+
+.download {
+  text-decoration: none;
+}
