@@ -1,0 +1,128 @@
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.bar input {
+  flex: 1;
+  max-width: 20rem;
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+}
+
+.count,
+.empty {
+  opacity: 0.7;
+}
+
+.error {
+  color: #c62828;
+}
+
+h2 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.photos {
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+}
+
+.photos button {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  cursor: pointer;
+}
+
+.photos img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.videos {
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.5rem;
+}
+
+.videos button {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0.4rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.play {
+  font-size: 1.5rem;
+}
+
+.title {
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.size {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: LinkText;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+a {
+  text-decoration: none;
+}
+
+.more {
+  margin-top: 1rem;
+}

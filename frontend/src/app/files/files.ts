@@ -1,6 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
+import { formatSize } from '../format';
+import { Item, Kind, downloadUrl } from '../media/item';
+import { Viewer } from '../media/viewer';
 import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
 
 export interface Entry {
@@ -8,6 +11,8 @@ export interface Entry {
   dir: boolean;
   size: number;
   modified: string;
+  kind?: Kind;
+  preview?: boolean;
 }
 
 interface Listing {
@@ -21,24 +26,12 @@ interface Crumb {
   path: string;
 }
 
-const sizeUnits = ['B', 'KB', 'MB', 'GB', 'TB'];
-const number = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 
-/** "1,5 MB" for 1572864. */
-export function formatSize(bytes: number): string {
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < sizeUnits.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${number.format(value)} ${sizeUnits[unit]}`;
-}
-
-/** The folders of the data directory, with downloads of their files. */
+/** The folders of the data directory: open, download and upload files. */
 @Component({
   selector: 'app-files',
+  imports: [Viewer],
   templateUrl: './files.html',
   styleUrl: './files.css',
 })
@@ -56,6 +49,14 @@ export class Files {
       ...parts.map((name, i) => ({ name, path: '/' + parts.slice(0, i + 1).join('/') })),
     ];
   });
+  /** The files of the folder, for the viewer to go through. */
+  protected readonly files = computed<Item[]>(() =>
+    (this.entries() ?? [])
+      .filter((entry) => !entry.dir)
+      .map((entry) => ({ ...entry, path: this.child(entry) })),
+  );
+  /** The file open in the viewer, an index into files, or null. */
+  protected readonly viewing = signal<number | null>(null);
   protected readonly formatSize = formatSize;
   protected readonly uploader = inject(Uploader);
   /** True while files are dragged over the page. */
@@ -67,6 +68,7 @@ export class Files {
 
   protected open(path: string): void {
     this.error.set(null);
+    this.viewing.set(null);
     this.http.get<Listing>('/api/files', { params: { path } }).subscribe({
       next: (listing) => {
         this.path.set(listing.path);
@@ -81,7 +83,11 @@ export class Files {
   }
 
   protected downloadUrl(entry: Entry): string {
-    return '/api/download?path=' + encodeURIComponent(this.child(entry));
+    return downloadUrl(this.child(entry));
+  }
+
+  protected view(entry: Entry): void {
+    this.viewing.set(this.files().findIndex((file) => file.name === entry.name));
   }
 
   protected modified(entry: Entry): string {

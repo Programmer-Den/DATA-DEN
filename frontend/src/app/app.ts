@@ -2,6 +2,10 @@ import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { AuthService, errorMessage } from './auth.service';
 import { Files } from './files/files';
+import { Kind } from './media/item';
+import { MediaView } from './media/media';
+
+type View = 'files' | Kind;
 
 interface Health {
   status: string;
@@ -10,7 +14,7 @@ interface Health {
 
 @Component({
   selector: 'app-root',
-  imports: [Files],
+  imports: [Files, MediaView],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -22,6 +26,13 @@ export class App {
   /** Why the last login failed, or null. */
   protected readonly loginError = signal<string | null>(null);
   protected readonly busy = signal(false);
+  protected readonly tabs: { view: View; name: string }[] = [
+    { view: 'files', name: 'Dateien' },
+    { view: 'photo', name: 'Fotos' },
+    { view: 'video', name: 'Videos' },
+    { view: 'document', name: 'Dokumente' },
+  ];
+  protected readonly view = signal<View>('files');
 
   constructor() {
     inject(HttpClient)

@@ -1,0 +1,66 @@
+<div class="backdrop" role="dialog" aria-modal="true" [attr.aria-label]="item()?.name">
+  @if (item(); as item) {
+    <header>
+      <span class="name">{{ item.name }}</span>
+      <span class="count">{{ index() + 1 }} / {{ items().length }}</span>
+      @if (shape() === 'pdf') {
+        <a class="button" [href]="url()" target="_blank" rel="noopener">In neuem Tab öffnen</a>
+      }
+      <a class="button" [href]="download()" download>Herunterladen</a>
+      <button type="button" class="button" (click)="closed.emit()">Schließen</button>
+    </header>
+
+    <div class="stage">
+      <button
+        type="button"
+        class="nav"
+        aria-label="Vorherige Datei"
+        [disabled]="index() === 0"
+        (click)="step(-1)"
+      >
+        ‹
+      </button>
+
+      <div class="content">
+        @if (failed(); as failed) {
+          <p class="message" role="alert">{{ failed }}</p>
+        } @else {
+          @switch (shape()) {
+            @case ('photo') {
+              <img [src]="url()" [alt]="item.name" (error)="mediaError()" />
+            }
+            @case ('video') {
+              <video [src]="url()" controls autoplay playsinline (error)="mediaError()"></video>
+            }
+            @case ('audio') {
+              <audio [src]="url()" controls autoplay (error)="mediaError()"></audio>
+            }
+            @case ('pdf') {
+              <iframe [src]="frameUrl()" [title]="item.name"></iframe>
+            }
+            @case ('text') {
+              @if (text(); as text) {
+                <pre>{{ text }}</pre>
+              } @else {
+                <p class="message">Lade …</p>
+              }
+            }
+            @default {
+              <p class="message">Keine Vorschau möglich. Die Datei lässt sich herunterladen.</p>
+            }
+          }
+        }
+      </div>
+
+      <button
+        type="button"
+        class="nav"
+        aria-label="Nächste Datei"
+        [disabled]="index() === items().length - 1"
+        (click)="step(1)"
+      >
+        ›
+      </button>
+    </div>
+  }
+</div>
