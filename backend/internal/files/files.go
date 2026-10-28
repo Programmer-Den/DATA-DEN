@@ -23,6 +23,11 @@ type Entry struct {
 	Dir      bool      `json:"dir"`
 	Size     int64     `json:"size"`
 	Modified time.Time `json:"modified"`
+	// Kind is the view a file belongs to (photo, video, audio, document),
+	// empty for folders and other files.
+	Kind string `json:"kind,omitempty"`
+	// Preview is true when /api/view can show the file in the browser.
+	Preview bool `json:"preview,omitempty"`
 }
 
 // Listing is the content of one folder.
@@ -52,11 +57,12 @@ func (f *Files) Close() error {
 	return f.root.Close()
 }
 
-// Register adds /api/files, /api/download and /api/uploads to mux, behind
-// require (the login check).
+// Register adds /api/files, /api/download, /api/view, /api/media and
+// /api/uploads to mux, behind require (the login check).
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
+	f.registerViews(mux, require)
 	f.registerUploads(mux, require)
 }
 
@@ -92,11 +98,7 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 		if name == "." && info.Name() == uploadDir {
 			continue
 		}
-		entry := Entry{Name: info.Name(), Dir: info.IsDir(), Modified: info.ModTime().UTC()}
-		if !entry.Dir {
-			entry.Size = info.Size()
-		}
-		entries = append(entries, entry)
+		entries = append(entries, entryOf(info))
 	}
 	// Folders first, then by name.
 	slices.SortFunc(entries, func(a, b Entry) int {

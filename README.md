@@ -59,6 +59,14 @@ outside the data directory; symlinks are not listed at all. In Docker the
 server runs as user 65532, so the data directory has to belong to it:
 `sudo chown -R 65532:65532 /srv/data-den`.
 
+Photos, videos, music and documents get their own views. `/api/view` serves
+a file for the browser to show, with range requests so a video can seek; it
+only takes the formats listed in `backend/internal/files/view.go` (images,
+MP4/WebM/MOV/MKV, common audio, PDF and plain text), never HTML, and serves
+everything but PDFs in a CSP sandbox. Other files, such as Word or Excel
+documents, are downloaded. `/api/media?kind=photo|video|audio|document` lists
+every file of that kind in the whole data directory, newest first.
+
 Uploads take many files or whole folders at once, picked with the two
 buttons or dragged onto the page, into the open folder. Three files upload
 at a time, each with its own progress bar. Every file goes in chunks of
