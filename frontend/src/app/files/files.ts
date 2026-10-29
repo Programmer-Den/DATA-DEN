@@ -61,6 +61,13 @@ export class Files {
   protected readonly uploader = inject(Uploader);
   /** True while files are dragged over the page. */
   protected readonly dragging = signal(false);
+  /** True while the name of a new folder is asked for. */
+  protected readonly creating = signal(false);
+  /** The entry being renamed, by name, or null. */
+  protected readonly renaming = signal<string | null>(null);
+  /** The file or folder being moved: its path stays while other folders open. */
+  protected readonly moving = signal<{ path: string; name: string } | null>(null);
+  protected readonly busy = signal(false);
 
   constructor() {
     this.open('/');
@@ -69,6 +76,7 @@ export class Files {
   protected open(path: string): void {
     this.error.set(null);
     this.viewing.set(null);
+    this.renaming.set(null);
     this.http.get<Listing>('/api/files', { params: { path } }).subscribe({
       next: (listing) => {
         this.path.set(listing.path);
@@ -79,7 +87,7 @@ export class Files {
   }
 
   protected child(entry: Entry): string {
-    return (this.path() === '/' ? '/' : this.path() + '/') + entry.name;
+    return this.childPath(entry.name);
   }
 
   protected downloadUrl(entry: Entry): string {
@@ -88,6 +96,71 @@ export class Files {
 
   protected view(entry: Entry): void {
     this.viewing.set(this.files().findIndex((file) => file.name === entry.name));
+  }
+
+  protected createFolder(event: Event, name: string): void {
+    event.preventDefault();
+    name = name.trim();
+    if (!name) {
+      return;
+    }
+    this.change('/api/folders', { path: this.childPath(name) }, () => this.creating.set(false));
+  }
+
+  protected rename(event: Event, entry: Entry, name: string): void {
+    event.preventDefault();
+    name = name.trim();
+    if (!name || name === entry.name) {
+      this.renaming.set(null);
+      return;
+    }
+    this.change('/api/move', { from: this.child(entry), to: this.childPath(name) }, () =>
+      this.renaming.set(null),
+    );
+  }
+
+  protected startMove(entry: Entry): void {
+    this.moving.set({ path: this.child(entry), name: entry.name });
+  }
+
+  /** Moves the file or folder picked with startMove into the open folder. */
+  protected moveHere(): void {
+    const moving = this.moving();
+    if (moving) {
+      this.change('/api/move', { from: moving.path, to: this.childPath(moving.name) }, () =>
+        this.moving.set(null),
+      );
+    }
+  }
+
+  protected remove(entry: Entry): void {
+    const what = entry.dir
+      ? `Den Ordner „${entry.name}“ mit seinem ganzen Inhalt endgültig löschen?`
+      : `„${entry.name}“ endgültig löschen?`;
+    if (confirm(what)) {
+      this.change('/api/delete', { path: this.child(entry) });
+    }
+  }
+
+  /** Sends a change to the server and shows the folder again afterwards. */
+  private change(url: string, body: object, done?: () => void): void {
+    this.busy.set(true);
+    this.error.set(null);
+    this.http.post(url, body).subscribe({
+      next: () => {
+        this.busy.set(false);
+        done?.();
+        this.open(this.path());
+      },
+      error: (err: unknown) => {
+        this.busy.set(false);
+        this.error.set(errorMessage(err));
+      },
+    });
+  }
+
+  private childPath(name: string): string {
+    return (this.path() === '/' ? '/' : this.path() + '/') + name;
   }
 
   protected modified(entry: Entry): string {

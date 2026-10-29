@@ -68,7 +68,7 @@ describe('Files', () => {
       ],
     });
     await fixture.whenStable();
-    page().querySelectorAll<HTMLButtonElement>('tbody button')[1].click();
+    page().querySelectorAll<HTMLButtonElement>('tbody td:first-child button')[1].click();
     await fixture.whenStable();
     expect(page().querySelector('app-viewer')?.textContent).toContain('2 / 2');
     expect(page().querySelector('app-viewer img')?.getAttribute('src')).toBe(
@@ -96,6 +96,122 @@ describe('Files', () => {
       .flush({ error: 'Nicht gefunden' }, { status: 404, statusText: 'Not Found' });
     await fixture.whenStable();
     expect(page().querySelector('[role=alert]')?.textContent).toContain('Nicht gefunden');
+  });
+});
+
+describe('Files management', () => {
+  let http: HttpTestingController;
+  let fixture: ComponentFixture<Files>;
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    http = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(Files);
+    http.expectOne('/api/files?path=/').flush({ path: '/', entries: [photos, notes] });
+    await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    http.verify();
+    vi.restoreAllMocks();
+  });
+
+  function page(): HTMLElement {
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  function button(label: string): HTMLButtonElement {
+    return page().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+  }
+
+  async function submit(input: HTMLInputElement, value: string): Promise<void> {
+    input.value = value;
+    input.form!.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+  }
+
+  async function reload(path: string): Promise<void> {
+    http.expectOne(`/api/files?path=${path}`).flush({ path, entries: [photos, notes] });
+    await fixture.whenStable();
+  }
+
+  it('creates a folder', async () => {
+    [...page().querySelectorAll('button')]
+      .find((b) => b.textContent?.includes('Neuer Ordner'))!
+      .click();
+    await fixture.whenStable();
+    await submit(page().querySelector('input[aria-label="Name des neuen Ordners"]')!, ' Urlaub ');
+    const req = http.expectOne('/api/folders');
+    expect(req.request.body).toEqual({ path: '/Urlaub' });
+    req.flush({ path: '/Urlaub' }, { status: 201, statusText: 'Created' });
+    await fixture.whenStable();
+    await reload('/');
+    expect(page().querySelector('input[aria-label="Name des neuen Ordners"]')).toBeNull();
+  });
+
+  it('renames a file', async () => {
+    button('notizen 1.txt umbenennen').click();
+    await fixture.whenStable();
+    const input = page().querySelector<HTMLInputElement>(
+      'input[aria-label="Neuer Name für notizen 1.txt"]',
+    )!;
+    expect(input.value).toBe('notizen 1.txt');
+    await submit(input, 'notizen 2.txt');
+    const req = http.expectOne('/api/move');
+    expect(req.request.body).toEqual({ from: '/notizen 1.txt', to: '/notizen 2.txt' });
+    req.flush({ path: '/notizen 2.txt' });
+    await fixture.whenStable();
+    await reload('/');
+  });
+
+  it('shows why a rename failed and keeps the form', async () => {
+    button('notizen 1.txt umbenennen').click();
+    await fixture.whenStable();
+    await submit(page().querySelector('form.inline input')!, 'Fotos');
+    http
+      .expectOne('/api/move')
+      .flush({ error: 'Existiert bereits' }, { status: 409, statusText: 'Conflict' });
+    await fixture.whenStable();
+    expect(page().querySelector('[role=alert]')?.textContent).toContain('Existiert bereits');
+    expect(page().querySelector('form.inline')).not.toBeNull();
+  });
+
+  it('moves a file into another folder', async () => {
+    button('notizen 1.txt verschieben').click();
+    await fixture.whenStable();
+    expect(page().querySelector('.moving')?.textContent).toContain('notizen 1.txt');
+
+    page().querySelector<HTMLButtonElement>('tbody td:first-child button')!.click();
+    http.expectOne('/api/files?path=/Fotos').flush({ path: '/Fotos', entries: [] });
+    await fixture.whenStable();
+    [...page().querySelectorAll('.moving button')]
+      .find((b) => b.textContent?.includes('Hierher'))!
+      .dispatchEvent(new Event('click'));
+    const req = http.expectOne('/api/move');
+    expect(req.request.body).toEqual({ from: '/notizen 1.txt', to: '/Fotos/notizen 1.txt' });
+    req.flush({ path: '/Fotos/notizen 1.txt' });
+    await fixture.whenStable();
+    await reload('/Fotos');
+    expect(page().querySelector('.moving')).toBeNull();
+  });
+
+  it('deletes after asking', async () => {
+    const confirm = vi
+      .spyOn(window, 'confirm')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    button('Fotos löschen').click();
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('mit seinem ganzen Inhalt'));
+    http.expectNone('/api/delete');
+
+    button('Fotos löschen').click();
+    const req = http.expectOne('/api/delete');
+    expect(req.request.body).toEqual({ path: '/Fotos' });
+    req.flush({ path: '/Fotos' });
+    await fixture.whenStable();
+    await reload('/');
   });
 });
 
