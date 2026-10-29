@@ -12,6 +12,7 @@ function photo(i: number, modified: string): Item {
     modified,
     kind: 'photo',
     preview: true,
+    thumb: true,
   };
 }
 
@@ -56,6 +57,22 @@ describe('MediaView', () => {
     expect(page(fixture).querySelector('app-viewer')?.textContent).toContain('3 / 3');
     expect(page(fixture).querySelector('app-viewer img')?.getAttribute('src')).toBe(
       '/api/view?path=%2FFotos%2Fp3.jpg',
+    );
+  });
+
+  it('shows thumbnails, and the photo itself when there is none', async () => {
+    const fixture = await start('photo', [
+      photo(1, '2026-10-20T10:00:00Z'),
+      { ...photo(2, '2026-10-20T10:00:00Z'), thumb: false },
+    ]);
+    const imgs = page(fixture).querySelectorAll<HTMLImageElement>('.photos img');
+    expect(imgs[0].getAttribute('src')).toBe('/api/thumb?path=%2FFotos%2Fp1.jpg');
+    expect(imgs[1].getAttribute('src')).toBe('/api/view?path=%2FFotos%2Fp2.jpg');
+
+    imgs[0].dispatchEvent(new Event('error'));
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.photos img')?.getAttribute('src')).toBe(
+      '/api/view?path=%2FFotos%2Fp1.jpg',
     );
   });
 

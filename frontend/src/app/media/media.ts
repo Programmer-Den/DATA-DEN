@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
-import { Item, Kind, downloadUrl, viewUrl } from './item';
+import { Item, Kind, downloadUrl, thumbUrl, viewUrl } from './item';
 import { Viewer } from './viewer';
 
 interface Media {
@@ -45,6 +45,8 @@ export class MediaView {
   protected readonly limit = signal(PAGE);
   /** The file open in the viewer, an index into found, or null. */
   protected readonly open = signal<number | null>(null);
+  /** Photos whose thumbnail failed; they show the photo itself. */
+  private readonly failedThumbs = signal(new Set<string>());
 
   protected readonly found = computed(() => {
     const search = this.search().trim().toLowerCase();
@@ -66,7 +68,6 @@ export class MediaView {
 
   protected readonly page = PAGE;
   protected readonly formatSize = formatSize;
-  protected readonly viewUrl = viewUrl;
   protected readonly downloadUrl = downloadUrl;
 
   constructor() {
@@ -87,6 +88,19 @@ export class MediaView {
   protected filter(value: string): void {
     this.search.set(value);
     this.limit.set(PAGE);
+  }
+
+  /** The thumbnail, or the photo itself when there is none or it failed. */
+  protected tileUrl(item: Item): string {
+    return item.thumb && !this.failedThumbs().has(item.path)
+      ? thumbUrl(item.path)
+      : viewUrl(item.path);
+  }
+
+  protected noThumb(item: Item): void {
+    if (item.thumb && !this.failedThumbs().has(item.path)) {
+      this.failedThumbs.update((failed) => new Set(failed).add(item.path));
+    }
   }
 
   /** "Fotos/2026" for "/Fotos/2026/a.jpg". */

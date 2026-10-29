@@ -28,6 +28,8 @@ type Entry struct {
 	Kind string `json:"kind,omitempty"`
 	// Preview is true when /api/view can show the file in the browser.
 	Preview bool `json:"preview,omitempty"`
+	// Thumb is true when /api/thumb can make a thumbnail of the photo.
+	Thumb bool `json:"thumb,omitempty"`
 }
 
 // Listing is the content of one folder.
@@ -41,6 +43,8 @@ type Listing struct {
 type Files struct {
 	root    *os.Root
 	uploads uploads
+	// thumbSlots limits how many thumbnails are made at the same time.
+	thumbSlots chan struct{}
 }
 
 // Open opens the data directory dir.
@@ -49,7 +53,11 @@ func Open(dir string) (*Files, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Files{root: root, uploads: uploads{byID: map[string]*upload{}}}, nil
+	return &Files{
+		root:       root,
+		uploads:    uploads{byID: map[string]*upload{}},
+		thumbSlots: make(chan struct{}, thumbWorkers),
+	}, nil
 }
 
 // Close releases the data directory.
@@ -57,8 +65,8 @@ func (f *Files) Close() error {
 	return f.root.Close()
 }
 
-// Register adds /api/files, /api/download, /api/view, /api/media and
-// /api/uploads to mux, behind require (the login check).
+// Register adds /api/files, /api/download, /api/view, /api/media,
+// /api/thumb and /api/uploads to mux, behind require (the login check).
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
@@ -95,7 +103,7 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 			// Symlinks, devices and the like are not offered.
 			continue
 		}
-		if name == "." && info.Name() == uploadDir {
+		if name == "." && hidden(info.Name()) {
 			continue
 		}
 		entries = append(entries, entryOf(info))
@@ -122,7 +130,7 @@ func (f *Files) download(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if name == uploadDir || strings.HasPrefix(name, uploadDir+"/") {
+	if hidden(name) {
 		writeError(w, http.StatusNotFound, "Nicht gefunden")
 		return
 	}
@@ -141,6 +149,13 @@ func (f *Files) download(w http.ResponseWriter, r *http.Request) {
 	// ServeContent answers Range requests, so a broken download of a large
 	// video can continue where it stopped.
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+}
+
+// hidden is true for the server's own folders at the top of the data
+// directory, such as unfinished uploads and thumbnails: never listed or served.
+func hidden(name string) bool {
+	top, _, _ := strings.Cut(name, "/")
+	return strings.HasPrefix(top, ".data-den-")
 }
 
 // relative turns the path of a request, such as "/Fotos/2026", into a name

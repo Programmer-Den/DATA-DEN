@@ -10,11 +10,18 @@ export interface Item {
   kind?: Kind;
   /** True when the browser can show the file (/api/view). */
   preview?: boolean;
+  /** True when the server makes a small thumbnail of the photo (/api/thumb). */
+  thumb?: boolean;
 }
 
 /** The file for the browser to show. */
 export function viewUrl(path: string): string {
   return '/api/view?path=' + encodeURIComponent(path);
+}
+
+/** A small JPEG of a photo for the gallery. */
+export function thumbUrl(path: string): string {
+  return '/api/thumb?path=' + encodeURIComponent(path);
 }
 
 /** The file to save. */

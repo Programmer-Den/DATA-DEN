@@ -72,7 +72,12 @@ var formats = map[string]format{
 }
 
 func formatOf(name string) format {
-	return formats[strings.ToLower(path.Ext(name))]
+	return formats[lowerExt(name)]
+}
+
+// lowerExt is the extension of name in lowercase, such as ".jpg".
+func lowerExt(name string) string {
+	return strings.ToLower(path.Ext(name))
 }
 
 // Item is a file in a media listing, with its path from the top.
@@ -90,6 +95,7 @@ type Media struct {
 func (f *Files) registerViews(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/view", require(f.view))
 	mux.HandleFunc("GET /api/media", require(f.media))
+	mux.HandleFunc("GET /api/thumb", require(f.thumb))
 }
 
 // view serves a file for the browser to show: a photo, a video with seeking
@@ -100,7 +106,7 @@ func (f *Files) view(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if name == uploadDir || strings.HasPrefix(name, uploadDir+"/") {
+	if hidden(name) {
 		writeError(w, http.StatusNotFound, "Nicht gefunden")
 		return
 	}
@@ -153,7 +159,7 @@ func (f *Files) media(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		if d.IsDir() {
-			if name == uploadDir {
+			if hidden(name) {
 				return fs.SkipDir
 			}
 			return nil
@@ -194,6 +200,7 @@ func entryOf(info fs.FileInfo) Entry {
 		entry.Size = info.Size()
 		entry.Kind = format.kind
 		entry.Preview = format.inline != ""
+		entry.Thumb = thumbFormats[lowerExt(info.Name())]
 	}
 	return entry
 }
