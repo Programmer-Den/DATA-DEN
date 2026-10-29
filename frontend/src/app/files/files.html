@@ -16,6 +16,34 @@
     }
   </nav>
 
+  <div class="tools">
+    @if (creating()) {
+      <form class="inline" (submit)="createFolder($event, folderName.value)">
+        <input
+          #folderName
+          aria-label="Name des neuen Ordners"
+          placeholder="Name des neuen Ordners"
+          (keydown.escape)="creating.set(false)"
+        />
+        <button type="submit" [disabled]="busy()">Anlegen</button>
+        <button type="button" (click)="creating.set(false)">Abbrechen</button>
+      </form>
+    } @else {
+      <button type="button" (click)="creating.set(true)">Neuer Ordner</button>
+    }
+  </div>
+
+  @if (moving(); as move) {
+    <div class="moving" role="status">
+      <span
+        >„{{ move.name }}“ verschieben: Zielordner öffnen und dort auf „Hierher verschieben“
+        klicken.</span
+      >
+      <button type="button" [disabled]="busy()" (click)="moveHere()">Hierher verschieben</button>
+      <button type="button" (click)="moving.set(null)">Abbrechen</button>
+    </div>
+  }
+
   @if (error(); as error) {
     <p class="error" role="alert">{{ error }}</p>
   }
@@ -30,14 +58,25 @@
             <th scope="col">Name</th>
             <th scope="col" class="size">Größe</th>
             <th scope="col">Geändert</th>
-            <th scope="col"><span class="visually-hidden">Herunterladen</span></th>
+            <th scope="col"><span class="visually-hidden">Aktionen</span></th>
           </tr>
         </thead>
         <tbody>
           @for (entry of entries; track entry.name) {
             <tr>
               <td>
-                @if (entry.dir) {
+                @if (renaming() === entry.name) {
+                  <form class="inline" (submit)="rename($event, entry, newName.value)">
+                    <input
+                      #newName
+                      [value]="entry.name"
+                      [attr.aria-label]="'Neuer Name für ' + entry.name"
+                      (keydown.escape)="renaming.set(null)"
+                    />
+                    <button type="submit" [disabled]="busy()">Speichern</button>
+                    <button type="button" (click)="renaming.set(null)">Abbrechen</button>
+                  </form>
+                } @else if (entry.dir) {
                   <button type="button" class="link" (click)="open(child(entry))">
                     📁 {{ entry.name }}
                   </button>
@@ -51,16 +90,45 @@
               </td>
               <td class="size">{{ entry.dir ? '' : formatSize(entry.size) }}</td>
               <td>{{ modified(entry) }}</td>
-              <td>
+              <td class="actions">
                 @if (!entry.dir) {
                   <a
-                    class="download"
+                    class="icon"
                     [href]="downloadUrl(entry)"
                     download
+                    title="Herunterladen"
                     [attr.aria-label]="entry.name + ' herunterladen'"
                     >⬇</a
                   >
                 }
+                <button
+                  type="button"
+                  class="icon"
+                  title="Umbenennen"
+                  [attr.aria-label]="entry.name + ' umbenennen'"
+                  (click)="renaming.set(entry.name)"
+                >
+                  ✎
+                </button>
+                <button
+                  type="button"
+                  class="icon"
+                  title="Verschieben"
+                  [attr.aria-label]="entry.name + ' verschieben'"
+                  (click)="startMove(entry)"
+                >
+                  ↪
+                </button>
+                <button
+                  type="button"
+                  class="icon"
+                  title="Löschen"
+                  [attr.aria-label]="entry.name + ' löschen'"
+                  [disabled]="busy()"
+                  (click)="remove(entry)"
+                >
+                  🗑
+                </button>
               </td>
             </tr>
           }

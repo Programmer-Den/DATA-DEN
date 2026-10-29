@@ -81,6 +81,15 @@ keeps it in `.data-den-thumbs/` in the data directory, hidden like
 HEIC, are shown as they are. Thumbnails of deleted photos stay; deleting
 `.data-den-thumbs/` is safe and only costs making them again.
 
+In the folder view, **Neuer Ordner** creates a folder in the open folder;
+each row can be renamed (✎), moved (↪: open the target folder, then
+**Hierher verschieben**) and deleted (🗑, after a question; a folder goes with
+everything in it, and there is no recycle bin). The API is
+`POST /api/folders {"path"}`, `POST /api/move {"from", "to"}` and
+`POST /api/delete {"path"}`, JSON only. Nothing is ever overwritten
+("Existiert bereits"), a folder cannot move into itself, and the data
+directory itself and the `.data-den-*` folders cannot be changed.
+
 Uploads take many files or whole folders at once, picked with the two
 buttons or dragged onto the page, into the open folder. Three files upload
 at a time, each with its own progress bar. Every file goes in chunks of
