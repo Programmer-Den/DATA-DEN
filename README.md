@@ -73,6 +73,14 @@ everything but PDFs in a CSP sandbox. Other files, such as Word or Excel
 documents, are downloaded. `/api/media?kind=photo|video|audio|document` lists
 every file of that kind in the whole data directory, newest first.
 
+The gallery shows thumbnails from `/api/thumb`: a JPEG of at most 320 pixels,
+made from JPEG, PNG, GIF, WebP and BMP photos up to 100 megapixels, turned by
+the photo's EXIF orientation. The first request makes it, two at a time, and
+keeps it in `.data-den-thumbs/` in the data directory, hidden like
+`.data-den-uploads/`; a changed photo gets a new one. Other photos, such as
+HEIC, are shown as they are. Thumbnails of deleted photos stay; deleting
+`.data-den-thumbs/` is safe and only costs making them again.
+
 Uploads take many files or whole folders at once, picked with the two
 buttons or dragged onto the page, into the open folder. Three files upload
 at a time, each with its own progress bar. Every file goes in chunks of

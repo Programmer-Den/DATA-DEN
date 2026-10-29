@@ -38,7 +38,12 @@
           @for (entry of month.items; track entry.item.path) {
             <li>
               <button type="button" [title]="entry.item.path" (click)="open.set(entry.index)">
-                <img [src]="viewUrl(entry.item.path)" [alt]="entry.item.name" loading="lazy" />
+                <img
+                  [src]="tileUrl(entry.item)"
+                  [alt]="entry.item.name"
+                  loading="lazy"
+                  (error)="noThumb(entry.item)"
+                />
               </button>
             </li>
           }

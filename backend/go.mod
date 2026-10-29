@@ -4,7 +4,10 @@ go 1.27.3
 
 tool golang.org/x/vuln/cmd/govulncheck
 
-require golang.org/x/crypto v0.58.0
+require (
+	golang.org/x/crypto v0.58.0
+	golang.org/x/image v0.47.0
+)
 
 require (
 	golang.org/x/mod v0.42.0 // indirect
