@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -32,7 +34,14 @@ type Config struct {
 	Status *status.Status
 	// Audit adds the audit log's API behind the login; nil leaves it out.
 	Audit *audit.Log
+	// Clients holds the desktop sync client's programs, served behind the
+	// login at /api/sync/client/<name>; nil leaves it out.
+	Clients fs.FS
 }
+
+// clientName is what /api/sync/client serves, such as
+// data-den-sync-windows-amd64.exe.
+var clientName = regexp.MustCompile(`^data-den-sync-(windows|linux|darwin)-(amd64|arm64)(\.exe)?$`)
 
 // New returns the handler for the website and the API.
 func New(cfg Config) http.Handler {
@@ -47,6 +56,9 @@ func New(cfg Config) http.Handler {
 		}
 		if cfg.Audit != nil {
 			cfg.Audit.Register(mux, cfg.Auth.Require)
+		}
+		if cfg.Clients != nil {
+			mux.HandleFunc("GET /api/sync/client/{name}", cfg.Auth.Require(clients(cfg.Clients)))
 		}
 		if cfg.Data != nil {
 			cfg.Data.Register(mux, cfg.Auth.Require)
@@ -86,6 +98,24 @@ func site(files fs.FS) http.Handler {
 		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// clients serves the sync client's programs for download.
+func clients(files fs.FS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if !clientName.MatchString(name) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Nicht gefunden"})
+			return
+		}
+		if _, err := fs.Stat(files, name); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Nicht gefunden"})
+			return
+		}
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFileFS(w, r, files, name) //nolint:gosec // name matched clientName
+	}
 }
 
 func securityHeaders(next http.Handler) http.Handler {

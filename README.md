@@ -266,6 +266,53 @@ with "Datei existiert bereits". Unfinished chunks wait in
 `.data-den-uploads/` in the data directory, which the folder view hides; a
 restart of the server removes them.
 
+## Desktop sync
+
+`data-den-sync` keeps a folder on a PC and a folder in DATA-DEN the same,
+both ways, like a sync client: a file changed, added or deleted on either
+side follows on the other, over the same HTTPS address as the website. It
+is built for Windows (x64 and ARM) into the image; download it while logged
+in from `https://<address>/api/sync/client/data-den-sync-windows-amd64.exe`
+(or `-arm64.exe`), or build it with
+`cd backend && GOOS=windows go build ./cmd/data-den-sync`.
+
+```powershell
+.\data-den-sync.exe setup            # address, app password, folder on the PC, folder in DATA-DEN
+.\data-den-sync.exe run              # syncs now and every minute; Ctrl+C stops
+.\data-den-sync.exe autostart on     # starts "run --hidden" at every login, for this user only
+```
+
+It logs in with an app password, never the account's password; on Windows
+the password is kept encrypted for that Windows user (DPAPI), elsewhere in a
+file only the user can read, or comes from `DATA_DEN_SYNC_TOKEN`. Settings
+and the log (`sync.log`) are in `%AppData%\DATA-DEN-Sync`; `interval` in
+`config.json` sets the seconds between rounds (default 60).
+
+Each round lists both sides (`GET /api/sync/tree?path=`, every file with its
+size, time and checksum) and compares them with the state after the last
+round, kept in `.data-den-sync\state.json` in the synced folder:
+
+- Changed on one side: copied to the other. A file the server replaces is
+  kept as a version, one it deletes goes into its recycle bin; one deleted
+  on the PC is moved to `.data-den-sync\deleted\<day>` and removed after
+  30 days.
+- Changed on both sides: the PC's version becomes
+  `name (Konflikt <date> <PC>).ext` and is uploaded too, so nothing is
+  lost; the server's version keeps the name. Equal content is no conflict.
+- Deleted on one side, changed on the other: the change wins.
+- A folder deleted on one side is deleted as a whole on the other, unless
+  something in it changed there.
+
+The server replaces or deletes a file only while it is still as the round saw
+it (`"replace": true, "expect": {"size", "mod"}` on `POST /api/uploads`,
+`"size"` and `"mod"` on `POST /api/delete`, otherwise 412), so an edit from another device in the
+meantime waits for the next round instead of being overwritten. If one side
+is suddenly empty while both had files, such as a missing drive, the client
+stops instead of deleting everything. Names Windows cannot hold (`:`, `?`,
+`CON` and the like) and names that differ only in case are left out with a
+line in the log; `desktop.ini`, `Thumbs.db`, `~$` Office lock files and
+`.tmp` files are never synced.
+
 ## Status
 
 The **Status** tab shows the free space on the data disk, the state of the
