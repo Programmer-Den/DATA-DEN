@@ -188,7 +188,7 @@ func (a *Auth) Require(next http.HandlerFunc) http.HandlerFunc {
 				a.tokenFailed(w, r)
 				return
 			}
-			if readOnly && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if readOnly && !reading(r.Method) {
 				writeError(w, http.StatusForbidden, "Dieses App-Passwort darf nur lesen")
 				return
 			}
@@ -196,6 +196,29 @@ func (a *Auth) Require(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		a.requireSession(next)(w, r)
+	}
+}
+
+// reading is true for the methods a read-only app password may use.
+func reading(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions, "PROPFIND":
+		return true
+	}
+	return false
+}
+
+// RequireToken only lets requests with a valid app password through, for
+// WebDAV: a drive keeps its password, so the account's own password and
+// second factor never go there. Without one it asks for Basic auth.
+func (a *Auth) RequireToken(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="DATA-DEN", charset="UTF-8"`)
+			http.Error(w, "Bitte mit Benutzername und App-Passwort anmelden", http.StatusUnauthorized)
+			return
+		}
+		a.Require(next)(w, r)
 	}
 }
 

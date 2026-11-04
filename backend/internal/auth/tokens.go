@@ -27,7 +27,8 @@ import (
 // dd_..." or with Basic auth as the account's username and the token. It
 // works wherever a session does, except for the account's settings, the
 // accounts of others and the app passwords themselves. A read-only token
-// only gets GET and HEAD. An admin can revoke all tokens of an account.
+// only reads (GET, HEAD, OPTIONS and PROPFIND). An admin can revoke all
+// tokens of an account.
 
 const (
 	// tokenPrefix marks DATA-DEN tokens, so secret scanners can find them.

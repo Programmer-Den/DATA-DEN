@@ -35,6 +35,8 @@ export class TokensView {
   protected readonly error = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly formatDay = formatDay;
+  /** The address to mount as a network drive. */
+  protected readonly davUrl = `${location.origin}/dav/`;
 
   constructor() {
     this.load();

@@ -4,6 +4,10 @@
     Für Skripte, Apps und das Netzlaufwerk (WebDAV): statt Passwort und Code aus der App. Jedes
     lässt sich einzeln widerrufen. Es geht nicht für die Einstellungen des Kontos.
   </p>
+  <p class="hint">
+    Als Netzlaufwerk einbinden: <code class="dav">{{ davUrl }}</code
+    >, mit dem eigenen Benutzernamen und einem App-Passwort.
+  </p>
   @if (created(); as created) {
     <div class="recovery">
       <p>
