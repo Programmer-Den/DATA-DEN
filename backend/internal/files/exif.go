@@ -290,3 +290,16 @@ func (f *Files) prunePhotos(seen map[string]bool) {
 		}
 	}
 }
+
+// Namer names the town at a position, "" when it does not know (yet).
+type Namer interface {
+	Name(lat, lon float64) string
+}
+
+// place is the town where the photo with meta was taken, "" when unknown.
+func (f *Files) place(meta photoMeta) string {
+	if f.places == nil || meta.Lat == nil {
+		return ""
+	}
+	return f.places.Name(*meta.Lat, *meta.Lon)
+}

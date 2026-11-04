@@ -1,3 +1,25 @@
+@if (kind() === 'photo') {
+  <nav class="modes" aria-label="Fotos zeigen">
+    @for (m of modes; track m.mode) {
+      <button
+        type="button"
+        [class.active]="mode() === m.mode"
+        [attr.aria-pressed]="mode() === m.mode"
+        (click)="setMode(m.mode)"
+      >
+        {{ m.name }}
+      </button>
+    }
+  </nav>
+}
+@if (album(); as album) {
+  <div class="album-head">
+    <button type="button" (click)="openAlbum(null)">‹ Alle Alben</button>
+    <h2>{{ album.name }}</h2>
+    <span class="count">{{ span(album) }}</span>
+  </div>
+}
+
 <div class="bar">
   <input
     type="search"
@@ -6,8 +28,10 @@
     [value]="search()"
     (input)="filter($any($event.target).value)"
   />
-  @if (items(); as items) {
-    <span class="count">{{ found().length }} von {{ items.length }}</span>
+  @if (showAlbums()) {
+    <span class="count">{{ albums().length }} Alben</span>
+  } @else if (items()) {
+    <span class="count">{{ found().length }} von {{ all().length }}</span>
   }
 </div>
 
@@ -15,6 +39,32 @@
   <p class="error" role="alert">{{ error }}</p>
 } @else if (items() === null) {
   <p>Lade …</p>
+} @else if (showAlbums()) {
+  @if (albums().length === 0) {
+    <p class="empty">
+      @if (mode() === 'places') {
+        Keine Fotos mit Ort gefunden. Den Ort schreiben Kameras und Handys mit GPS in die Fotos;
+        neue Orte werden nach und nach bei OpenStreetMap nachgeschlagen.
+      } @else {
+        Keine Reisen gefunden: dafür braucht es mindestens drei Fotos mit Ort fern von zu Hause.
+      }
+    </p>
+  } @else {
+    <ul class="albums">
+      @for (a of albums(); track a.id) {
+        <li>
+          <button type="button" (click)="openAlbum(a)">
+            <img [src]="tileUrl(a.items[0])" alt="" loading="lazy" (error)="noThumb(a.items[0])" />
+            <span class="title">{{ a.name }}</span>
+            <span class="meta">{{ a.items.length }} Fotos · {{ span(a) }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+    @if (mode() === 'places') {
+      <p class="credit">Ortsnamen © OpenStreetMap-Mitwirkende</p>
+    }
+  }
 } @else if (found().length === 0) {
   <p class="empty">
     @switch (kind()) {
@@ -32,7 +82,7 @@
 } @else {
   @switch (kind()) {
     @case ('photo') {
-      @if (years().length > 1) {
+      @if (years().length > 1 && !album()) {
         <nav class="years" aria-label="Jahre">
           @for (year of years(); track year.year) {
             <button type="button" (click)="jump(year)">{{ year.year }}</button>

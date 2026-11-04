@@ -112,3 +112,23 @@ func TestDamagedMessage(t *testing.T) {
 		t.Errorf("many files: %s", m.Body)
 	}
 }
+
+func TestNewGeocoder(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DATA_DEN_GEOCODER", "off")
+	if namer, g, err := newGeocoder(dir); namer != nil || g != nil || err != nil {
+		t.Errorf("off: %v, %v, %v", namer, g, err)
+	}
+	for _, value := range []string{"", "https://nominatim.example.org/"} {
+		t.Setenv("DATA_DEN_GEOCODER", value)
+		if namer, g, err := newGeocoder(dir); namer == nil || g == nil || err != nil {
+			t.Errorf("%q: %v, %v, %v", value, namer, g, err)
+		}
+	}
+	for _, value := range []string{"nominatim", "ftp://x", "https://"} {
+		t.Setenv("DATA_DEN_GEOCODER", value)
+		if _, _, err := newGeocoder(dir); err == nil {
+			t.Errorf("%q: no error", value)
+		}
+	}
+}

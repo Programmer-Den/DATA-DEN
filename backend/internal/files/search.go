@@ -114,9 +114,9 @@ func (f *Files) refreshIndex() int {
 		}
 		entry := entryOf(info)
 		if entry.Kind == "photo" {
-			// Reads the EXIF data of new photos ahead, so the timeline
-			// answers quickly.
-			f.photoMeta(name, info)
+			// Reads the EXIF data of new photos and asks for their towns
+			// ahead, so the timeline and the albums answer quickly.
+			f.place(f.photoMeta(name, info))
 			photos[name] = true
 		}
 		if prev, ok := old[name]; ok && prev.entry.Size == entry.Size && prev.entry.Modified.Equal(entry.Modified) && prev.entry.Dir == entry.Dir {

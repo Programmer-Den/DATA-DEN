@@ -93,6 +93,48 @@ describe('MediaView', () => {
     expect(page(fixture).querySelector('#year-2020')).not.toBeNull();
   });
 
+  it('shows albums by place and opens one', async () => {
+    const fixture = await start('photo', [
+      { ...photo(1, '2026-10-20T10:00:00Z'), taken: '2026-07-14T15:00:00', place: 'Rom' },
+      { ...photo(2, '2026-10-20T10:00:00Z'), taken: '2026-07-12T15:00:00', place: 'Rom' },
+      { ...photo(3, '2026-10-20T10:00:00Z'), taken: '2026-01-01T15:00:00', place: 'Berlin' },
+      photo(4, '2026-10-20T10:00:00Z'),
+    ]);
+    const modes = page(fixture).querySelectorAll<HTMLButtonElement>('.modes button');
+    modes[1].click();
+    await fixture.whenStable();
+    const albums = page(fixture).querySelectorAll<HTMLButtonElement>('.albums button');
+    expect([...albums].map((a) => a.querySelector('.title')?.textContent)).toEqual([
+      'Rom',
+      'Berlin',
+    ]);
+    expect(albums[0].textContent).toContain('2 Fotos · 12.07.2026 – 14.07.2026');
+    expect(page(fixture).querySelector('.credit')?.textContent).toContain('OpenStreetMap');
+
+    albums[0].click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.album-head h2')?.textContent).toBe('Rom');
+    expect(page(fixture).querySelectorAll('.photos li').length).toBe(2);
+    expect(page(fixture).textContent).toContain('2 von 2');
+
+    page(fixture).querySelector<HTMLButtonElement>('.photos button')!.click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('app-viewer')?.textContent).toContain('1 / 2');
+    page(fixture).querySelector<HTMLButtonElement>('app-viewer header button')!.click();
+    await fixture.whenStable();
+
+    page(fixture).querySelector<HTMLButtonElement>('.album-head button')!.click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelectorAll('.albums button').length).toBe(2);
+  });
+
+  it('says when there are no trips', async () => {
+    const fixture = await start('photo', [photo(1, '2026-10-20T10:00:00Z')]);
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[2].click();
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('Keine Reisen gefunden');
+  });
+
   it('shows thumbnails, and the photo itself when there is none', async () => {
     const fixture = await start('photo', [
       photo(1, '2026-10-20T10:00:00Z'),

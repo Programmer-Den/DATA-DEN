@@ -48,6 +48,7 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_SMTP_USERNAME`, `DATA_DEN_SMTP_PASSWORD` | The login at the mail server, often an app password |
 | `DATA_DEN_SMTP_FROM` | The sender, such as `DATA-DEN <nas@example.org>` |
 | `DATA_DEN_PUSH_CONTACT` | The contact the push services see, `mailto:` or `https://`; default the sender above. Without either, no push messages |
+| `DATA_DEN_GEOCODER` | The Nominatim server that names the towns of the photos, default `https://nominatim.openstreetmap.org`; `off` sends no positions anywhere |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
@@ -184,6 +185,20 @@ come with `taken` (from the EXIF date, in the camera's local time, such as
 by `taken`, or by the file's time when a photo has no date. Only JPEGs carry
 EXIF that is read; it is read once per photo and kept in memory until the
 photo changes, ahead of time by the search index's walk.
+
+Above the gallery, **Zeitleiste**, **Orte** and **Reisen** switch between
+the timeline and albums. Each photo with a GPS position gets `place`, the
+town it was taken in, from OpenStreetMap's reverse geocoding (Nominatim,
+`DATA_DEN_GEOCODER`). The position is rounded to 0.01° (about a kilometre)
+before it is sent, each rounded position is asked for only once, at most one
+request a second as Nominatim's usage policy asks, and the answers are kept
+in `.data-den-places/names.json`; a new photo gets its town a moment after it
+is first listed. The Orte view credits the names to the OpenStreetMap
+contributors, as their licence (ODbL) asks. **Orte** has an album per town,
+most photos first. **Reisen** finds trips: photos taken away from home (the
+town with the most photos), ended by a photo at home or three days without
+one; at least three photos make a trip. Albums are made in the browser from
+`/api/media`, nothing is stored.
 
 The gallery shows thumbnails from `/api/thumb`: a JPEG of at most 320 pixels,
 made from JPEG, PNG, GIF, WebP and BMP photos up to 100 megapixels, turned by

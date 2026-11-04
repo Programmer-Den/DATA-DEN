@@ -62,6 +62,8 @@ type Files struct {
 	sums sums
 	// photos caches the EXIF data of the photos, for the timeline.
 	photos photoCache
+	// places names the towns of the photos; nil leaves them unnamed.
+	places Namer
 	// account is whose space this is, for the audit log.
 	account string
 	// audit notes changes in the audit log; nil notes nothing.
