@@ -47,6 +47,8 @@ type Grant struct {
 	// Write is true when To may also change the folder.
 	Write   bool      `json:"write"`
 	Created time.Time `json:"created"`
+	// Team is true for a team folder, which Owner ("@<name>") names.
+	Team bool `json:"team,omitempty"`
 	// Missing is true in answers when the folder is gone, for example in
 	// the recycle bin.
 	Missing bool `json:"missing,omitempty"`
@@ -73,7 +75,7 @@ var (
 )
 
 // grantBodyKeys are the keys a JSON body to a shared folder may have.
-var grantBodyKeys = []string{"path", "from", "to", "size", "replace"}
+var grantBodyKeys = []string{"path", "from", "to", "size", "replace", "id"}
 
 // GrantRoutes are the API paths behind the login for shared folders.
 var GrantRoutes = []string{
@@ -184,9 +186,18 @@ func (s *Spaces) grantFolderThere(g Grant) bool {
 	if err != nil {
 		return false
 	}
-	name := strings.TrimPrefix(g.Path, "/")
+	name := g.dir()
 	info, err := f.root.Lstat(name)
 	return err == nil && info.IsDir() && !f.symlinkIn(name)
+}
+
+// dir is the folder of g within the owner's space, such as "Projekt", or
+// "." for a whole team folder.
+func (g Grant) dir() string {
+	if g.Path == "/" {
+		return "."
+	}
+	return strings.TrimPrefix(g.Path, "/")
 }
 
 func (s *Spaces) createGrant(w http.ResponseWriter, r *http.Request) {
@@ -335,7 +346,8 @@ func (s *Spaces) serveGrant(w http.ResponseWriter, r *http.Request, user, id str
 	}
 	switch {
 	case slices.Contains(grantReadRoutes, r.Pattern):
-	case slices.Contains(grantWriteRoutes, r.Pattern):
+	case slices.Contains(grantWriteRoutes, r.Pattern),
+		g.Team && slices.Contains(teamWriteRoutes, r.Pattern):
 		if !g.Write {
 			writeError(w, http.StatusForbidden, "Nur Lesezugriff")
 			return
@@ -357,7 +369,7 @@ func (s *Spaces) serveGrant(w http.ResponseWriter, r *http.Request, user, id str
 	if s.cfg.Quota != nil {
 		f.quota.Store(s.cfg.Quota(g.Owner))
 	}
-	prefix := strings.TrimPrefix(g.Path, "/")
+	prefix := g.dir()
 	scoped, ok := scopeRequest(w, r, f, prefix)
 	if !ok {
 		return
@@ -382,7 +394,7 @@ func (s *Spaces) serveGrant(w http.ResponseWriter, r *http.Request, user, id str
 	// Where else the same content lies is the owner's to know, and so is the
 	// recycle bin, which the id of a deleted item is for.
 	delete(answer, "duplicates")
-	if r.Pattern == "POST /api/delete" {
+	if r.Pattern == "POST /api/delete" && !g.Team {
 		delete(answer, "id")
 	}
 	w.Header().Del("Content-Length")
@@ -425,6 +437,9 @@ func (sw *scopedWriter) Write(b []byte) (int, error) {
 // unscope turns a path in the owner's space, such as "/Projekt/a", into one
 // within the shared folder prefix ("Projekt"), such as "/a".
 func unscope(p, prefix string) string {
+	if prefix == "." {
+		return p
+	}
 	rest, ok := strings.CutPrefix(p, "/"+prefix)
 	if !ok || (rest != "" && !strings.HasPrefix(rest, "/")) {
 		return "/"

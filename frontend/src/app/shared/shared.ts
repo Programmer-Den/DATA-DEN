@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { Files } from '../files/files';
-import { Grant, Grants, rights } from '../shares/grant';
+import { Grant, Grants, from, rights } from '../shares/grant';
 
 /** The folders other accounts share with me: open one or leave it. */
 @Component({
@@ -20,6 +20,7 @@ export class Shared {
   /** The folder open, or null for the list. */
   protected readonly opened = signal<Grant | null>(null);
   protected readonly rights = rights;
+  protected readonly from = from;
 
   constructor() {
     this.load();
@@ -35,7 +36,9 @@ export class Shared {
   protected leave(grant: Grant): void {
     if (
       !confirm(
-        `„${grant.name}“ von ${grant.owner} verlassen? Nur ${grant.owner} kann es wieder teilen.`,
+        grant.team
+          ? `Den Team-Ordner „${grant.name}“ verlassen? Nur ein Admin kann dich wieder hinzufügen.`
+          : `„${grant.name}“ von ${grant.owner} verlassen? Nur ${grant.owner} kann es wieder teilen.`,
       )
     ) {
       return;

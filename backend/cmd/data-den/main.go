@@ -156,6 +156,13 @@ func sharedMessage(g files.Grant) notify.Message {
 	if g.Write {
 		what = "zum Lesen und Schreiben"
 	}
+	if g.Team {
+		return notify.Message{
+			Kind:  notify.KindShare,
+			Title: "Team-Ordner „" + g.Name + "“",
+			Body:  "Der Team-Ordner „" + g.Name + "“ ist " + what + " für dich freigegeben. Du findest ihn unter „Geteilt mit mir“.",
+		}
+	}
 	return notify.Message{
 		Kind:  notify.KindShare,
 		Title: g.Owner + " teilt „" + g.Name + "“ mit dir",

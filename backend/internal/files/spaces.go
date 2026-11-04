@@ -9,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -330,6 +331,13 @@ func (s *Spaces) Retire(name string) error {
 		return errors.New("not a space that can be retired")
 	}
 	s.retireGrants(name)
+	return s.moveAside(name, name)
+}
+
+// moveAside closes the space key and moves its folder to
+// usersDir/.deleted/<as>-<time>.
+func (s *Spaces) moveAside(key, as string) error {
+	name := key
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if f, ok := s.byName[name]; ok {
@@ -340,7 +348,7 @@ func (s *Spaces) Retire(name string) error {
 		_ = f.Close()
 		delete(s.byName, name)
 	}
-	from := path.Join(usersDir, name)
+	from := spaceDir(name)
 	if _, err := s.owner.root.Lstat(from); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -348,17 +356,27 @@ func (s *Spaces) Retire(name string) error {
 	if err := s.owner.root.MkdirAll(deleted, 0o750); err != nil {
 		return err
 	}
-	to := path.Join(deleted, name+"-"+strconv.FormatInt(time.Now().Unix(), 10))
-	slog.Info("space of a deleted account moved aside", "username", name, "to", to)
+	to := path.Join(deleted, as+"-"+strconv.FormatInt(time.Now().Unix(), 10))
+	slog.Info("space moved aside", "space", name, "to", to)
 	return s.owner.root.Rename(from, to)
 }
 
-// space returns the space of the account name, opening it on first use.
+// spaceDir is the folder of the space name: usersDir/<name> for an account,
+// usersDir/.teams/<team> for a team folder ("@<team>").
+func spaceDir(name string) string {
+	if team, ok := strings.CutPrefix(name, "@"); ok {
+		return path.Join(teamsDir, team)
+	}
+	return path.Join(usersDir, name)
+}
+
+// space returns the space of the account name, or of a team folder
+// ("@<team>"), opening it on first use.
 func (s *Spaces) space(name string) (*Files, error) {
 	if name == s.cfg.Owner {
 		return s.owner, nil
 	}
-	if !accountName.MatchString(name) {
+	if !accountName.MatchString(strings.TrimPrefix(name, "@")) {
 		return nil, errors.New("invalid account name")
 	}
 	s.mu.Lock()
@@ -366,7 +384,7 @@ func (s *Spaces) space(name string) (*Files, error) {
 	if f, ok := s.byName[name]; ok {
 		return f, nil
 	}
-	dir := path.Join(usersDir, name)
+	dir := spaceDir(name)
 	if err := s.owner.root.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}

@@ -40,7 +40,12 @@ describe('Shared', () => {
     fixture = TestBed.createComponent(Shared);
     http.expectOne('/api/grants').flush({
       mine: [],
-      withMe: [reading, writing, { ...reading, id: 'c'.repeat(32), name: 'Alt', missing: true }],
+      withMe: [
+        reading,
+        writing,
+        { ...reading, id: 'c'.repeat(32), name: 'Alt', missing: true },
+        { ...writing, id: 'd'.repeat(32), owner: '@familie', name: 'familie', team: true },
+      ],
     });
     await fixture.whenStable();
   });
@@ -56,13 +61,15 @@ describe('Shared', () => {
 
   it('lists the folders shared with me', () => {
     const rows = page().querySelectorAll('tbody tr');
-    expect(rows.length).toBe(3);
+    expect(rows.length).toBe(4);
     expect(rows[0].textContent).toContain('Projekt');
     expect(rows[0].textContent).toContain('chef');
     expect(rows[0].textContent).toContain('Nur lesen');
     expect(rows[1].textContent).toContain('Lesen und Schreiben');
     expect(rows[2].textContent).toContain('nicht mehr vorhanden');
     expect(rows[2].querySelector('button.link')).toBeNull();
+    expect(rows[3].textContent).toContain('Team-Ordner');
+    expect(rows[3].textContent).not.toContain('@familie');
   });
 
   it('opens a folder to read, with nothing to change', async () => {
@@ -89,7 +96,7 @@ describe('Shared', () => {
     await fixture.whenStable();
     button(page(), 'Geteilt mit mir').click();
     await fixture.whenStable();
-    expect(page().querySelectorAll('tbody tr').length).toBe(3);
+    expect(page().querySelectorAll('tbody tr').length).toBe(4);
   });
 
   it('changes a folder it may write to within it', async () => {

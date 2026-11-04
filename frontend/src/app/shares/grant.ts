@@ -11,6 +11,8 @@ export interface Grant {
   /** True when that account may also change the folder. */
   write: boolean;
   created: string;
+  /** True for a team folder, which owner ("@<name>") names. */
+  team?: boolean;
   /** True when the folder is gone, for example in the recycle bin. */
   missing?: boolean;
 }
@@ -19,6 +21,11 @@ export interface Grant {
 export interface Grants {
   mine: Grant[];
   withMe: Grant[];
+}
+
+/** Who shares a folder: an account, or "Team" for a team folder. */
+export function from(grant: Grant): string {
+  return grant.team ? 'Team-Ordner' : grant.owner;
 }
 
 /** The rights of a grant in words. */

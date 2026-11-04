@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -46,6 +47,7 @@ func grantsSetup(t *testing.T) (*Spaces, http.Handler, string, *[]Grant, *[]stri
 	}
 	s.Register(mux, require)
 	s.RegisterGrants(mux, require)
+	s.RegisterTeams(mux, require)
 	if err := os.MkdirAll(filepath.Join(data, "Projekt", "2026"), 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -348,4 +350,118 @@ func TestGrantFollowsAndEnds(t *testing.T) {
 	if mine, _ := grants(t, h, "chef"); len(mine) != 0 {
 		t.Errorf("chef still has %+v", mine)
 	}
+}
+
+func TestTeamFolder(t *testing.T) {
+	_, h, data, shared, audited := grantsSetup(t)
+	admin := func(method, target, body string) (int, map[string]any) {
+		return do(h, method, target, "application/json", body, as("chef"))
+	}
+	if code, _ := admin(http.MethodPost, "/api/teams", `{"name":"familie"}`); code != http.StatusCreated {
+		t.Fatalf("create: status %d", code)
+	}
+	for _, body := range []string{`{"name":"familie"}`, `{"name":"Groß"}`, `{"name":"../x"}`} {
+		if code, _ := admin(http.MethodPost, "/api/teams", body); code == http.StatusCreated {
+			t.Errorf("%s: status %d", body, code)
+		}
+	}
+	if code, _ := admin(http.MethodPost, "/api/teams/familie/members", `{"to":"anna","write":true}`); code != http.StatusOK {
+		t.Fatalf("anna: status %d", code)
+	}
+	if code, _ := admin(http.MethodPost, "/api/teams/familie/members", `{"to":"bob"}`); code != http.StatusOK {
+		t.Fatalf("bob: status %d", code)
+	}
+	if code, _ := admin(http.MethodPost, "/api/teams/familie/members", `{"to":"niemand"}`); code != http.StatusBadRequest {
+		t.Errorf("unknown account: status %d", code)
+	}
+	if code, _ := admin(http.MethodPost, "/api/teams/fehlt/members", `{"to":"anna"}`); code != http.StatusNotFound {
+		t.Errorf("unknown team: status %d", code)
+	}
+	if len(*shared) != 2 || !(*shared)[0].Team {
+		t.Errorf("told %+v", *shared)
+	}
+	code, answer := admin(http.MethodGet, "/api/teams", "")
+	teams, _ := answer["teams"].([]any)
+	if code != http.StatusOK || len(teams) != 1 || len(teams[0].(map[string]any)["members"].([]any)) != 2 {
+		t.Errorf("teams: %d %v", code, answer)
+	}
+
+	_, withMe := grants(t, h, "anna")
+	if len(withMe) != 1 || withMe[0].Owner != "@familie" || !withMe[0].Team || withMe[0].Missing {
+		t.Fatalf("anna's %+v", withMe)
+	}
+	g := withMe[0]
+	if rec := in(h, "anna", g.ID, http.MethodPost, "/api/folders", `{"path":"/Urlaub"}`); rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"path":"/Urlaub"`) {
+		t.Fatalf("folder: status %d, body %s", rec.Code, rec.Body)
+	}
+	if !exists(data, teamsDir+"/familie/Urlaub") {
+		t.Error("not in the team folder")
+	}
+	if l := listing(t, in(h, "anna", g.ID, http.MethodGet, "/api/files?path=/", "")); l.Path != "/" || len(l.Entries) != 1 {
+		t.Errorf("listing %+v", l)
+	}
+	// Members who may change it restore from its recycle bin themselves.
+	rec := in(h, "anna", g.ID, http.MethodPost, "/api/delete", `{"path":"/Urlaub"}`)
+	id := jsonID(rec.Body.Bytes())
+	if rec.Code != http.StatusOK || id == "" {
+		t.Fatalf("delete: status %d, body %s", rec.Code, rec.Body)
+	}
+	if rec := in(h, "anna", g.ID, http.MethodGet, "/api/trash", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "/Urlaub") {
+		t.Errorf("trash: status %d, body %s", rec.Code, rec.Body)
+	}
+	if rec := in(h, "anna", g.ID, http.MethodPost, "/api/trash/restore", `{"id":"`+id+`"}`); rec.Code != http.StatusOK {
+		t.Errorf("restore: status %d, body %s", rec.Code, rec.Body)
+	}
+	if !exists(data, teamsDir+"/familie/Urlaub") {
+		t.Error("not restored")
+	}
+	// bob only reads.
+	_, bobs := grants(t, h, "bob")
+	if rec := in(h, "bob", bobs[0].ID, http.MethodGet, "/api/trash", ""); rec.Code != http.StatusForbidden {
+		t.Errorf("bob's trash: status %d, want 403", rec.Code)
+	}
+	if rec := in(h, "bob", bobs[0].ID, http.MethodGet, "/api/files?path=/Urlaub", ""); rec.Code != http.StatusOK {
+		t.Errorf("bob's listing: status %d", rec.Code)
+	}
+	// A plain shared folder keeps its owner's recycle bin to itself.
+	plain := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+	if rec := in(h, "anna", plain.ID, http.MethodGet, "/api/trash", ""); rec.Code != http.StatusForbidden {
+		t.Errorf("chef's trash through a plain grant: status %d, want 403", rec.Code)
+	}
+	// The team folder is not part of the owner's space or usage.
+	if l := listing(t, get(h, "/api/files", "/", as("chef"))); len(l.Entries) != 2 {
+		t.Errorf("chef sees %+v", l.Entries)
+	}
+
+	if code, _ := admin(http.MethodPost, "/api/teams/familie/members/delete", `{"to":"bob"}`); code != http.StatusOK {
+		t.Errorf("remove bob: status %d", code)
+	}
+	if _, bobs := grants(t, h, "bob"); len(bobs) != 0 {
+		t.Errorf("bob still has %+v", bobs)
+	}
+	if code, _ := admin(http.MethodPost, "/api/teams/familie/delete", ""); code != http.StatusOK {
+		t.Errorf("delete: status %d", code)
+	}
+	if _, withMe := grants(t, h, "anna"); len(withMe) != 1 || withMe[0].ID != plain.ID {
+		t.Errorf("anna still has %+v", withMe)
+	}
+	if exists(data, teamsDir+"/familie") {
+		t.Error("the team folder is still there")
+	}
+	entries, _ := os.ReadDir(filepath.Join(data, usersDir, ".deleted"))
+	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), ".team-familie-") {
+		t.Errorf("moved aside as %v", entries)
+	}
+	if !slices.Contains(*audited, "chef team-create familie") || !slices.Contains(*audited, "anna folder @familie:/Urlaub") {
+		t.Errorf("audit %v", *audited)
+	}
+}
+
+// jsonID is the "id" of a JSON answer.
+func jsonID(body []byte) string {
+	var answer struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(body, &answer)
+	return answer.ID
 }
