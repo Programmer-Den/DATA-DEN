@@ -1,14 +1,15 @@
 # Storage VM
 
 The data lives in a Debian VM under Hyper-V on the Windows PC. Both 4 TB
-disks are passed through to it and mirrored (RAID 1), so Windows, its Docker
-and the runner containers never see them. Only the Pi gets into the VM.
+disks are passed through to it, mirrored (RAID 1) and encrypted, so Windows,
+its Docker and the runner containers never see them, and a disk taken out of
+the PC cannot be read. Only the Pi gets into the VM.
 
 ```mermaid
 flowchart LR
     pi["Raspberry Pi"] -- "8443, 22" --> acl["Hyper-V port ACLs"]
     acl --> nft["nftables in the VM"]
-    nft --> vm["Debian VM<br/>/srv/data-den on RAID 1"]
+    nft --> vm["Debian VM<br/>/srv/data-den on LUKS on RAID 1"]
 ```
 
 Two walls keep everything else out: the port ACLs of the VM's network
@@ -20,9 +21,12 @@ optional backup: [Backup (optional)](#backup-optional).
 
 | File | Runs on | Does |
 |---|---|---|
-| `New-DataDenVM.ps1` | Windows, as administrator | Creates the VM, takes both disks offline in Windows and passes them through |
+| `New-DataDenVM.ps1` | Windows, as administrator | Creates the VM with a virtual TPM, takes both disks offline in Windows and passes them through |
 | `Set-DataDenNetwork.ps1` | Windows, as administrator | Port ACLs: only the Pi gets in (HTTPS, SSH, ping), the VM may connect out |
-| `setup-raid.sh` | the VM, as root | RAID 1 over both disks with mdadm, mounted at `/srv/data-den` |
+| `setup-raid.sh` | the VM, as root | RAID 1 over both disks with mdadm, encrypted with LUKS, mounted at `/srv/data-den` |
+| `disk-key.sh` | the VM, as root | Unlocks the mirror by hand, binds it to the TPM again, replaces the recovery key |
+| `encrypt-raid.sh` | the VM, as root | Encrypts a mirror set up before the encryption, without losing data |
+| `luks.sh` | sourced by the three above | The encryption's shared steps |
 | `setup-firewall.sh`, `nftables.conf` | the VM, as root | nftables: only the Pi gets in |
 | `setup-updates.sh` | the VM, as root | Switches automatic security updates on or off, or shows their status |
 | `setup-backup.sh` | the VM, as root | Switches the optional backup on or off, or shows its status |
@@ -91,7 +95,9 @@ sudo vm/setup-updates.sh on                  # automatic security updates
 ```
 
 `setup-raid.sh` shows both disks and asks you to type `DATA-DEN` before it
-erases them. The first resync of 4 TB takes several hours; the mirror can be
+erases them. It then encrypts the mirror and shows its **recovery key**
+once: save it outside the VM, such as in a password manager, and type its
+first group to go on ([Encryption](#encryption)). The first resync of 4 TB takes several hours; the mirror can be
 used meanwhile. Check it with `cat /proc/mdstat`.
 
 Then start DATA-DEN in the VM: [deploy/README.md](../deploy/README.md).
@@ -102,6 +108,8 @@ Then start DATA-DEN in the VM: [deploy/README.md](../deploy/README.md).
   shows them *Offline*.
 - In the VM: `cat /proc/mdstat` shows an `active raid1` array with `[UU]`,
   and `df -h /srv/data-den` about 3.6 TB.
+- `sudo vm/disk-key.sh status` shows the mirror open, with a `tpm2` and a
+  `recovery` key. After `sudo reboot` it is mounted again by itself.
 - From the Pi, `ssh <user>@<vm>` works. From the Windows PC or another
   device, `ssh <user>@<vm>` and `ping <vm>` time out.
 - `sudo nft list ruleset` in the VM shows the Pi's address.
@@ -126,7 +134,121 @@ and add it to the mirror in the VM:
 sudo mdadm --manage /dev/md/data-den --add /dev/disk/by-id/<new disk>
 ```
 
+The encryption sits on top of the mirror, so the new disk needs nothing
+else. The failed disk only ever held encrypted data; it can go back to the
+seller as it is.
+
 Den-Watcher will report the RAID state as an alarm in a later step.
+
+## Encryption
+
+The mirror is encrypted with LUKS2 (AES-XTS) under the file system:
+`/dev/md/data-den` holds only encrypted data, `/dev/mapper/data-den` is the
+opened mirror, and `/srv/data-den` its file system.
+
+| Protects | Does not protect |
+|---|---|
+| A disk taken out of the PC, stolen, sent back or thrown away | The running VM, and anyone logged into it as root |
+| Both disks stolen without the PC | Someone who is administrator of Windows on the PC, as the TPM's key is kept there |
+
+The VM's virtual TPM (`New-DataDenVM.ps1` switches it on) holds the key, so
+the mirror unlocks itself at every boot, including the restarts after
+automatic updates; nobody has to type anything. The TPM only gives the key
+out while the VM boots with Secure Boot on. A **recovery key**, shown once
+by `setup-raid.sh`, opens the mirror without the TPM. The backup is
+encrypted separately by restic with its own password.
+
+```bash
+sudo vm/disk-key.sh status         # locked or open, and the keys: tpm2 and recovery
+sudo vm/disk-key.sh unlock         # opens and mounts it by hand, then restarts DATA-DEN
+sudo vm/disk-key.sh tpm            # binds it to the TPM again (asks for the recovery key)
+sudo vm/disk-key.sh recovery-key   # a new recovery key, the old one stops working
+```
+
+### When it stays locked after a boot
+
+That happens when the TPM was reset or replaced: a new VM, Windows
+reinstalled, the VM moved to another PC, or Secure Boot switched off. The VM
+still boots, without the data, and DATA-DEN shows an empty disk that nothing
+can be written to (the empty `/srv/data-den` below the mirror is locked with
+`chattr +i`). Log in over SSH from the Pi and:
+
+```bash
+sudo vm/disk-key.sh unlock         # type the recovery key
+sudo vm/disk-key.sh tpm            # so it unlocks itself again next time
+```
+
+Without the recovery key and without the TPM, the data is lost, so keep the
+key safe. If it may have been seen by someone, replace it with
+`disk-key.sh recovery-key`; that works with the TPM alone, even when the old
+key is lost.
+
+### Switching the TPM on for an existing VM
+
+VMs created before the encryption have no TPM. In PowerShell as
+administrator:
+
+```powershell
+Stop-VM -Name DATA-DEN
+Set-VMKeyProtector -VMName DATA-DEN -NewLocalKeyProtector
+Enable-VMTPM -VMName DATA-DEN
+Start-VM -Name DATA-DEN
+```
+
+In the VM, `ls /dev/tpmrm0` then shows it.
+
+### Encrypting an existing mirror
+
+A mirror set up before the encryption is encrypted with `encrypt-raid.sh`
+without losing data. There are two copies at every step: the script takes
+one disk out of the mirror, encrypts it, copies everything onto it and
+compares every file, while the other disk keeps the data as it is. Only
+`finish` erases that disk and mirrors the encrypted one onto it.
+
+1. If the backup is on, let it run once more:
+   `sudo systemctl start data-den-backup`.
+2. Switch the TPM on (above), then stop DATA-DEN:
+   `cd ~/data-den && sudo docker compose stop`.
+3. Copy this folder into the VM again, so it has the new scripts, and start:
+
+   ```bash
+   sudo vm/encrypt-raid.sh start
+   ```
+
+   It shows the recovery key like `setup-raid.sh`. Copying and comparing
+   4 TB takes several hours each; run it in `tmux` or in the console in
+   `vmconnect`, so a dropped SSH connection does not stop it. At the end,
+   `/srv/data-den` is the encrypted copy on one disk.
+4. Start DATA-DEN (`sudo docker compose start`) and check your files in the
+   web interface. Reboot once (`sudo reboot`) and check that the mirror is
+   mounted again by itself.
+5. Then erase the old disk and mirror onto it:
+
+   ```bash
+   sudo vm/encrypt-raid.sh finish
+   ```
+
+   The resync overwrites the whole old disk, the unencrypted data included,
+   and takes several hours; the mirror can be used meanwhile.
+
+### If the encryption stops
+
+If `start` stops halfway, it says at which step; the old disk still has
+all data. To go back to the old mirror, in the VM:
+
+```bash
+sudo umount /mnt/data-den-new; sudo cryptsetup close data-den   # if they are there
+sudo mdadm --stop /dev/md/data-den-new
+sudo mount -o remount,rw /srv/data-den
+sudo mdadm --zero-superblock /dev/disk/by-id/<the disk it took out>
+sudo mdadm --manage /dev/md/data-den --add /dev/disk/by-id/<the disk it took out>
+```
+
+That makes the mirror complete again, unencrypted; after the resync,
+`start` can run again. Between `start` and `finish`, the old data stays
+readable on the old disk:
+`sudo mdadm --assemble --run /dev/md/data-den-old /dev/disk/by-id/<old disk>`
+and `sudo mount -o ro /dev/md/data-den-old /mnt`.
 
 ## Automatic updates
 

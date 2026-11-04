@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Mirrors the two passed-through data disks (RAID 1 with mdadm) and mounts
-# the mirror at /srv/data-den. ERASES both disks. Run once in the VM as root:
+# Mirrors the two passed-through data disks (RAID 1 with mdadm), encrypts the
+# mirror (LUKS2, unlocked at boot by the VM's TPM) and mounts it at
+# /srv/data-den. ERASES both disks. Run once in the VM as root:
 #
 #   sudo vm/setup-raid.sh /dev/disk/by-id/<disk 1> /dev/disk/by-id/<disk 2>
 #
 # Guide: vm/README.md
 set -euo pipefail
+
+# shellcheck source=vm/luks.sh
+source "$(dirname "$0")/luks.sh"
 
 array=/dev/md/data-den
 mountpoint=/srv/data-den
@@ -51,6 +55,10 @@ for disk in "${disks[@]}"; do
 	fi
 done
 
+# Before anything is erased: without a TPM the mirror could not unlock itself.
+luks_install_tools
+luks_require_tpm
+
 lsblk -o NAME,SIZE,MODEL,SERIAL,FSTYPE "${disks[@]}"
 if ! $yes; then
 	read -rp "Both disks above are erased. Type DATA-DEN to go on: " answer
@@ -66,18 +74,16 @@ wipefs --all "${disks[@]}"
 # of 4 TB takes hours; the mirror can be used meanwhile.
 mdadm --create "$array" --run --level=1 --raid-devices=2 --metadata=1.2 \
 	--bitmap=internal --name=data-den "${disks[@]}"
-mkfs.ext4 -L data-den -m 1 "$array"
+luks_format "$array" "$yes"
+mkfs.ext4 -L data-den -m 1 "$mapper_dev"
 
 # The array assembles at boot from mdadm.conf, and mdadm's monitor mails root
 # when a disk fails.
 mdadm --detail --scan "$array" >> /etc/mdadm/mdadm.conf
 update-initramfs -u
 
-mkdir -p "$mountpoint"
-uuid="$(blkid -s UUID -o value "$array")"
-# nofail: the VM still boots, without the data, if the mirror is missing.
-echo "UUID=$uuid $mountpoint ext4 defaults,noatime,nofail 0 2" >> /etc/fstab
-systemctl daemon-reload
+luks_guard_mountpoint "$mountpoint"
+luks_write_config "$array" "$mountpoint"
 mount "$mountpoint"
 
-echo "RAID 1 is up and mounted at $mountpoint. Resync progress: cat /proc/mdstat"
+echo "RAID 1 is up, encrypted and mounted at $mountpoint. Resync progress: cat /proc/mdstat"
