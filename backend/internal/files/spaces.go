@@ -47,6 +47,10 @@ var Routes = []string{
 	"GET /api/integrity",
 	"POST /api/integrity/check",
 	"POST /api/integrity/accept",
+	"GET /api/marks",
+	"GET /api/tagged",
+	"POST /api/tags",
+	"POST /api/favourites",
 }
 
 // ShareRoutes are the API paths behind the login for share links.

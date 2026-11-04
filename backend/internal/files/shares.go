@@ -462,7 +462,7 @@ func (f *Files) shareList(w http.ResponseWriter, r *http.Request) {
 	if rel != "." {
 		listed += rel
 	}
-	f.writeListing(w, name, listed)
+	f.writeListing(w, name, listed, false)
 }
 
 func (f *Files) shareDownload(w http.ResponseWriter, r *http.Request) {
@@ -475,7 +475,7 @@ func (f *Files) shareDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A video is fetched in many ranges; only the start counts.
-	if rng := r.Header.Get("Range"); rng == "" || strings.HasPrefix(rng, "bytes=0-") {
+	if firstPiece(r) {
 		f.note(r, "share-download", "/"+name)
 	}
 	f.serveDownload(w, r, name)

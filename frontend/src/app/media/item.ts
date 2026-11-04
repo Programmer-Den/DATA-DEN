@@ -12,6 +12,10 @@ export interface Item {
   preview?: boolean;
   /** True when the server makes a small thumbnail of the photo (/api/thumb). */
   thumb?: boolean;
+  /** The account's own tags of the file. */
+  tags?: string[];
+  /** True when the account marked it as a favourite. */
+  favourite?: boolean;
 }
 
 /** The file for the browser to show. */

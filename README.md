@@ -178,6 +178,17 @@ again only files whose size or modification time changed. Of each document
 up to 50 MB, the first 256 KB of text are indexed. The recycle bin and the
 other `.data-den-*` folders are left out.
 
+Every account keeps its own tags, favourites and recently used files, in
+`.data-den-marks/marks.json`. On a row of **Dateien**, ☆ marks a file or
+folder as a favourite and 🏷 sets its tags (comma-separated, up to 20 of up to
+40 characters each); the tags are shown under the name, and a click on one
+lists its files. The **Favoriten** tab shows all tags with how many files
+have them, the favourites, newest first, and the last 50 files that were
+opened, downloaded or uploaded. Moves and the recycle bin keep the marks;
+deleting for good forgets them, and share links never show them. API:
+`GET /api/marks`, `GET /api/tagged?tag=`, `POST /api/tags {"path", "tags"}`,
+`POST /api/favourites {"path", "favourite"}`.
+
 Share links (🔗 on a row) give a file or folder to people without a login:
 the link `/s/<id>` works for 1, 7, 30 or 90 days or a year and can ask for a
 password. Behind it, a shared folder can be browsed, each file downloaded

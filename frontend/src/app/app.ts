@@ -4,6 +4,7 @@ import { AccountView } from './account/account';
 import { AuditView } from './audit/audit';
 import { AuthService, errorMessage, needsCode } from './auth.service';
 import { Files } from './files/files';
+import { MarksView } from './marks/marks';
 import { Kind } from './media/item';
 import { MediaView } from './media/media';
 import { ChecksView } from './checks/checks';
@@ -18,6 +19,7 @@ import { UsersView } from './users/users';
 
 type View =
   | 'files'
+  | 'marks'
   | Kind
   | 'shares'
   | 'trash'
@@ -40,6 +42,7 @@ interface Health {
   selector: 'app-root',
   imports: [
     Files,
+    MarksView,
     MediaView,
     PublicShare,
     SearchView,
@@ -67,6 +70,7 @@ export class App {
   protected readonly askCode = signal(false);
   protected readonly tabs = computed<{ view: View; name: string }[]>(() => [
     { view: 'files', name: 'Dateien' },
+    { view: 'marks', name: 'Favoriten' },
     { view: 'photo', name: 'Fotos' },
     { view: 'video', name: 'Videos' },
     { view: 'document', name: 'Dokumente' },
@@ -83,6 +87,8 @@ export class App {
   protected readonly shareId = shareIdOf(location.pathname);
   /** What was searched for last. */
   protected readonly query = signal('');
+  /** The tag the favourites view shows, picked in the folder view. */
+  protected readonly tag = signal('');
   private readonly startFolder = inject(StartFolder);
 
   constructor() {
@@ -141,6 +147,12 @@ export class App {
       this.query.set(query.trim());
       this.view.set('search');
     }
+  }
+
+  /** Shows the files of a tag in the favourites view. */
+  protected showTag(tag: string): void {
+    this.tag.set(tag);
+    this.view.set('marks');
   }
 
   /** Shows a folder, such as one found in the search, in the folder view. */
