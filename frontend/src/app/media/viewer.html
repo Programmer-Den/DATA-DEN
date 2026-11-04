@@ -6,7 +6,7 @@
       @if (shape() === 'pdf') {
         <a class="button" [href]="url()" target="_blank" rel="noopener">In neuem Tab öffnen</a>
       }
-      @if (item.text && !item.grant) {
+      @if ((item.text || officeFile()) && !item.grant) {
         <button type="button" class="button" (click)="editing.set(true)">Bearbeiten</button>
       }
       <a class="button" [href]="download()" download>Herunterladen</a>
@@ -71,5 +71,9 @@
 </div>
 
 @if (editing() && item(); as item) {
-  <app-editor [path]="item.path" (saved)="edited()" (closed)="stopEditing()" />
+  @if (officeFile()) {
+    <app-office-frame [path]="item.path" (closed)="edited(); stopEditing()" />
+  } @else {
+    <app-editor [path]="item.path" (saved)="edited()" (closed)="stopEditing()" />
+  }
 }

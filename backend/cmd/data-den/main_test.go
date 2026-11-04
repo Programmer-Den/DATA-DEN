@@ -132,3 +132,29 @@ func TestNewGeocoder(t *testing.T) {
 		}
 	}
 }
+
+func TestOfficeConfig(t *testing.T) {
+	t.Setenv("DATA_DEN_OFFICE_URL", "")
+	t.Setenv("DATA_DEN_WOPI_ADDR", "")
+	if _, addr, err := officeConfig(); err != nil || addr != "" {
+		t.Errorf("unset: %q, %v", addr, err)
+	}
+	t.Setenv("DATA_DEN_OFFICE_URL", "http://127.0.0.1:9980")
+	cfg, addr, err := officeConfig()
+	if err != nil || addr != defaultWOPIAddr || cfg.WOPI != "http://"+defaultWOPIAddr || cfg.URL.Host != "127.0.0.1:9980" {
+		t.Errorf("default: %+v, %q, %v", cfg, addr, err)
+	}
+	for _, bad := range []string{"127.0.0.1:9980", "ftp://x", "http://"} {
+		t.Setenv("DATA_DEN_OFFICE_URL", bad)
+		if _, _, err := officeConfig(); err == nil {
+			t.Errorf("DATA_DEN_OFFICE_URL %q: no error", bad)
+		}
+	}
+	t.Setenv("DATA_DEN_OFFICE_URL", "http://127.0.0.1:9980")
+	for _, bad := range []string{":9981", "0.0.0.0:9981", "9981"} {
+		t.Setenv("DATA_DEN_WOPI_ADDR", bad)
+		if _, _, err := officeConfig(); err == nil {
+			t.Errorf("DATA_DEN_WOPI_ADDR %q: no error", bad)
+		}
+	}
+}

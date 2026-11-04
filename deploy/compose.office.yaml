@@ -1,0 +1,32 @@
+# Optional: editing office documents with Collabora Online (CODE).
+# Start together with compose.yaml:
+#   sudo docker compose -f compose.yaml -f compose.office.yaml up -d
+# Guide: deploy/README.md, "Office documents".
+services:
+  data-den:
+    environment:
+      # Where DATA-DEN reaches Collabora, and where Collabora reaches
+      # DATA-DEN's WOPI listener for loading and saving: both only on the VM.
+      DATA_DEN_OFFICE_URL: http://127.0.0.1:9980
+      DATA_DEN_WOPI_ADDR: 127.0.0.1:9981
+
+  collabora:
+    image: collabora/code:26.04.5.2.1
+    restart: unless-stopped
+    # Like DATA-DEN: the VM's own network, listening only on 127.0.0.1, so
+    # nothing but DATA-DEN reaches it. The browser gets to it through
+    # DATA-DEN, behind the login.
+    network_mode: host
+    environment:
+      # The only WOPI host Collabora may load documents from.
+      aliasgroup1: http://127.0.0.1:9981
+      # DATA-DEN and the Pi handle HTTPS; Collabora speaks plain HTTP on the
+      # VM itself. Without a username and password its admin console is off.
+      extra_params: >-
+        --o:ssl.enable=false --o:ssl.termination=true --o:net.listen=loopback
+        --o:net.proto=IPv4 --o:welcome.enable=false
+      dictionaries: de_DE en_US en_GB
+    # Collabora isolates each document with its own tools and needs Docker's
+    # default capabilities for that, so no cap_drop and no-new-privileges
+    # here. It never sees the data directory: DATA-DEN hands it each
+    # document over WOPI.
