@@ -89,7 +89,6 @@ expect 1 'RESTIC_REPOSITORY is not set' env -u RESTIC_REPOSITORY ./backup.sh
 
 # Events for DATA-DEN's notifications.
 events="$(mktemp -d)"
-trap 'rm -rf "$events"' EXIT
 expect 2 'Usage' ./event.sh backup "Titel"
 expect 2 'Unknown kind' env DATA_DEN_EVENTS_DIR="$events" ./event.sh share "Titel" "Text"
 expect 2 'title is empty' env DATA_DEN_EVENTS_DIR="$events" ./event.sh backup "" "Text"
@@ -117,6 +116,73 @@ if ! grep -q '"title": "Backup fehlgeschlagen", "body": "Das nächtliche Backup 
 else
 	echo '[PASS] backup-result.sh reports a failed run'
 fi
+
+# The disk health from Windows, in a pool file as hv_kvp_daemon writes it.
+health="$(mktemp -d)"
+rm -f "$events"/*.json
+trap 'rm -rf "$events" "$health"' EXIT
+# pool KEY VALUE...: a pool file with one record per pair.
+pool() {
+	: > "$health/pool"
+	while [[ $# -ge 2 ]]; do
+		{
+			printf '%s' "$1"
+			head -c $((512 - ${#1})) /dev/zero
+			printf '%s' "$2"
+			head -c $((2048 - ${#2})) /dev/zero
+		} >> "$health/pool"
+		shift 2
+	done
+}
+# shellcheck disable=SC2329 # called through expect
+check_health() {
+	env DATA_DEN_KVP_POOL="$health/pool" DATA_DEN_STATE_DIR="$health/state" DATA_DEN_EVENTS_DIR="$events" DATA_DEN_EVENT=./event.sh ./disk-health.sh
+}
+# expect_events TITLE...: the events written since the last call, by title.
+expect_events() {
+	local got want
+	got="$( (cat "$events"/*.json 2>/dev/null || true) | sed -n 's/.*"title": "\([^"]*\)".*/\1/p' | sort | paste -sd '|' -)"
+	want="$(printf '%s\n' "$@" | sort | paste -sd '|' -)"
+	if [[ "$got" != "$want" ]]; then
+		printf '[FAIL] disk-health.sh: events "%s", wanted "%s"\n' "$got" "$want" >&2
+		failed=1
+	else
+		printf '[PASS] disk-health.sh: events "%s"\n' "$want"
+	fi
+	rm -f "$events"/*.json
+}
+now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+expect 0 'not handed over' check_health
+pool Other x DataDenDiskHealth "status=ok
+checked=$now"
+expect 0 '' check_health
+expect_events
+pool DataDenDiskHealth "status=warn
+checked=$now
+Platte 2 (WDC, X1): 3 nicht korrigierbare Lesefehler"
+expect 0 '' check_health
+expect_events 'Platte meldet Probleme'
+if ! grep -q 'Platte 2 (WDC, X1): 3 nicht korrigierbare Lesefehler' "$health/state/disk-health"; then
+	echo '[FAIL] disk-health.sh did not keep the state' >&2
+	failed=1
+fi
+expect 0 '' check_health
+expect_events
+pool DataDenDiskHealth "status=ok
+checked=$now"
+expect 0 '' check_health
+expect_events 'Platten wieder in Ordnung'
+pool DataDenDiskHealth "status=ok
+checked=2026-01-01T00:00:00Z"
+expect 0 '' check_health
+expect 0 '' check_health
+expect_events 'Plattenprüfung meldet sich nicht'
+pool DataDenDiskHealth "nonsense"
+expect 1 'not understood' check_health
+
+expect 2 'Usage' ./setup-disk-health.sh
+expect 2 'Usage' ./setup-disk-health.sh start
+expect 2 'Usage' ./setup-disk-health.sh on now
 
 expect 2 'Usage' ./setup-updates.sh
 expect 2 'Usage' ./setup-updates.sh start

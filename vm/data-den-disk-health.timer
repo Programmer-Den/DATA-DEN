@@ -1,0 +1,11 @@
+# Starts the disk health check every 15 minutes. setup-disk-health.sh
+# switches it on and off. Guide: vm/README.md#disk-health
+[Unit]
+Description=DATA-DEN disk health from Windows, every 15 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target
