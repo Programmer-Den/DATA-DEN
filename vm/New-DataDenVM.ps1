@@ -89,6 +89,10 @@ Set-VM -Name $Name -ProcessorCount $ProcessorCount -StaticMemory `
 
 # Debian boots with Secure Boot under the UEFI CA template.
 Set-VMFirmware -VMName $Name -EnableSecureBoot On -SecureBootTemplate MicrosoftUEFICertificateAuthority
+# A virtual TPM unlocks the encrypted mirror at boot (setup-raid.sh). Its key
+# is kept in this Windows; the recovery key opens the mirror without it.
+Set-VMKeyProtector -VMName $Name -NewLocalKeyProtector
+Enable-VMTPM -VMName $Name
 $dvd = Add-VMDvdDrive -VMName $Name -Path $IsoPath -Passthru
 Set-VMFirmware -VMName $Name -FirstBootDevice $dvd
 

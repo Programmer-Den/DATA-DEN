@@ -27,6 +27,29 @@ expect 2 'Usage' ./setup-raid.sh --force /dev/sdb /dev/sdc
 expect 2 'not a block device' ./setup-raid.sh /nonexistent-1 /nonexistent-2
 expect 2 'not a block device' ./setup-raid.sh /dev/null /dev/null
 
+expect 2 'Usage' ./encrypt-raid.sh
+expect 2 'Usage' ./encrypt-raid.sh begin
+expect 2 'Usage' ./encrypt-raid.sh start --force
+expect 2 'Usage' ./encrypt-raid.sh start --yes now
+expect 2 'Usage' ./disk-key.sh
+expect 2 'Usage' ./disk-key.sh open
+expect 2 'Usage' ./disk-key.sh unlock now
+
+# The encryption's settings and the recovery key's shape.
+# shellcheck source=vm/luks.sh
+source ./luks.sh
+expect 0 'data-den UUID=1234 none luks,tpm2-device=auto,headless=true,nofail' luks_crypttab_line 1234
+expect 0 '/dev/mapper/data-den /srv/data-den ext4 defaults,noatime,nofail,x-systemd.before=docker.service 0 2' luks_fstab_line /srv/data-den
+key=cdtilclg-nguhkdff-gfehjjvc-uektbfci-bnjrcchn-ckhgkcrt-jhhngdni-bidkdfhv
+expect 0 '' luks_is_recovery_key "$key"
+for bad in "${key%-*}" "$key-cdtilclg" "${key/c/a}" "$key " ''; do
+	expect 1 '' luks_is_recovery_key "$bad"
+done
+expect 0 "$key" luks_show_recovery_key "$key" false <<< cdtilclg
+expect 0 'not the first group' luks_show_recovery_key "$key" false <<< $'nguhkdff\ncdtilclg'
+expect 1 'shown only now' luks_show_recovery_key "$key" false < /dev/null
+expect 0 "$key" luks_show_recovery_key "$key" true
+
 expect 2 'Usage' ./setup-firewall.sh
 expect 2 'Usage' ./setup-firewall.sh 192.168.1.20 10.0.0.1
 for bad in 256.1.1.1 192.168.1 192.168.1.020x '192.168.1.20 tcp dport 1-65535' 'x/g;s/y' ''; do
