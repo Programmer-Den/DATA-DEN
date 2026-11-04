@@ -77,7 +77,10 @@ func (f *Files) syncTree(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		if name == "." && hidden(p) {
-			return fs.SkipDir
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		if !d.Type().IsDir() && !d.Type().IsRegular() {
 			// Symlinks, devices and the like are not offered.
