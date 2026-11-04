@@ -1,0 +1,42 @@
+<div class="share-form" role="group" [attr.aria-label]="'„' + name() + '“ freigeben'">
+  <strong>„{{ name() }}“ freigeben</strong>
+  @if (link(); as link) {
+    <p>Jeder mit diesem Link kann es öffnen und herunterladen:</p>
+    <div class="link-row">
+      <input
+        readonly
+        [value]="link"
+        aria-label="Freigabelink"
+        (focus)="$any($event.target).select()"
+      />
+      <button type="button" (click)="copy(link)">{{ copied() ? 'Kopiert' : 'Kopieren' }}</button>
+      <button type="button" (click)="closed.emit()">Fertig</button>
+    </div>
+  } @else {
+    <form (submit)="create($event, days.value, password.value)">
+      <label>
+        Gültig für
+        <select #days name="days">
+          @for (option of shareDays; track option.days) {
+            <option [value]="option.days" [selected]="option.days === 7">{{ option.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Passwort (optional)
+        <input
+          #password
+          name="password"
+          type="password"
+          autocomplete="new-password"
+          maxlength="72"
+        />
+      </label>
+      <button type="submit" [disabled]="busy()">Link erstellen</button>
+      <button type="button" (click)="closed.emit()">Abbrechen</button>
+    </form>
+  }
+  @if (error(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+</div>

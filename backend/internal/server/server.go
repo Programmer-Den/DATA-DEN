@@ -42,6 +42,7 @@ func New(cfg Config) http.Handler {
 		}
 		if cfg.Data != nil {
 			cfg.Data.Register(mux, cfg.Auth.Require)
+			cfg.Data.RegisterShares(mux, cfg.Auth.Require, cfg.Auth)
 		} else {
 			missing := func(w http.ResponseWriter, _ *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Datenordner nicht verfügbar"})
@@ -59,6 +60,10 @@ func New(cfg Config) http.Handler {
 			mux.HandleFunc("GET /api/trash", cfg.Auth.Require(missing))
 			mux.HandleFunc("GET /api/search", cfg.Auth.Require(missing))
 			mux.HandleFunc("POST /api/trash/", cfg.Auth.Require(missing))
+			mux.HandleFunc("GET /api/shares", cfg.Auth.Require(missing))
+			mux.HandleFunc("POST /api/shares", cfg.Auth.Require(missing))
+			mux.HandleFunc("POST /api/shares/delete", cfg.Auth.Require(missing))
+			mux.HandleFunc("/api/s/", missing)
 		}
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

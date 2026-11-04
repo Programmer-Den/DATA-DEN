@@ -185,6 +185,21 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"username": a.cfg.Username})
 }
 
+// Wait is how long the client of r is still locked out after too many
+// wrong passwords, or 0. Share links use it for their passwords.
+func (a *Auth) Wait(r *http.Request) time.Duration {
+	return a.lockedFor(a.clientIP(r))
+}
+
+// Failed counts a wrong share password from the client of r like a failed
+// login, so guessing one also locks the client out of logging in.
+func (a *Auth) Failed(r *http.Request, share string) {
+	ip := a.clientIP(r)
+	a.fail(ip)
+	// fail2ban on the Pi matches this line.
+	slog.Warn("login failed", "ip", ip, "share", share)
+}
+
 func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(CookieName); err == nil {
 		a.mu.Lock()

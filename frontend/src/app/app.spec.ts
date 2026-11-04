@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { App } from './app';
+import { App, shareIdOf } from './app';
 import { StatusReport } from './status/status.service';
 
 const fine: StatusReport = {
@@ -159,5 +159,16 @@ describe('App', () => {
   it('shows no warning when all is well', async () => {
     const fixture = await start('chriszly');
     expect(page(fixture).querySelector('.warnings')).toBeNull();
+  });
+});
+
+describe('shareIdOf', () => {
+  it('finds the id of a share link', () => {
+    const id = '0123456789abcdef0123456789abcdef';
+    expect(shareIdOf('/s/' + id)).toBe(id);
+    expect(shareIdOf('/s/' + id + '/')).toBe(id);
+    expect(shareIdOf('/')).toBeNull();
+    expect(shareIdOf('/s/kurz')).toBeNull();
+    expect(shareIdOf('/s/' + id + '/mehr')).toBeNull();
   });
 });

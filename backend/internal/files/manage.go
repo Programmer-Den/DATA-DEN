@@ -115,6 +115,7 @@ func (f *Files) move(w http.ResponseWriter, r *http.Request) {
 		f.diskError(w, "moving", err)
 		return
 	}
+	f.moveShares(from, to)
 	slog.Info("moved", "from", "/"+from, "to", "/"+to)
 	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + to})
 }

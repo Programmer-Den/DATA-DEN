@@ -113,6 +113,25 @@ again only files whose size or modification time changed. Of each document
 up to 50 MB, the first 256 KB of text are indexed. The recycle bin and the
 other `.data-den-*` folders are left out.
 
+Share links (🔗 on a row) give a file or folder to people without a login:
+the link `/s/<id>` works for 1, 7, 30 or 90 days or a year and can ask for a
+password. Behind it, a shared folder can be browsed, each file downloaded
+and any folder in it downloaded as one ZIP (stored, not compressed, so it
+starts at once); nothing outside the shared folder is reachable, not even
+through symlinks. A wrong password counts like a failed login (same lockout,
+same `login failed` log line for fail2ban, with `share=<id>`); the right one
+sets a cookie for that one link, valid for a day at most. The **Freigaben**
+tab lists the links, until when they work and whether they need a password,
+copies a link again and revokes it. Moving or renaming keeps the links
+working; in the recycle bin, the link stops working until it is restored.
+Expired links answer like unknown ones and are removed. Each link is a file
+in `.data-den-shares/` in the data directory (hidden), with the password as
+a bcrypt hash. API: `GET /api/shares`,
+`POST /api/shares {"path", "days", "password"}`,
+`POST /api/shares/delete {"id"}`; for the link `GET /api/s/{id}`,
+`POST /api/s/{id}/unlock {"password"}`, `GET /api/s/{id}/files?path=`,
+`GET /api/s/{id}/download?path=` and `GET /api/s/{id}/zip?path=`.
+
 Uploads take many files or whole folders at once, picked with the two
 buttons or dragged onto the page, into the open folder. Three files upload
 at a time, each with its own progress bar. Every file goes in chunks of

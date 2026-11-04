@@ -220,3 +220,31 @@ func TestHashPassword(t *testing.T) {
 		}
 	}
 }
+
+func TestShareGuessesLockOut(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("richtig"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := New(Config{Username: "chriszly", PasswordHash: string(hash)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	a.Register(mux)
+	guess := httptest.NewRequest(http.MethodPost, "/api/s/x/unlock", nil)
+	guess.RemoteAddr = "192.0.2.7:1"
+	if wait := a.Wait(guess); wait != 0 {
+		t.Fatalf("wait %v before any failure", wait)
+	}
+	for range MaxFailures {
+		a.Failed(guess, "x")
+	}
+	if wait := a.Wait(guess); wait <= 0 {
+		t.Errorf("wait %v after %d failures", wait, MaxFailures)
+	}
+	// Wrong share passwords count against logging in too.
+	if rec := login(mux, "192.0.2.7:1", "chriszly", "richtig", nil); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("login: status %d, want 429", rec.Code)
+	}
+}

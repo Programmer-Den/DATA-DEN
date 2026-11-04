@@ -43,6 +43,7 @@ type Listing struct {
 type Files struct {
 	root    *os.Root
 	uploads uploads
+	shares  shares
 	// thumbSlots limits how many thumbnails are made at the same time.
 	thumbSlots chan struct{}
 	// trashDays is how long a deleted item can be restored.
@@ -59,6 +60,7 @@ func Open(dir string) (*Files, error) {
 	return &Files{
 		root:       root,
 		uploads:    uploads{byID: map[string]*upload{}},
+		shares:     shares{unlocked: map[string]unlock{}},
 		thumbSlots: make(chan struct{}, thumbWorkers),
 		trashDays:  DefaultTrashDays,
 	}, nil
@@ -71,7 +73,8 @@ func (f *Files) Close() error {
 
 // Register adds /api/files, /api/download, /api/view, /api/media,
 // /api/thumb, /api/uploads, /api/folders, /api/move, /api/delete,
-// /api/trash and /api/search to mux, behind require (the login check).
+// /api/trash and /api/search to mux, behind require (the login check). The
+// share links are added by RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
@@ -87,6 +90,15 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	listed := "/"
+	if name != "." {
+		listed += name
+	}
+	f.writeListing(w, name, listed)
+}
+
+// writeListing answers with the folder name, shown as listed.
+func (f *Files) writeListing(w http.ResponseWriter, name, listed string) {
 	dir, err := f.root.Open(name)
 	if err != nil {
 		openError(w, err)
@@ -126,10 +138,6 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 		}
 		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
-	listed := "/"
-	if name != "." {
-		listed += name
-	}
 	writeJSON(w, http.StatusOK, Listing{Path: listed, Entries: entries})
 }
 
@@ -142,6 +150,11 @@ func (f *Files) download(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Nicht gefunden")
 		return
 	}
+	f.serveDownload(w, r, name)
+}
+
+// serveDownload answers with the file name to save.
+func (f *Files) serveDownload(w http.ResponseWriter, r *http.Request, name string) {
 	file, err := f.root.Open(name)
 	if err != nil {
 		openError(w, err)

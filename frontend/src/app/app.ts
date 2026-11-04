@@ -4,11 +4,13 @@ import { AuthService, errorMessage } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
 import { MediaView } from './media/media';
+import { PublicShare } from './public/public-share';
+import { SharesView } from './shares/shares';
 import { StatusView } from './status/status';
 import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
 
-type View = 'files' | Kind | 'trash' | 'status';
+type View = 'files' | Kind | 'shares' | 'trash' | 'status';
 
 /** How often the warnings about space and the RAID are checked. */
 export const STATUS_INTERVAL = 5 * 60 * 1000;
@@ -20,7 +22,7 @@ interface Health {
 
 @Component({
   selector: 'app-root',
-  imports: [Files, MediaView, TrashView, StatusView],
+  imports: [Files, MediaView, PublicShare, SharesView, TrashView, StatusView],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -38,12 +40,19 @@ export class App {
     { view: 'photo', name: 'Fotos' },
     { view: 'video', name: 'Videos' },
     { view: 'document', name: 'Dokumente' },
+    { view: 'shares', name: 'Freigaben' },
     { view: 'trash', name: 'Papierkorb' },
     { view: 'status', name: 'Status' },
   ];
   protected readonly view = signal<View>('files');
+  /** The id of a share link /s/<id> this page was opened with, or null. */
+  protected readonly shareId = shareIdOf(location.pathname);
 
   constructor() {
+    if (this.shareId) {
+      // Someone with a link: no login, no version.
+      return;
+    }
     inject(HttpClient)
       .get<Health>('/api/health')
       .subscribe({
@@ -83,4 +92,9 @@ export class App {
   protected logout(): void {
     this.auth.logout().subscribe();
   }
+}
+
+/** The id in a share link's path "/s/<id>", or null for any other page. */
+export function shareIdOf(path: string): string | null {
+  return /^\/s\/([0-9a-f]{32})\/?$/.exec(path)?.[1] ?? null;
 }

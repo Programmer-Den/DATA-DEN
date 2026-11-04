@@ -1,0 +1,61 @@
+.hint,
+.empty,
+.missing {
+  opacity: 0.7;
+}
+
+.done {
+  color: #2e7d32;
+}
+
+.error {
+  color: #c62828;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  text-align: right;
+}
+
+.actions button {
+  margin: 0.1rem 0 0.1rem 0.3rem;
+}
+
+.share-form {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 0.5rem;
+}
+
+.share-form form,
+.link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.share-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.link-row input {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
