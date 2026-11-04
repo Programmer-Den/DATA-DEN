@@ -162,8 +162,10 @@ func run() error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-
 	if data != nil {
+		// The search index, built in the background so the server answers
+		// at once.
+		go data.Index(ctx.Done())
 		go data.PurgeTrashEvery(ctx, time.Hour)
 	}
 

@@ -102,6 +102,16 @@ deleted for good, checked at start, every hour and whenever the bin is opened. A
 ("Existiert bereits"), a folder cannot move into itself, and the data
 directory itself and the `.data-den-*` folders cannot be changed.
 
+`GET /api/search?q=` searches the names and paths of all files and folders
+and the text of documents: TXT, MD, CSV and LOG (UTF-8 or Latin-1), PDF,
+Word (`.docx`) and OpenDocument (`.odt`). Every word must match; a match in
+the name ranks above one in the path, which ranks above one in the text,
+and a text match comes with a snippet around it. The index lives in memory:
+built in the background at start and refreshed every 10 minutes, reading
+again only files whose size or modification time changed. Of each document
+up to 50 MB, the first 256 KB of text are indexed. The recycle bin and the
+other `.data-den-*` folders are left out.
+
 Uploads take many files or whole folders at once, picked with the two
 buttons or dragged onto the page, into the open folder. Three files upload
 at a time, each with its own progress bar. Every file goes in chunks of
