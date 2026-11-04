@@ -1,0 +1,55 @@
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (shares(); as shares) {
+  <p class="hint">
+    Freigaben entstehen in der Dateiansicht über 🔗. Abgelaufene Links verschwinden von selbst.
+  </p>
+  @if (shares.length === 0) {
+    <p class="empty">Keine Freigaben.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Ort</th>
+          <th scope="col">Gültig bis</th>
+          <th scope="col">Passwort</th>
+          <th scope="col"><span class="visually-hidden">Aktionen</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (share of shares; track share.id) {
+          <tr>
+            <td>
+              {{ share.dir ? '📁 ' : '' }}{{ share.name }}
+              @if (share.missing) {
+                <span class="missing">(nicht mehr vorhanden)</span>
+              }
+            </td>
+            <td>{{ share.path }}</td>
+            <td>{{ date(share.expires) }}</td>
+            <td>{{ share.password ? 'ja' : 'nein' }}</td>
+            <td class="actions">
+              <button type="button" (click)="copy(share)">Link kopieren</button>
+              <button
+                type="button"
+                [disabled]="busy()"
+                [attr.aria-label]="'Link zu ' + share.name + ' widerrufen'"
+                (click)="revoke(share)"
+              >
+                Widerrufen
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+} @else if (!error()) {
+  <p>Lade …</p>
+}

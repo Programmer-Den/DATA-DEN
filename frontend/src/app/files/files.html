@@ -44,6 +44,10 @@
     </div>
   }
 
+  @if (sharing(); as target) {
+    <app-share-form [path]="target.path" [name]="target.name" (closed)="sharing.set(null)" />
+  }
+
   @if (deleted(); as gone) {
     <div class="moving" role="status">
       <span>„{{ gone.name }}“ liegt im Papierkorb.</span>
@@ -116,6 +120,15 @@
                   (click)="renaming.set(entry.name)"
                 >
                   ✎
+                </button>
+                <button
+                  type="button"
+                  class="icon"
+                  title="Freigeben"
+                  [attr.aria-label]="entry.name + ' freigeben'"
+                  (click)="share(entry)"
+                >
+                  🔗
                 </button>
                 <button
                   type="button"

@@ -55,6 +55,8 @@ func TestSite(t *testing.T) {
 		{"/main.js", "console.log"},
 		// A route of the Angular app, not a file: gets index.html.
 		{"/files/holiday", "<app-root>"},
+		// The page of a share link.
+		{"/s/0123456789abcdef0123456789abcdef", "<app-root>"},
 	}
 	for _, tt := range tests {
 		rec := get(t, h, tt.path)
@@ -109,6 +111,10 @@ func TestFilesWithoutDataDirectory(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("/api/files without data directory: status %d, want 503", rec.Code)
+	}
+	// Share links answer without a login.
+	if rec := get(t, h, "/api/s/0123456789abcdef0123456789abcdef"); rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("/api/s/ without data directory: status %d, want 503", rec.Code)
 	}
 }
 

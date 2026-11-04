@@ -4,6 +4,7 @@ import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
 import { Item, Kind, downloadUrl } from '../media/item';
 import { Viewer } from '../media/viewer';
+import { ShareForm } from '../shares/share-form';
 import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
 
 export interface Entry {
@@ -31,7 +32,7 @@ const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 
 /** The folders of the data directory: open, download and upload files. */
 @Component({
   selector: 'app-files',
-  imports: [Viewer],
+  imports: [Viewer, ShareForm],
   templateUrl: './files.html',
   styleUrl: './files.css',
 })
@@ -68,6 +69,8 @@ export class Files {
   /** The file or folder being moved: its path stays while other folders open. */
   protected readonly moving = signal<{ path: string; name: string } | null>(null);
   protected readonly busy = signal(false);
+  /** The file or folder a link is being made for, or null. */
+  protected readonly sharing = signal<{ path: string; name: string } | null>(null);
   /** What was just moved to the recycle bin, for undo. */
   protected readonly deleted = signal<{ id: string; name: string } | null>(null);
 
@@ -119,6 +122,10 @@ export class Files {
     this.change('/api/move', { from: this.child(entry), to: this.childPath(name) }, () =>
       this.renaming.set(null),
     );
+  }
+
+  protected share(entry: Entry): void {
+    this.sharing.set({ path: this.child(entry), name: entry.name });
   }
 
   protected startMove(entry: Entry): void {
