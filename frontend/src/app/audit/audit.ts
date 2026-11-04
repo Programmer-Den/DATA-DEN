@@ -28,6 +28,8 @@ export const ACTIONS: Record<string, string> = {
   'user-delete': 'Konto gelöscht',
   upload: 'Hochgeladen',
   replace: 'Ersetzt (alte Version aufbewahrt)',
+  create: 'Textdatei angelegt',
+  edit: 'Bearbeitet',
   folder: 'Ordner angelegt',
   move: 'Verschoben oder umbenannt',
   delete: 'In den Papierkorb',

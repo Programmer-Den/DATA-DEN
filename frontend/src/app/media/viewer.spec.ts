@@ -9,8 +9,17 @@ const items: Item[] = [
   { path: '/Fotos/a.jpg', name: 'a.jpg', size: 10, modified, kind: 'photo', preview: true },
   { path: '/film.mp4', name: 'film.mp4', size: 10, modified, kind: 'video', preview: true },
   { path: '/brief.pdf', name: 'brief.pdf', size: 10, modified, kind: 'document', preview: true },
-  { path: '/notiz.txt', name: 'notiz.txt', size: 5, modified, kind: 'document', preview: true },
+  {
+    path: '/notiz.txt',
+    name: 'notiz.txt',
+    size: 5,
+    modified,
+    kind: 'document',
+    preview: true,
+    text: true,
+  },
   { path: '/tabelle.xlsx', name: 'tabelle.xlsx', size: 10, modified, kind: 'document' },
+  { path: '/liste.md', name: 'liste.md', size: 9, modified, kind: 'document', preview: true },
   {
     path: '/gross.log',
     name: 'gross.log',
@@ -53,7 +62,7 @@ describe('Viewer', () => {
     expect(page().querySelector('a[download]')?.getAttribute('href')).toBe(
       '/api/download?path=%2FFotos%2Fa.jpg',
     );
-    expect(page().textContent).toContain('1 / 6');
+    expect(page().textContent).toContain('1 / 7');
   });
 
   it('plays a video', async () => {
@@ -83,8 +92,54 @@ describe('Viewer', () => {
     expect(page().querySelector('pre')?.textContent).toBe('Hallo');
   });
 
+  it('shows Markdown formatted', async () => {
+    await show(5);
+    http.expectOne('/api/view?path=%2Fliste.md').flush('# Liste');
+    await fixture.whenStable();
+    expect(page().querySelector('.markdown h1')?.textContent).toBe('Liste');
+    // Only files the server marks as text can be edited.
+    expect(page().textContent).not.toContain('Bearbeiten');
+  });
+
+  it('opens a text file in the editor and shows it again after saving', async () => {
+    await show(3);
+    http.expectOne('/api/view?path=%2Fnotiz.txt').flush('Hallo');
+    await fixture.whenStable();
+    let changed = false;
+    fixture.componentInstance.changed.subscribe(() => (changed = true));
+    [...page().querySelectorAll('button')]
+      .find((b) => b.textContent?.includes('Bearbeiten'))!
+      .click();
+    await fixture.whenStable();
+    http
+      .expectOne('/api/text?path=/notiz.txt')
+      .flush({ path: '/notiz.txt', content: 'Hallo', version: 'v1' });
+    await fixture.whenStable();
+    const textarea = page().querySelector('textarea')!;
+    textarea.value = 'Hallo Welt';
+    textarea.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    [...page().querySelectorAll('app-editor button')]
+      .find((b) => b.textContent?.includes('Speichern'))!
+      .dispatchEvent(new Event('click'));
+    http.expectOne('/api/text').flush({ path: '/notiz.txt', version: 'v2' });
+    await fixture.whenStable();
+    expect(changed).toBe(true);
+
+    // Escape closes the editor, not the viewer.
+    let closed = false;
+    fixture.componentInstance.closed.subscribe(() => (closed = true));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await fixture.whenStable();
+    expect(closed).toBe(false);
+    expect(page().querySelector('app-editor')).toBeNull();
+    http.expectOne('/api/view?path=%2Fnotiz.txt').flush('Hallo Welt');
+    await fixture.whenStable();
+    expect(page().querySelector('pre')?.textContent).toBe('Hallo Welt');
+  });
+
   it('offers only the download without a preview or for large text', async () => {
-    for (const index of [4, 5]) {
+    for (const index of [4, 6]) {
       await show(index);
       expect(page().textContent).toContain('Keine Vorschau möglich');
       expect(page().querySelector('a[download]')).not.toBeNull();

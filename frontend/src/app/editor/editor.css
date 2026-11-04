@@ -1,0 +1,146 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: Canvas;
+  color: CanvasText;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+}
+
+.name {
+  flex: 1;
+  min-width: 8rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.state {
+  opacity: 0.7;
+}
+
+.button,
+.modes button {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid currentColor;
+  border-radius: 0.3rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.primary:not(:disabled) {
+  background: #1d76db;
+  border-color: #1d76db;
+  color: #fff;
+}
+
+.modes {
+  display: flex;
+}
+
+.modes button {
+  border-radius: 0;
+}
+
+.modes button:first-child {
+  border-radius: 0.3rem 0 0 0.3rem;
+}
+
+.modes button:last-child {
+  border-radius: 0 0.3rem 0.3rem 0;
+}
+
+.modes button.on {
+  background: color-mix(in srgb, CanvasText 15%, transparent);
+}
+
+.error {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: #fde8e4;
+  color: #8a1c0a;
+}
+
+.panes {
+  flex: 1;
+  display: grid;
+  min-height: 0;
+}
+
+.panes.split {
+  grid-template-columns: 1fr 1fr;
+}
+
+textarea,
+.preview {
+  min-height: 0;
+  padding: 1rem;
+  overflow: auto;
+}
+
+textarea {
+  border: none;
+  resize: none;
+  background: inherit;
+  color: inherit;
+  font:
+    0.95rem/1.5 ui-monospace,
+    monospace;
+  outline: none;
+}
+
+.split textarea {
+  border-right: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+}
+
+.preview {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.preview ::ng-deep :is(pre, code) {
+  background: color-mix(in srgb, CanvasText 8%, transparent);
+  border-radius: 0.2rem;
+}
+
+.preview ::ng-deep pre {
+  padding: 0.5rem;
+  overflow: auto;
+}
+
+.preview ::ng-deep img {
+  max-width: 100%;
+}
+
+.message {
+  padding: 1rem;
+  text-align: center;
+}
+
+@media (max-width: 40rem) {
+  .panes.split {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .split textarea {
+    border-right: none;
+    border-bottom: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  }
+}

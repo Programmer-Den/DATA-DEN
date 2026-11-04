@@ -34,6 +34,8 @@ type Entry struct {
 	Preview bool `json:"preview,omitempty"`
 	// Thumb is true when /api/thumb can make a thumbnail of the photo.
 	Thumb bool `json:"thumb,omitempty"`
+	// Text is true when /api/text can open the file in the editor.
+	Text bool `json:"text,omitempty"`
 }
 
 // Listing is the content of one folder.
@@ -148,8 +150,8 @@ func (f *Files) Close() error {
 // Register adds /api/files, /api/download, /api/view, /api/media,
 // /api/thumb, /api/usage, /api/uploads, /api/folders, /api/move,
 // /api/delete, /api/trash, /api/search, /api/duplicates, /api/integrity,
-// /api/versions and /api/albums (all of Routes) to mux, behind require (the
-// login check). The share links are added by RegisterShares.
+// /api/versions, /api/albums and /api/text (all of Routes) to mux, behind
+// require (the login check). The share links are added by RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
@@ -162,6 +164,7 @@ func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http
 	f.registerSums(mux, require)
 	f.registerVersions(mux, require)
 	f.registerAlbums(mux, require)
+	f.registerEdit(mux, require)
 }
 
 func (f *Files) list(w http.ResponseWriter, r *http.Request) {

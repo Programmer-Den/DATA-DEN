@@ -139,7 +139,13 @@ func (f *Files) view(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Content-Type", format.inline)
 	h.Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": info.Name()}))
-	h.Set("Cache-Control", "private, max-age=3600")
+	if format.inline == textPlain {
+		// Text can be changed in the editor: the browser asks each time
+		// whether it is still the same.
+		h.Set("Cache-Control", "private, no-cache")
+	} else {
+		h.Set("Cache-Control", "private, max-age=3600")
+	}
 	if format.inline == "application/pdf" {
 		// The document view shows PDFs in a frame of the website. Chrome
 		// refuses to show a PDF in a sandbox, so it gets none.
@@ -227,6 +233,7 @@ func entryOf(info fs.FileInfo) Entry {
 		entry.Kind = format.kind
 		entry.Preview = format.inline != ""
 		entry.Thumb = thumbFormats[lowerExt(info.Name())]
+		entry.Text = editable(info.Name()) && info.Size() <= MaxText
 	}
 	return entry
 }

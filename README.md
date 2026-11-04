@@ -226,6 +226,20 @@ each row can be renamed (✎), moved (↪: open the target folder, then
 `POST /api/folders {"path"}`, `POST /api/move {"from", "to"}` and
 `POST /api/delete {"path"}`, JSON only.
 
+Text and Markdown files (TXT, MD, CSV and LOG, UTF-8, up to 1 MB) can be
+edited in the browser: **Bearbeiten** in the viewer opens the editor,
+**Neue Textdatei** in the folder view makes an empty one (a name without one
+of these extensions gets `.md`). Markdown is shown formatted, in the viewer
+and next to the text in the editor (Text, Beides, Vorschau). **Speichern** or
+Ctrl+S saves; the first save of each editing session keeps the file as it
+was as a version (🕘 **Ältere Versionen**), so a wrong edit can be undone.
+Text files in folders that another account shares cannot be edited yet. A file changed
+elsewhere meanwhile is never overwritten: the editor says so and offers to
+load it again. The API is `GET /api/text?path` → `{"content", "version"}` and
+`PUT /api/text {"path", "content", "version", "backup"}`, JSON only; an empty
+`version` creates a new file and never overwrites one. A save is written to
+`.data-den-edits/` first and then replaces the file in one step.
+
 Deleting moves the file or folder into the recycle bin,
 `.data-den-trash/` in the data directory (hidden; a rename, so quick even for
 large folders), and the folder view offers **Rückgängig** right away. The

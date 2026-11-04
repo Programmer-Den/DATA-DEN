@@ -35,7 +35,7 @@ func (f *Files) usage() (int64, error) {
 			}
 			return err
 		}
-		if d.IsDir() && (name == usersDir || name == thumbDir || name == uploadDir || name == sharesDir) {
+		if d.IsDir() && (name == usersDir || name == thumbDir || name == uploadDir || name == sharesDir || name == editDir) {
 			return fs.SkipDir
 		}
 		if d.Type().IsRegular() && name != grantsFile {

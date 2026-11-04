@@ -1,0 +1,64 @@
+<div class="backdrop" role="dialog" aria-modal="true" [attr.aria-label]="name() + ' bearbeiten'">
+  <header>
+    <span class="name">{{ name() }}</span>
+    <span class="state" role="status">
+      @if (saving()) {
+        Speichert …
+      } @else if (dirty()) {
+        Ungespeichert
+      } @else if (content() !== null) {
+        Gespeichert
+      }
+    </span>
+    @if (markdown()) {
+      <div class="modes" role="group" aria-label="Ansicht">
+        <button type="button" [class.on]="mode() === 'edit'" (click)="mode.set('edit')">
+          Text
+        </button>
+        <button type="button" [class.on]="mode() === 'split'" (click)="mode.set('split')">
+          Beides
+        </button>
+        <button type="button" [class.on]="mode() === 'preview'" (click)="mode.set('preview')">
+          Vorschau
+        </button>
+      </div>
+    }
+    <button
+      type="button"
+      class="button primary"
+      title="Strg+S"
+      [disabled]="content() === null || saving() || !dirty()"
+      (click)="save()"
+    >
+      Speichern
+    </button>
+    <button type="button" class="button" (click)="close()">Schließen</button>
+  </header>
+
+  @if (error(); as error) {
+    <p class="error" role="alert">
+      {{ error }}
+      @if (conflict()) {
+        <button type="button" class="button" (click)="reload()">Neu laden</button>
+      }
+    </p>
+  }
+
+  @if (content() !== null) {
+    <div class="panes" [class]="markdown() ? mode() : 'edit'">
+      @if (!markdown() || mode() !== 'preview') {
+        <textarea
+          [value]="content()"
+          [attr.aria-label]="'Inhalt von ' + name()"
+          spellcheck="true"
+          (input)="input($event)"
+        ></textarea>
+      }
+      @if (markdown() && mode() !== 'edit') {
+        <article class="preview" [innerHTML]="preview()"></article>
+      }
+    </div>
+  } @else if (!error()) {
+    <p class="message">Lade …</p>
+  }
+</div>
