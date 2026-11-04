@@ -17,6 +17,8 @@ export interface Item {
   /** Where a photo was taken. */
   lat?: number;
   lon?: number;
+  /** The town nearest to where a photo was taken. */
+  place?: string;
 }
 
 /** When a photo was taken, or else when the file was last changed. */

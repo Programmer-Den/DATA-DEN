@@ -8,6 +8,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/places"
 )
 
 // EXIF tags that the gallery uses.
@@ -39,6 +41,8 @@ type photoMeta struct {
 	Taken string
 	// Lat and Lon are where it was taken, nil when unknown.
 	Lat, Lon *float64
+	// Place is the town nearest to where it was taken, "" when unknown.
+	Place string
 	// Orientation is how to turn the photo, 1 to 8.
 	Orientation int
 }
@@ -269,6 +273,9 @@ func (f *Files) photoMeta(name string, info fs.FileInfo) photoMeta {
 		if file, err := f.root.Open(name); err == nil {
 			meta = readExif(file)
 			_ = file.Close()
+		}
+		if meta.Lat != nil {
+			meta.Place = places.Nearest(*meta.Lat, *meta.Lon)
 		}
 	}
 	f.photos.mu.Lock()

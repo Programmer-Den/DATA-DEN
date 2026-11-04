@@ -198,10 +198,10 @@ func TestMediaTimeline(t *testing.T) {
 	if want := []string{"/mitte.jpg", "/ohne.png", "/alt.jpg"}; !slices.Equal(got, want) {
 		t.Fatalf("order %v, want %v", got, want)
 	}
-	if old := media.Items[2]; old.Taken != "2015-08-01T10:00:00" || old.Lat == nil || *old.Lat != 52.52 {
+	if old := media.Items[2]; old.Taken != "2015-08-01T10:00:00" || old.Lat == nil || *old.Lat != 52.52 || old.Place != "Berlin" {
 		t.Errorf("alt.jpg: %+v", old)
 	}
-	if png := media.Items[1]; png.Taken != "" || png.Lat != nil {
+	if png := media.Items[1]; png.Taken != "" || png.Lat != nil || png.Place != "" {
 		t.Errorf("ohne.png: %+v", png)
 	}
 }

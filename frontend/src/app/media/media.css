@@ -144,3 +144,56 @@ a {
 .more {
   margin-top: 1rem;
 }
+
+.modes {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.modes button {
+  padding: 0.25rem 0.75rem;
+  font: inherit;
+}
+
+.modes .active {
+  font-weight: bold;
+}
+
+.album-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.album-head h2 {
+  margin: 0;
+}
+
+.albums {
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.albums button {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.albums img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}

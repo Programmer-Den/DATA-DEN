@@ -168,6 +168,17 @@ by `taken`, or by the file's time when a photo has no date. Only JPEGs carry
 EXIF that is read; it is read once per photo and kept in memory until the
 photo changes, ahead of time by the search index's walk.
 
+Above the gallery, **Zeitleiste**, **Orte** and **Reisen** switch between
+the timeline and albums. Each photo with a GPS position gets `place`, the
+nearest town within 150 km from a list built into the server
+(`backend/internal/places/places.tsv`, the Natural Earth populated places,
+public domain, with German names), so no position ever leaves the NAS. The
+list is coarse: in Germany it has the larger cities only. **Orte** has an
+album per town, most photos first. **Reisen** finds trips: photos taken away
+from home (the town with the most photos), ended by a photo at home or three
+days without one; at least three photos make a trip. Albums are made in the
+browser from `/api/media`, nothing is stored.
+
 The gallery shows thumbnails from `/api/thumb`: a JPEG of at most 320 pixels,
 made from JPEG, PNG, GIF, WebP and BMP photos up to 100 megapixels, turned by
 the photo's EXIF orientation. The first request makes it, two at a time, and

@@ -90,6 +90,8 @@ type Item struct {
 	// Lat and Lon are where a photo was taken, by its EXIF data.
 	Lat *float64 `json:"lat,omitempty"`
 	Lon *float64 `json:"lon,omitempty"`
+	// Place is the town nearest to where a photo was taken.
+	Place string `json:"place,omitempty"`
 }
 
 // Media is every file of one kind in the data directory.
@@ -184,7 +186,7 @@ func (f *Files) media(w http.ResponseWriter, r *http.Request) {
 		item := Item{Path: "/" + name, Entry: entryOf(info)}
 		if kind == "photo" {
 			meta := f.photoMeta(name, info)
-			item.Taken, item.Lat, item.Lon = meta.Taken, meta.Lat, meta.Lon
+			item.Taken, item.Lat, item.Lon, item.Place = meta.Taken, meta.Lat, meta.Lon, meta.Place
 			seen[name] = true
 		}
 		items = append(items, item)
