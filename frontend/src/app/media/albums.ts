@@ -6,9 +6,19 @@ export interface Album {
   name: string;
   /** Newest first, like the timeline. */
   items: Item[];
-  /** When the oldest and the newest photo were taken. */
-  from: Date;
-  to: Date;
+  /** When the oldest and the newest photo were taken; null when empty. */
+  from: Date | null;
+  to: Date | null;
+  /** True for an album made by hand (/api/albums). */
+  own?: boolean;
+}
+
+/** An own album as the server keeps it. */
+export interface OwnAlbum {
+  id: string;
+  name: string;
+  created: string;
+  paths: string[];
 }
 
 /** A trip ends when no photo away from home was taken for this long. */
@@ -22,9 +32,27 @@ function album(id: string, name: string, items: Item[]): Album {
     id,
     name,
     items: [...items].sort((a, b) => takenAt(b).getTime() - takenAt(a).getTime()),
-    from: new Date(Math.min(...times)),
-    to: new Date(Math.max(...times)),
+    from: times.length ? new Date(Math.min(...times)) : null,
+    to: times.length ? new Date(Math.max(...times)) : null,
   };
+}
+
+/**
+ * The own albums with their photos, newest album first. Paths of files that
+ * are gone, or in the recycle bin, are left out.
+ */
+export function ownAlbums(own: OwnAlbum[], items: Item[]): Album[] {
+  const byPath = new Map(items.map((item) => [item.path, item]));
+  return [...own]
+    .sort((a, b) => b.created.localeCompare(a.created))
+    .map((o) => ({
+      ...album(
+        o.id,
+        o.name,
+        o.paths.flatMap((p) => byPath.get(p) ?? []),
+      ),
+      own: true,
+    }));
 }
 
 /** The places of the photos, most photos first. */
@@ -81,5 +109,5 @@ export function tripAlbums(items: Item[]): Album[] {
   end();
   return trips
     .map((trip) => album('trip:' + trip[0].path, byCount(trip).slice(0, 3).join(', '), trip))
-    .sort((a, b) => b.to.getTime() - a.to.getTime());
+    .sort((a, b) => b.to!.getTime() - a.to!.getTime());
 }

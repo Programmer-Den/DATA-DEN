@@ -119,6 +119,7 @@ func (f *Files) move(w http.ResponseWriter, r *http.Request) {
 	f.moveShares(from, to)
 	f.sumMoved(from, to)
 	f.versionsMoved(from, to)
+	f.albumsMoved(from, to)
 	if f.moved != nil {
 		f.moved(from, to)
 	}

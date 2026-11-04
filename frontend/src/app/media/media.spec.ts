@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { OwnAlbum } from './albums';
 import { Item, Kind } from './item';
 import { MediaView, PAGE } from './media';
 
@@ -26,13 +27,23 @@ describe('MediaView', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.verify();
+    vi.restoreAllMocks();
+  });
 
-  async function start(kind: Kind, items: Item[]): Promise<ComponentFixture<MediaView>> {
+  async function start(
+    kind: Kind,
+    items: Item[],
+    albums: OwnAlbum[] = [],
+  ): Promise<ComponentFixture<MediaView>> {
     const fixture = TestBed.createComponent(MediaView);
     fixture.componentRef.setInput('kind', kind);
     await fixture.whenStable();
     http.expectOne(`/api/media?kind=${kind}`).flush({ kind, items });
+    if (kind === 'photo') {
+      http.expectOne('/api/albums').flush({ albums });
+    }
     await fixture.whenStable();
     return fixture;
   }
@@ -135,6 +146,116 @@ describe('MediaView', () => {
     expect(page(fixture).textContent).toContain('Keine Reisen gefunden');
   });
 
+  it('makes an own album and adds chosen photos to it', async () => {
+    const fixture = await start('photo', [
+      photo(1, '2026-10-20T10:00:00Z'),
+      photo(2, '2026-10-19T10:00:00Z'),
+    ]);
+    const modes = page(fixture).querySelectorAll<HTMLButtonElement>('.modes button');
+    modes[3].click();
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('Noch keine eigenen Alben');
+
+    const input = page(fixture).querySelector<HTMLInputElement>('.new-album input')!;
+    input.value = 'Hochzeit';
+    page(fixture).querySelector<HTMLFormElement>('.new-album')!.dispatchEvent(new Event('submit'));
+    const create = http.expectOne('/api/albums');
+    expect(create.request.method).toBe('POST');
+    expect(create.request.body).toEqual({ name: 'Hochzeit' });
+    create.flush({ id: 'a1', name: 'Hochzeit', created: '2026-11-04T10:00:00Z', paths: [] });
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.albums .meta')?.textContent).toContain('0 Fotos · leer');
+
+    // Choose two photos in the timeline and add them.
+    modes[0].click();
+    await fixture.whenStable();
+    const choose = [...page(fixture).querySelectorAll<HTMLButtonElement>('.bar button')].find((b) =>
+      b.textContent?.includes('Auswählen'),
+    )!;
+    choose.click();
+    await fixture.whenStable();
+    const tiles = page(fixture).querySelectorAll<HTMLButtonElement>('.photos button');
+    tiles[0].click();
+    tiles[1].click();
+    tiles[1].click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('app-viewer')).toBeNull();
+    expect(page(fixture).querySelector('.choose')?.textContent).toContain('1 ausgewählt');
+    expect(tiles[0].classList).toContain('selected');
+
+    const add = [...page(fixture).querySelectorAll<HTMLButtonElement>('.choose button')][0];
+    add.click();
+    const req = http.expectOne('/api/albums/add');
+    expect(req.request.body).toEqual({ id: 'a1', paths: ['/Fotos/p1.jpg'] });
+    req.flush({
+      id: 'a1',
+      name: 'Hochzeit',
+      created: '2026-11-04T10:00:00Z',
+      paths: ['/Fotos/p1.jpg'],
+    });
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.notice')?.textContent).toContain('1 Foto zu „Hochzeit“');
+  });
+
+  it('opens an own album, takes photos out, renames and deletes it', async () => {
+    const album: OwnAlbum = {
+      id: 'a1',
+      name: 'Hochzeit',
+      created: '2026-11-04T10:00:00Z',
+      paths: ['/Fotos/p1.jpg', '/Fotos/p2.jpg', '/Fotos/gone.jpg'],
+    };
+    const fixture = await start(
+      'photo',
+      [
+        photo(1, '2026-10-20T10:00:00Z'),
+        photo(2, '2026-10-19T10:00:00Z'),
+        photo(3, '2026-10-18T10:00:00Z'),
+      ],
+      [album],
+    );
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[3].click();
+    await fixture.whenStable();
+    page(fixture).querySelector<HTMLButtonElement>('.albums button')!.click();
+    await fixture.whenStable();
+    // The file that is gone is left out.
+    expect(page(fixture).querySelectorAll('.photos li').length).toBe(2);
+
+    const button = (text: string) =>
+      [...page(fixture).querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        b.textContent?.includes(text),
+      )!;
+    button('Auswählen').click();
+    await fixture.whenStable();
+    page(fixture).querySelector<HTMLButtonElement>('.photos button')!.click();
+    await fixture.whenStable();
+    button('Aus Album nehmen').click();
+    const remove = http.expectOne('/api/albums/remove');
+    expect(remove.request.body).toEqual({ id: 'a1', paths: ['/Fotos/p1.jpg'] });
+    remove.flush({ ...album, paths: ['/Fotos/p2.jpg'] });
+    await fixture.whenStable();
+    expect(page(fixture).querySelectorAll('.photos li').length).toBe(1);
+
+    button('Umbenennen').click();
+    await fixture.whenStable();
+    const input = page(fixture).querySelector<HTMLInputElement>('.album-head input')!;
+    input.value = 'Hochzeit 2026';
+    page(fixture)
+      .querySelector<HTMLFormElement>('.album-head form')!
+      .dispatchEvent(new Event('submit'));
+    const rename = http.expectOne('/api/albums/rename');
+    expect(rename.request.body).toEqual({ id: 'a1', name: 'Hochzeit 2026' });
+    rename.flush({ ...album, name: 'Hochzeit 2026', paths: ['/Fotos/p2.jpg'] });
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.album-head h2')?.textContent).toBe('Hochzeit 2026');
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    button('Album löschen').click();
+    http.expectOne('/api/albums/delete').flush({ id: 'a1' });
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.album-head')).toBeNull();
+    expect(page(fixture).textContent).toContain('gelöscht');
+  });
+
   it('shows thumbnails, and the photo itself when there is none', async () => {
     const fixture = await start('photo', [
       photo(1, '2026-10-20T10:00:00Z'),
@@ -222,6 +343,9 @@ describe('MediaView', () => {
     await fixture.whenStable();
     http
       .expectOne('/api/media?kind=photo')
+      .flush({ error: 'Datenordner nicht verfügbar' }, { status: 503, statusText: 'Unavailable' });
+    http
+      .expectOne('/api/albums')
       .flush({ error: 'Datenordner nicht verfügbar' }, { status: 503, statusText: 'Unavailable' });
     await fixture.whenStable();
     expect(page(fixture).querySelector('[role=alert]')?.textContent).toContain('nicht verfügbar');
