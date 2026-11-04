@@ -20,7 +20,7 @@
       </div>
     }
     <nav class="tabs" aria-label="Ansichten">
-      @for (tab of tabs; track tab.view) {
+      @for (tab of tabs(); track tab.view) {
         <button
           type="button"
           [class.active]="view() === tab.view"
@@ -43,6 +43,12 @@
       }
       @case ('status') {
         <app-status />
+      }
+      @case ('account') {
+        <app-account />
+      }
+      @case ('users') {
+        <app-users />
       }
       @default {
         <app-media [kind]="$any(view())" />

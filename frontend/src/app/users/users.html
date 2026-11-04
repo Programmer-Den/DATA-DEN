@@ -1,0 +1,105 @@
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (users(); as users) {
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Admin</th>
+        <th scope="col" class="size">Belegt</th>
+        <th scope="col">Kontingent (GB)</th>
+        <th scope="col"><span class="visually-hidden">Aktionen</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (user of users; track user.name) {
+        <tr>
+          <td>
+            {{ user.name }}
+            @if (user.owner) {
+              <span class="hint">(Hauptkonto)</span>
+            }
+          </td>
+          <td>
+            <input
+              type="checkbox"
+              [checked]="user.admin"
+              [disabled]="user.owner || user.name === auth.user() || busy()"
+              [attr.aria-label]="user.name + ' ist Admin'"
+              (change)="setAdmin(user, $any($event.target).checked)"
+            />
+          </td>
+          <td class="size">{{ user.used >= 0 ? formatSize(user.used) : '–' }}</td>
+          <td>
+            @if (user.owner) {
+              <span class="hint">ohne Grenze</span>
+            } @else {
+              <form class="quota" (submit)="$event.preventDefault(); setQuota(user, quota.value)">
+                <input
+                  #quota
+                  inputmode="decimal"
+                  placeholder="ohne Grenze"
+                  [value]="quotaField(user.quota)"
+                  [attr.aria-label]="'Kontingent von ' + user.name + ' in GB'"
+                />
+                <button type="submit" [disabled]="busy()">Speichern</button>
+              </form>
+            }
+          </td>
+          <td class="actions">
+            @if (!user.owner) {
+              <button type="button" [disabled]="busy()" (click)="setPassword(user)">
+                Passwort setzen
+              </button>
+              @if (user.name !== auth.user()) {
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  [attr.aria-label]="user.name + ' löschen'"
+                  (click)="remove(user)"
+                >
+                  Löschen
+                </button>
+              }
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+} @else if (!error()) {
+  <p>Lade …</p>
+}
+
+<h2>Neues Konto</h2>
+<form #form class="create" (submit)="create($event, form)">
+  <label>
+    Benutzername
+    <input
+      name="name"
+      autocomplete="off"
+      pattern="[a-z0-9][a-z0-9._\-]{0,31}"
+      title="a-z, 0-9, Punkt, Bindestrich und Unterstrich"
+      required
+    />
+  </label>
+  <label>
+    Passwort
+    <input name="password" type="password" autocomplete="new-password" minlength="10" required />
+  </label>
+  <label>
+    Kontingent in GB
+    <input name="quota" inputmode="decimal" placeholder="ohne Grenze" />
+  </label>
+  <label class="check">
+    <input name="admin" type="checkbox" />
+    Admin (darf Konten verwalten)
+  </label>
+  <button type="submit" [disabled]="busy()">Anlegen</button>
+</form>
+<p class="hint">Jedes Konto hat seinen eigenen Bereich und sieht die Dateien der anderen nicht.</p>

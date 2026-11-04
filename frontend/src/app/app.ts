@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, DestroyRef, effect, inject, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { AccountView } from './account/account';
 import { AuthService, errorMessage } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
@@ -9,8 +10,9 @@ import { SharesView } from './shares/shares';
 import { StatusView } from './status/status';
 import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
+import { UsersView } from './users/users';
 
-type View = 'files' | Kind | 'shares' | 'trash' | 'status';
+type View = 'files' | Kind | 'shares' | 'trash' | 'status' | 'account' | 'users';
 
 /** How often the warnings about space and the RAID are checked. */
 export const STATUS_INTERVAL = 5 * 60 * 1000;
@@ -22,7 +24,16 @@ interface Health {
 
 @Component({
   selector: 'app-root',
-  imports: [Files, MediaView, PublicShare, SharesView, TrashView, StatusView],
+  imports: [
+    Files,
+    MediaView,
+    PublicShare,
+    SharesView,
+    TrashView,
+    StatusView,
+    AccountView,
+    UsersView,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -35,7 +46,7 @@ export class App {
   /** Why the last login failed, or null. */
   protected readonly loginError = signal<string | null>(null);
   protected readonly busy = signal(false);
-  protected readonly tabs: { view: View; name: string }[] = [
+  protected readonly tabs = computed<{ view: View; name: string }[]>(() => [
     { view: 'files', name: 'Dateien' },
     { view: 'photo', name: 'Fotos' },
     { view: 'video', name: 'Videos' },
@@ -43,7 +54,9 @@ export class App {
     { view: 'shares', name: 'Freigaben' },
     { view: 'trash', name: 'Papierkorb' },
     { view: 'status', name: 'Status' },
-  ];
+    { view: 'account', name: 'Konto' },
+    ...(this.auth.admin() ? [{ view: 'users' as const, name: 'Benutzer' }] : []),
+  ]);
   protected readonly view = signal<View>('files');
   /** The id of a share link /s/<id> this page was opened with, or null. */
   protected readonly shareId = shareIdOf(location.pathname);
@@ -90,7 +103,7 @@ export class App {
   }
 
   protected logout(): void {
-    this.auth.logout().subscribe();
+    this.auth.logout().subscribe(() => this.view.set('files'));
   }
 }
 

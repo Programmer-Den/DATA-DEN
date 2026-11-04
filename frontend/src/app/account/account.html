@@ -1,0 +1,52 @@
+<section>
+  <h2>Speicherplatz</h2>
+  @if (usage(); as usage) {
+    @if (usage.quota > 0) {
+      <p>{{ formatSize(usage.used) }} von {{ formatSize(usage.quota) }} belegt</p>
+      <progress [value]="percent(usage)" max="100">{{ percent(usage) }} %</progress>
+    } @else {
+      <p>{{ formatSize(usage.used) }} belegt, ohne Grenze</p>
+    }
+    <p class="hint">Der Papierkorb zählt mit.</p>
+  } @else if (!error()) {
+    <p>Lade …</p>
+  }
+</section>
+
+<section>
+  <h2>Passwort</h2>
+  @if (auth.owner()) {
+    <p class="hint">
+      Das Passwort des Hauptkontos steht in den Einstellungen des Servers (DATA_DEN_PASSWORD_HASH).
+    </p>
+  } @else {
+    <form #form class="password" (submit)="changePassword($event, form)">
+      <label>
+        Bisheriges Passwort
+        <input name="current" type="password" autocomplete="current-password" required />
+      </label>
+      <label>
+        Neues Passwort
+        <input
+          name="password"
+          type="password"
+          autocomplete="new-password"
+          minlength="10"
+          required
+        />
+      </label>
+      <label>
+        Neues Passwort wiederholen
+        <input name="repeat" type="password" autocomplete="new-password" minlength="10" required />
+      </label>
+      <button type="submit" [disabled]="busy()">Passwort ändern</button>
+    </form>
+  }
+</section>
+
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}

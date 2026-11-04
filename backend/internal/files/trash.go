@@ -166,6 +166,7 @@ func (f *Files) purgeTrash() {
 				slog.Warn("emptying the recycle bin", "path", item.Path, "err", err)
 				continue
 			}
+			f.forgetUsage()
 			slog.Info("deleted for good after the waiting time", "path", item.Path)
 		}
 	}
@@ -241,6 +242,7 @@ func (f *Files) deleteForGood(w http.ResponseWriter, r *http.Request) {
 		f.diskError(w, "deleting for good", err)
 		return
 	}
+	f.forgetUsage()
 	slog.Info("deleted for good", "path", item.Path)
 	writeJSON(w, http.StatusOK, map[string]string{"path": item.Path})
 }
@@ -251,6 +253,7 @@ func (f *Files) emptyTrash(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &body) {
 		return
 	}
+	defer f.forgetUsage()
 	for _, item := range f.trashItems() {
 		if err := f.root.RemoveAll(path.Join(trashDir, item.ID)); err != nil {
 			f.diskError(w, "emptying the recycle bin", err)

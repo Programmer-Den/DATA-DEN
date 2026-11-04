@@ -27,12 +27,13 @@ describe('App', () => {
   async function start(
     session: string | null,
     status: StatusReport = fine,
+    admin = false,
   ): Promise<ComponentFixture<App>> {
     const fixture = TestBed.createComponent(App);
     http.expectOne('/api/health').flush({ status: 'ok', version: '1.2.3' });
     const req = http.expectOne('/api/session');
     if (session) {
-      req.flush({ username: session });
+      req.flush({ username: session, admin });
       await fixture.whenStable();
       http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
       http.expectOne('/api/status').flush(status);
@@ -159,6 +160,23 @@ describe('App', () => {
   it('shows no warning when all is well', async () => {
     const fixture = await start('chriszly');
     expect(page(fixture).querySelector('.warnings')).toBeNull();
+  });
+
+  it('shows the accounts only to admins', async () => {
+    const names = (fixture: ComponentFixture<App>) =>
+      [...page(fixture).querySelectorAll('.tabs button')].map((b) => b.textContent?.trim());
+    const user = await start('anna');
+    expect(names(user)).toContain('Konto');
+    expect(names(user)).not.toContain('Benutzer');
+    user.destroy();
+
+    const admin = await start('chriszly', fine, true);
+    expect(names(admin)).toContain('Benutzer');
+    [...page(admin).querySelectorAll<HTMLButtonElement>('.tabs button')]
+      .find((b) => b.textContent?.trim() === 'Benutzer')!
+      .click();
+    await admin.whenStable();
+    http.expectOne('/api/users').flush({ users: [] });
   });
 });
 
