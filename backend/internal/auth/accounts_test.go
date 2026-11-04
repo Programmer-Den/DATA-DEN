@@ -20,14 +20,23 @@ func init() {
 // accountsSetup is like setup, with the accounts kept in file.
 func accountsSetup(t *testing.T, file string, removed func(string) error) *http.ServeMux {
 	t.Helper()
+	return accountsSetupWith(t, Config{AccountsFile: file, Removed: removed})
+}
+
+func accountsSetupClock(t *testing.T, file string, c *clock) *http.ServeMux {
+	t.Helper()
+	return accountsSetupWith(t, Config{AccountsFile: file, Now: c.Now})
+}
+
+func accountsSetupWith(t *testing.T, cfg Config) *http.ServeMux {
+	t.Helper()
 	hash, err := bcrypt.GenerateFromPassword([]byte("richtig"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := New(Config{
-		Username: "chriszly", PasswordHash: string(hash), AccountsFile: file, Removed: removed,
-		Usage: func(name string) (int64, error) { return int64(len(name)), nil },
-	})
+	cfg.Username, cfg.PasswordHash = "chriszly", string(hash)
+	cfg.Usage = func(name string) (int64, error) { return int64(len(name)), nil }
+	a, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,12 +46,19 @@ func accountsSetup(t *testing.T, file string, removed func(string) error) *http.
 }
 
 func call(mux http.Handler, c *http.Cookie, method, target, body string) (int, map[string]any) {
+	return callReq(mux, "192.0.2.1:1", method, target, body, c)
+}
+
+func callReq(mux http.Handler, remote, method, target, body string, cookies ...*http.Cookie) (int, map[string]any) {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.RemoteAddr = remote
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c != nil {
-		req.AddCookie(c)
+	for _, c := range cookies {
+		if c != nil {
+			req.AddCookie(c)
+		}
 	}
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

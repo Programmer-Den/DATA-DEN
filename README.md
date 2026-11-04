@@ -77,6 +77,29 @@ recovered in the VM.
 The accounts are kept in `.data-den-accounts/accounts.json` in the data
 directory, readable only by the server, with bcrypt hashes of the passwords.
 
+### Two-factor login
+
+Each account can turn on a second factor for itself in the **Konto** tab:
+scan the QR code with an authenticator app (Aegis, Google Authenticator,
+2FAS and the like), type the code it shows, and note the ten recovery codes
+shown once then. From then on the login also asks for the app's code
+(TOTP, 6 digits, 30 seconds); a recovery code works instead, once each.
+Wrong codes count as failed logins. Turning it off again needs the password
+and a code.
+
+When someone loses the phone and the recovery codes, an admin turns it off
+for that account in the **Benutzer** tab. The owner's own is turned off in
+the VM, with the server stopped:
+
+```bash
+sudo docker compose stop data-den
+sudo docker compose run --rm data-den reset-2fa <username>
+sudo docker compose start data-den
+```
+
+The secrets are stored in the accounts file, the recovery codes only as
+SHA-256 hashes.
+
 ## Files
 
 After the login the website has four tabs. **Dateien** shows the folders of

@@ -33,3 +33,42 @@ progress {
   display: grid;
   gap: 0.25rem;
 }
+
+.setup {
+  display: grid;
+  gap: 1rem;
+  padding-left: 1.2rem;
+}
+
+.setup img {
+  display: block;
+  margin: 0.5rem 0;
+  background: #fff;
+  image-rendering: pixelated;
+}
+
+.secret {
+  overflow-wrap: anywhere;
+}
+
+.code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.code label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.recovery {
+  padding: 0.5rem 1rem;
+  border: 2px solid #f9a825;
+  border-radius: 0.4rem;
+}
+
+.recovery ul {
+  columns: 2;
+}

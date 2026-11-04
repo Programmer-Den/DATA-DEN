@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AccountView } from './account/account';
-import { AuthService, errorMessage } from './auth.service';
+import { AuthService, errorMessage, needsCode } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
 import { MediaView } from './media/media';
@@ -46,6 +46,8 @@ export class App {
   /** Why the last login failed, or null. */
   protected readonly loginError = signal<string | null>(null);
   protected readonly busy = signal(false);
+  /** Whether the login form asks for the code of the second factor. */
+  protected readonly askCode = signal(false);
   protected readonly tabs = computed<{ view: View; name: string }[]>(() => [
     { view: 'files', name: 'Dateien' },
     { view: 'photo', name: 'Fotos' },
@@ -91,12 +93,21 @@ export class App {
 
   protected login(event: Event, username: string, password: string): void {
     event.preventDefault();
+    const form = event.target as HTMLFormElement;
+    const field = form.elements.namedItem('code') as HTMLInputElement | null;
+    const code = field?.value ?? '';
     this.busy.set(true);
     this.loginError.set(null);
-    this.auth.login(username, password).subscribe({
-      next: () => this.busy.set(false),
+    this.auth.login(username, password, code.trim()).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.askCode.set(false);
+      },
       error: (err: unknown) => {
         this.busy.set(false);
+        if (needsCode(err)) {
+          this.askCode.set(true);
+        }
         this.loginError.set(errorMessage(err));
       },
     });

@@ -8,6 +8,8 @@ export interface Session {
   admin?: boolean;
   /** The owner's account comes from the server's settings. */
   owner?: boolean;
+  /** Whether the login needs a code from an authenticator app. */
+  twoFactor?: boolean;
 }
 
 /** The login: who is logged in, and logging in and out. */
@@ -21,6 +23,8 @@ export class AuthService {
   readonly admin = signal(false);
   /** Whether the logged-in user is the owner, whose password is in the server's settings. */
   readonly owner = signal(false);
+  /** Whether the logged-in user has the two-factor login on. */
+  readonly twoFactor = signal(false);
 
   /** Asks the server whether the session cookie is still valid. */
   check(): void {
@@ -30,8 +34,10 @@ export class AuthService {
     });
   }
 
-  login(username: string, password: string): Observable<void> {
-    return this.http.post<Session>('/api/login', { username, password }).pipe(
+  /** Logs in; code is the second factor, for accounts that have one. */
+  login(username: string, password: string, code?: string): Observable<void> {
+    const body = code ? { username, password, code } : { username, password };
+    return this.http.post<Session>('/api/login', body).pipe(
       tap((session) => this.set(session)),
       map(() => undefined),
     );
@@ -44,8 +50,14 @@ export class AuthService {
   private set(session: Session | null): void {
     this.admin.set(session?.admin ?? false);
     this.owner.set(session?.owner ?? false);
+    this.twoFactor.set(session?.twoFactor ?? false);
     this.user.set(session?.username ?? null);
   }
+}
+
+/** Whether a failed login asks for the code of the second factor. */
+export function needsCode(err: unknown): boolean {
+  return err instanceof HttpErrorResponse && err.error?.twoFactor === true;
 }
 
 /** The server's message for a failed request, in German like the UI. */

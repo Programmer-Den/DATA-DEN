@@ -5,8 +5,8 @@ import { AuthService } from '../auth.service';
 import { User, UsersView, parseQuota, quotaField } from './users';
 
 const users: User[] = [
-  { name: 'chriszly', admin: true, owner: true, quota: 0, used: 2 * 1024 ** 3 },
-  { name: 'anna', admin: false, owner: false, quota: 50 * 1024 ** 3, used: 1024 },
+  { name: 'chriszly', admin: true, owner: true, quota: 0, used: 2 * 1024 ** 3, twoFactor: false },
+  { name: 'anna', admin: false, owner: false, quota: 50 * 1024 ** 3, used: 1024, twoFactor: true },
 ];
 
 describe('quota fields', () => {
@@ -126,5 +126,12 @@ describe('UsersView', () => {
     http.expectOne('/api/users').flush({ users });
     await fixture.whenStable();
     expect(page().querySelector('[role=alert]')?.textContent).toContain('mindestens 10 Zeichen');
+  });
+
+  it('turns the second factor off for a lost phone', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    expect(row(0).textContent).toContain('aus');
+    button(row(1), '2FA ausschalten').click();
+    expect(http.expectOne('/api/users/anna').request.body).toEqual({ twoFactor: false });
   });
 });

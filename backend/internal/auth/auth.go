@@ -64,8 +64,12 @@ type Auth struct {
 	dummy    []byte
 	mu       sync.Mutex
 	accounts map[string]Account
-	sessions map[string]session
-	failures map[string][]time.Time
+	// twoFactor holds the accounts with a second factor, the owner's too.
+	twoFactor map[string]TwoFactor
+	// pendingSecrets are secrets being set up, until the first code fits.
+	pendingSecrets map[string]pendingSecret
+	sessions       map[string]session
+	failures       map[string][]time.Time
 }
 
 type session struct {
@@ -106,16 +110,18 @@ func New(cfg Config) (*Auth, error) {
 	if err != nil {
 		return nil, err
 	}
-	accounts, err := loadAccounts(cfg.AccountsFile, cfg.Username)
+	stored, err := loadAccounts(cfg.AccountsFile, cfg.Username)
 	if err != nil {
 		return nil, err
 	}
 	return &Auth{
-		cfg:      cfg,
-		dummy:    dummy,
-		accounts: accounts,
-		sessions: map[string]session{},
-		failures: map[string][]time.Time{},
+		cfg:            cfg,
+		dummy:          dummy,
+		accounts:       stored.accounts,
+		twoFactor:      stored.twoFactor,
+		pendingSecrets: map[string]pendingSecret{},
+		sessions:       map[string]session{},
+		failures:       map[string][]time.Time{},
 	}, nil
 }
 
@@ -126,6 +132,7 @@ func (a *Auth) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/logout", a.logout)
 	mux.HandleFunc("GET /api/session", a.Require(a.showSession))
 	a.registerAccounts(mux)
+	a.registerTwoFactor(mux)
 }
 
 type userKey struct{}
@@ -176,14 +183,24 @@ func (a *Auth) RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 
 func (a *Auth) showSession(w http.ResponseWriter, r *http.Request) {
 	account := user(r)
-	writeJSON(w, http.StatusOK, sessionInfo{Username: account.Name, Admin: account.Admin, Owner: account.Name == a.cfg.Username})
+	writeJSON(w, http.StatusOK, a.sessionInfo(account))
 }
 
 // sessionInfo is the answer of /api/session and of a login.
 type sessionInfo struct {
-	Username string `json:"username"`
-	Admin    bool   `json:"admin"`
-	Owner    bool   `json:"owner"`
+	Username  string `json:"username"`
+	Admin     bool   `json:"admin"`
+	Owner     bool   `json:"owner"`
+	TwoFactor bool   `json:"twoFactor"`
+}
+
+func (a *Auth) sessionInfo(account Account) sessionInfo {
+	return sessionInfo{
+		Username:  account.Name,
+		Admin:     account.Admin,
+		Owner:     account.Name == a.cfg.Username,
+		TwoFactor: a.hasSecondFactor(account.Name),
+	}
 }
 
 func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
@@ -206,6 +223,8 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		// Code is the second factor, for accounts that have one.
+		Code string `json:"code"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -220,6 +239,20 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("login failed", "ip", ip, "username", body.Username)
 		writeError(w, http.StatusUnauthorized, "Benutzername oder Passwort falsch")
 		return
+	}
+	if a.hasSecondFactor(account.Name) {
+		if body.Code == "" {
+			// Not a failure: the page asks for the code and sends all again.
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "Bitte den Code aus der App eingeben", "twoFactor": true})
+			return
+		}
+		if !a.checkSecondFactor(account.Name, body.Code) {
+			a.fail(ip)
+			// fail2ban on the Pi matches this line.
+			slog.Warn("login failed", "ip", ip, "username", body.Username, "reason", "code")
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "Der Code stimmt nicht", "twoFactor": true})
+			return
+		}
 	}
 	a.clearFailures(ip)
 
@@ -236,7 +269,7 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("login", "ip", ip, "username", account.Name)
 	http.SetCookie(w, cookie(token, expires))
-	writeJSON(w, http.StatusOK, sessionInfo{Username: account.Name, Admin: account.Admin, Owner: account.Name == a.cfg.Username})
+	writeJSON(w, http.StatusOK, a.sessionInfo(account))
 }
 
 // Wait is how long the client of r is still locked out after too many

@@ -29,10 +29,10 @@ import (
 
 func main() {
 	if len(os.Args) > 1 {
-		commands := map[string]func() error{"hash-password": hashPassword, "healthcheck": healthcheck}
+		commands := map[string]func() error{"hash-password": hashPassword, "healthcheck": healthcheck, "reset-2fa": resetTwoFactor}
 		command, ok := commands[os.Args[1]]
 		if !ok {
-			fmt.Fprintln(os.Stderr, "Usage: data-den [hash-password | healthcheck]")
+			fmt.Fprintln(os.Stderr, "Usage: data-den [hash-password | healthcheck | reset-2fa <username>]")
 			os.Exit(2)
 		}
 		if err := command(); err != nil {
@@ -61,6 +61,32 @@ func hashPassword() error {
 	}
 	fmt.Println(hash)
 	return nil
+}
+
+// resetTwoFactor turns the two-factor login of an account off, for an
+// owner who lost the phone and the recovery codes. Stop the server first.
+func resetTwoFactor() error {
+	if len(os.Args) != 3 {
+		return errors.New("usage: data-den reset-2fa <username>")
+	}
+	if err := auth.ResetTwoFactor(accountsFile(dataDir()), os.Args[2]); err != nil {
+		return err
+	}
+	fmt.Println("Two-factor login turned off for", os.Args[2])
+	return nil
+}
+
+func dataDir() string {
+	if dir := os.Getenv("DATA_DEN_DATA_DIR"); dir != "" {
+		return dir
+	}
+	return "/data"
+}
+
+// accountsFile keeps the accounts in the data directory, next to the files,
+// in a folder the API never serves.
+func accountsFile(dataDir string) string {
+	return filepath.Join(dataDir, ".data-den-accounts", "accounts.json")
 }
 
 // healthcheck asks the running server for its health, for Docker's
@@ -124,19 +150,14 @@ func run() error {
 	if (certFile == "") != (keyFile == "") {
 		return errors.New("set both DATA_DEN_TLS_CERT and DATA_DEN_TLS_KEY, or neither")
 	}
-	dataDir := os.Getenv("DATA_DEN_DATA_DIR")
-	if dataDir == "" {
-		dataDir = "/data"
-	}
+	dataDir := dataDir()
 	var login *auth.Auth
 	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
 		Owner: os.Getenv("DATA_DEN_USERNAME"),
 		User:  auth.Username,
 		Quota: func(name string) int64 { return login.Quota(name) },
 	})
-	// The accounts live in the data directory, next to the files, in a
-	// folder the API never serves.
-	accountsFile := ""
+	accounts := ""
 	if err != nil {
 		slog.Warn("the data directory cannot be opened, so no files are served; set DATA_DEN_DATA_DIR", "dir", dataDir, "err", err)
 	} else {
@@ -144,7 +165,7 @@ func run() error {
 		if err := setTrashDays(data); err != nil {
 			return err
 		}
-		accountsFile = filepath.Join(dataDir, ".data-den-accounts", "accounts.json")
+		accounts = accountsFile(dataDir)
 	}
 	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
 	if err != nil {
@@ -162,7 +183,7 @@ func run() error {
 		Username:     os.Getenv("DATA_DEN_USERNAME"),
 		PasswordHash: os.Getenv("DATA_DEN_PASSWORD_HASH"),
 		TrustedProxy: os.Getenv("DATA_DEN_TRUSTED_PROXY"),
-		AccountsFile: accountsFile,
+		AccountsFile: accounts,
 		Usage: func(name string) (int64, error) {
 			if data == nil {
 				return 0, errors.New("no data directory")

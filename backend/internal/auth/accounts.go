@@ -17,7 +17,7 @@ import (
 //
 //	GET  /api/users                 -> {"users": [...]}, admins only
 //	POST /api/users {"name", "password", "admin", "quota"} -> 201, admins only
-//	POST /api/users/{name} {"password"?, "admin"?, "quota"?} -> 200, admins only
+//	POST /api/users/{name} {"password"?, "admin"?, "quota"?, "twoFactor": false?} -> 200, admins only
 //	POST /api/users/{name}/delete {} -> 200, admins only; the files are moved aside
 //	POST /api/account/password {"current", "password"} -> 200, one's own password
 //
@@ -51,38 +51,85 @@ type UserInfo struct {
 	Quota int64  `json:"quota"`
 	// Used is how many bytes it stores, -1 when unknown.
 	Used int64 `json:"used"`
+	// TwoFactor is true when the login needs a code from an app.
+	TwoFactor bool `json:"twoFactor"`
 }
 
 type accountsFile struct {
-	Accounts []Account `json:"accounts"`
+	Accounts  []Account            `json:"accounts"`
+	TwoFactor map[string]TwoFactor `json:"twoFactor,omitempty"`
+}
+
+type storedAccounts struct {
+	accounts  map[string]Account
+	twoFactor map[string]TwoFactor
 }
 
 // loadAccounts reads file, if there is one. An account named like the owner
 // is left out: the settings decide about the owner.
-func loadAccounts(file, owner string) (map[string]Account, error) {
-	accounts := map[string]Account{}
+func loadAccounts(file, owner string) (storedAccounts, error) {
+	stored := storedAccounts{accounts: map[string]Account{}, twoFactor: map[string]TwoFactor{}}
 	if file == "" {
-		return accounts, nil
+		return stored, nil
 	}
 	data, err := os.ReadFile(filepath.Clean(file))
 	if errors.Is(err, fs.ErrNotExist) {
-		return accounts, nil
+		return stored, nil
 	}
 	if err != nil {
-		return nil, err
+		return stored, err
 	}
-	var stored accountsFile
-	if err := json.Unmarshal(data, &stored); err != nil {
-		return nil, errors.New(file + " is not valid JSON: " + err.Error())
+	var parsed accountsFile
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return stored, errors.New(file + " is not valid JSON: " + err.Error())
 	}
-	for _, account := range stored.Accounts {
+	for _, account := range parsed.Accounts {
 		if account.Name == owner || !accountName.MatchString(account.Name) {
 			slog.Warn("account left out", "username", account.Name)
 			continue
 		}
-		accounts[account.Name] = account
+		stored.accounts[account.Name] = account
 	}
-	return accounts, nil
+	for name, tf := range parsed.TwoFactor {
+		if _, ok := stored.accounts[name]; ok || name == owner {
+			stored.twoFactor[name] = tf
+		}
+	}
+	return stored, nil
+}
+
+// ResetTwoFactor turns the second factor of the account name off in file,
+// for an owner who lost both the phone and the recovery codes. The server
+// must not run meanwhile, or it writes its own state back.
+func ResetTwoFactor(file, name string) error {
+	data, err := os.ReadFile(filepath.Clean(file))
+	if err != nil {
+		return err
+	}
+	var parsed accountsFile
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return errors.New(file + " is not valid JSON: " + err.Error())
+	}
+	if _, ok := parsed.TwoFactor[name]; !ok {
+		return errors.New(name + " has no two-factor login")
+	}
+	delete(parsed.TwoFactor, name)
+	return writeAccounts(file, parsed)
+}
+
+func writeAccounts(file string, stored accountsFile) error {
+	data, err := json.MarshalIndent(stored, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		return err
+	}
+	tmp := file + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, file)
 }
 
 // save writes the accounts to the file, in one step. The caller holds mu.
@@ -90,23 +137,12 @@ func (a *Auth) save() error {
 	if a.cfg.AccountsFile == "" {
 		return nil
 	}
-	stored := accountsFile{Accounts: []Account{}}
+	stored := accountsFile{Accounts: []Account{}, TwoFactor: a.twoFactor}
 	for _, account := range a.accounts {
 		stored.Accounts = append(stored.Accounts, account)
 	}
 	slices.SortFunc(stored.Accounts, func(x, y Account) int { return strings.Compare(x.Name, y.Name) })
-	data, err := json.MarshalIndent(stored, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(a.cfg.AccountsFile), 0o700); err != nil {
-		return err
-	}
-	tmp := a.cfg.AccountsFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, a.cfg.AccountsFile)
+	return writeAccounts(a.cfg.AccountsFile, stored)
 }
 
 func (a *Auth) registerAccounts(mux *http.ServeMux) {
@@ -196,10 +232,12 @@ func (a *Auth) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Auth) listUsers(w http.ResponseWriter, _ *http.Request) {
-	users := []UserInfo{{Name: a.cfg.Username, Admin: true, Owner: true}}
 	a.mu.Lock()
+	_, ownerTF := a.twoFactor[a.cfg.Username]
+	users := []UserInfo{{Name: a.cfg.Username, Admin: true, Owner: true, TwoFactor: ownerTF}}
 	for _, account := range a.accounts {
-		users = append(users, UserInfo{Name: account.Name, Admin: account.Admin, Quota: account.Quota})
+		_, tf := a.twoFactor[account.Name]
+		users = append(users, UserInfo{Name: account.Name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf})
 	}
 	a.mu.Unlock()
 	for i := range users {
@@ -276,8 +314,14 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 		Password *string `json:"password"`
 		Admin    *bool   `json:"admin"`
 		Quota    *int64  `json:"quota"`
+		// TwoFactor false turns the second factor off, for a lost phone.
+		TwoFactor *bool `json:"twoFactor"`
 	}
 	if !readJSON(w, r, &body) {
+		return
+	}
+	if body.TwoFactor != nil && *body.TwoFactor {
+		writeError(w, http.StatusBadRequest, "Die Zwei-Faktor-Anmeldung richtet jeder selbst ein")
 		return
 	}
 	if body.Quota != nil && *body.Quota < 0 {
@@ -322,8 +366,13 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 		// The old password no longer lets anyone in.
 		a.dropSessions(name, "")
 	}
-	slog.Info("account changed", "username", name, "admin", account.Admin, "quota", account.Quota, "password", hash != "", "by", Username(r))
-	writeJSON(w, http.StatusOK, UserInfo{Name: name, Admin: account.Admin, Quota: account.Quota})
+	resetTF := body.TwoFactor != nil
+	if resetTF && !a.removeTwoFactor(w, name) {
+		return
+	}
+	slog.Info("account changed", "username", name, "admin", account.Admin, "quota", account.Quota, "password", hash != "", "twoFactorOff", resetTF, "by", Username(r))
+	_, tf := a.twoFactor[name]
+	writeJSON(w, http.StatusOK, UserInfo{Name: name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf})
 }
 
 func (a *Auth) deleteUser(w http.ResponseWriter, r *http.Request) {
@@ -353,9 +402,14 @@ func (a *Auth) deleteUser(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	account := a.accounts[name]
+	tf, hadTF := a.twoFactor[name]
 	delete(a.accounts, name)
+	delete(a.twoFactor, name)
 	if err := a.save(); err != nil {
 		a.accounts[name] = account
+		if hadTF {
+			a.twoFactor[name] = tf
+		}
 		a.saveError(w, err)
 		return
 	}
