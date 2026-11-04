@@ -197,21 +197,26 @@ describe('Files management', () => {
     expect(page().querySelector('.moving')).toBeNull();
   });
 
-  it('deletes after asking', async () => {
-    const confirm = vi
-      .spyOn(window, 'confirm')
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
-    button('Fotos löschen').click();
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('mit seinem ganzen Inhalt'));
-    http.expectNone('/api/delete');
-
+  it('moves to the recycle bin and undoes it', async () => {
     button('Fotos löschen').click();
     const req = http.expectOne('/api/delete');
     expect(req.request.body).toEqual({ path: '/Fotos' });
-    req.flush({ path: '/Fotos' });
+    req.flush({ path: '/Fotos', id: 'abc' });
     await fixture.whenStable();
     await reload('/');
+    expect(page().querySelector('[role=status]')?.textContent).toContain(
+      '„Fotos“ liegt im Papierkorb',
+    );
+
+    [...page().querySelectorAll<HTMLButtonElement>('[role=status] button')]
+      .find((b) => b.textContent?.includes('Rückgängig'))!
+      .click();
+    const undo = http.expectOne('/api/trash/restore');
+    expect(undo.request.body).toEqual({ id: 'abc' });
+    undo.flush({ path: '/Fotos' });
+    await fixture.whenStable();
+    await reload('/');
+    expect(page().querySelector('[role=status]')).toBeNull();
   });
 });
 

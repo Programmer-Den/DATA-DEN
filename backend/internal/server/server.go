@@ -50,6 +50,8 @@ func New(cfg Config) http.Handler {
 			mux.HandleFunc("POST /api/folders", cfg.Auth.Require(missing))
 			mux.HandleFunc("POST /api/move", cfg.Auth.Require(missing))
 			mux.HandleFunc("POST /api/delete", cfg.Auth.Require(missing))
+			mux.HandleFunc("GET /api/trash", cfg.Auth.Require(missing))
+			mux.HandleFunc("POST /api/trash/", cfg.Auth.Require(missing))
 		}
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

@@ -1,0 +1,58 @@
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (trash(); as trash) {
+  <p class="hint">
+    Gelöschte Dateien und Ordner bleiben {{ trash.days }} Tage hier und lassen sich
+    wiederherstellen. Danach sind sie endgültig gelöscht.
+  </p>
+  @if (trash.items.length === 0) {
+    <p class="empty">Der Papierkorb ist leer.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Ort</th>
+          <th scope="col" class="size">Größe</th>
+          <th scope="col">Gelöscht</th>
+          <th scope="col">Bleibt bis</th>
+          <th scope="col"><span class="visually-hidden">Aktionen</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of trash.items; track item.id) {
+          <tr>
+            <td>{{ item.dir ? '📁 ' : '' }}{{ item.name }}</td>
+            <td>{{ folder(item) }}</td>
+            <td class="size">{{ formatSize(item.size) }}</td>
+            <td>{{ deleted(item) }}</td>
+            <td>{{ until(item, trash.days) }}</td>
+            <td class="actions">
+              <button type="button" [disabled]="busy()" (click)="restore(item)">
+                Wiederherstellen
+              </button>
+              <button
+                type="button"
+                [disabled]="busy()"
+                [attr.aria-label]="item.name + ' endgültig löschen'"
+                (click)="deleteForGood(item)"
+              >
+                Endgültig löschen
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    <button type="button" class="empty-all" [disabled]="busy()" (click)="empty()">
+      Papierkorb leeren
+    </button>
+  }
+} @else if (!error()) {
+  <p>Lade …</p>
+}

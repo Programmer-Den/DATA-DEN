@@ -66,13 +66,14 @@ func (f *Files) Close() error {
 }
 
 // Register adds /api/files, /api/download, /api/view, /api/media,
-// /api/thumb, /api/uploads, /api/folders, /api/move and /api/delete to mux,
-// behind require (the login check).
+// /api/thumb, /api/uploads, /api/folders, /api/move, /api/delete and
+// /api/trash to mux, behind require (the login check).
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
 	f.registerViews(mux, require)
 	f.registerManage(mux, require)
+	f.registerTrash(mux, require)
 	f.registerUploads(mux, require)
 }
 

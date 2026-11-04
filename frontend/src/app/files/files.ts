@@ -68,6 +68,8 @@ export class Files {
   /** The file or folder being moved: its path stays while other folders open. */
   protected readonly moving = signal<{ path: string; name: string } | null>(null);
   protected readonly busy = signal(false);
+  /** What was just moved to the recycle bin, for undo. */
+  protected readonly deleted = signal<{ id: string; name: string } | null>(null);
 
   constructor() {
     this.open('/');
@@ -133,23 +135,29 @@ export class Files {
     }
   }
 
+  /** Moves to the recycle bin; the bar that follows can undo it. */
   protected remove(entry: Entry): void {
-    const what = entry.dir
-      ? `Den Ordner „${entry.name}“ mit seinem ganzen Inhalt endgültig löschen?`
-      : `„${entry.name}“ endgültig löschen?`;
-    if (confirm(what)) {
-      this.change('/api/delete', { path: this.child(entry) });
+    this.change<{ id: string }>('/api/delete', { path: this.child(entry) }, (answer) =>
+      this.deleted.set({ id: answer.id, name: entry.name }),
+    );
+  }
+
+  protected undoDelete(): void {
+    const deleted = this.deleted();
+    if (deleted) {
+      this.change('/api/trash/restore', { id: deleted.id }, () => this.deleted.set(null));
     }
   }
 
   /** Sends a change to the server and shows the folder again afterwards. */
-  private change(url: string, body: object, done?: () => void): void {
+  private change<T = unknown>(url: string, body: object, done?: (answer: T) => void): void {
     this.busy.set(true);
     this.error.set(null);
-    this.http.post(url, body).subscribe({
-      next: () => {
+    this.deleted.set(null);
+    this.http.post<T>(url, body).subscribe({
+      next: (answer) => {
         this.busy.set(false);
-        done?.();
+        done?.(answer);
         this.open(this.path());
       },
       error: (err: unknown) => {
