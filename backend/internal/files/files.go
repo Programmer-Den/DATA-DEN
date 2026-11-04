@@ -58,6 +58,8 @@ type Files struct {
 	// mux serves the API of this space alone, for Spaces.
 	mux  *http.ServeMux
 	sums sums
+	// photos caches the EXIF data of the photos, for the timeline.
+	photos photoCache
 	// account is whose space this is, for the audit log.
 	account string
 	// audit notes changes in the audit log; nil notes nothing.

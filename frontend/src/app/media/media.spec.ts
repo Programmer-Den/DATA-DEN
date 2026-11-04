@@ -60,6 +60,39 @@ describe('MediaView', () => {
     );
   });
 
+  it('sorts photos into months by the date taken and jumps to a year', async () => {
+    const fixture = await start('photo', [
+      { ...photo(1, '2026-10-20T10:00:00Z'), taken: '2026-07-14T15:32:10' },
+      { ...photo(2, '2026-10-20T10:00:00Z'), taken: '2015-08-01T10:00:00', lat: 52.52, lon: 13.4 },
+    ]);
+    const months = [...page(fixture).querySelectorAll('h2')].map((h) => h.textContent);
+    expect(months).toEqual(['Juli 2026', 'August 2015']);
+    expect(page(fixture).querySelector('#year-2015')?.textContent).toBe('August 2015');
+    expect(page(fixture).querySelector('.photos button')?.getAttribute('title')).toContain(
+      '14.07.2026',
+    );
+
+    const years = [...page(fixture).querySelectorAll<HTMLButtonElement>('.years button')];
+    expect(years.map((b) => b.textContent?.trim())).toEqual(['2026', '2015']);
+    const target = page(fixture).querySelector<HTMLElement>('#year-2015')!;
+    const scrolled = new Promise<void>((resolve) => {
+      target.scrollIntoView = () => resolve();
+    });
+    years[1].click();
+    await scrolled;
+  });
+
+  it('shows a far year by showing more photos', async () => {
+    const items = Array.from({ length: PAGE + 5 }, (_, i) =>
+      photo(i, i < PAGE + 2 ? '2026-10-20T10:00:00Z' : '2020-01-01T10:00:00Z'),
+    );
+    const fixture = await start('photo', items);
+    expect(page(fixture).querySelector('#year-2020')).toBeNull();
+    page(fixture).querySelectorAll<HTMLButtonElement>('.years button')[1].click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('#year-2020')).not.toBeNull();
+  });
+
   it('shows thumbnails, and the photo itself when there is none', async () => {
     const fixture = await start('photo', [
       photo(1, '2026-10-20T10:00:00Z'),

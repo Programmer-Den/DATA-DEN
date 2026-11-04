@@ -139,7 +139,8 @@ replacing the older one, so the latest 5 to 10 MB are kept.
 After the login the website has four tabs. **Dateien** shows the folders of
 the data directory, with a path bar to go back up; a click on a photo, video,
 song, PDF or text file opens it in the viewer, other files and the ⬇ link
-download it. **Fotos** shows every photo as a gallery by month, **Videos**
+download it. **Fotos** shows every photo as a timeline by the month it was
+taken, with a row of years to jump to, **Videos**
 every video, **Dokumente** every document with its folder; all newest first,
 with a search over the path and 120 at a time. The viewer goes through the
 list with ‹ › or the arrow keys, plays videos with seeking, shows PDFs in a
@@ -156,7 +157,12 @@ only takes the formats listed in `backend/internal/files/view.go` (images,
 MP4/WebM/MOV/MKV, common audio, PDF and plain text), never HTML, and serves
 everything but PDFs in a CSP sandbox. Other files, such as Word or Excel
 documents, are downloaded. `/api/media?kind=photo|video|audio|document` lists
-every file of that kind in the whole data directory, newest first.
+every file of that kind in the whole data directory, newest first. Photos
+come with `taken` (from the EXIF date, in the camera's local time, such as
+`2026-07-14T15:32:10`) and `lat`/`lon` (from the EXIF GPS data) and are sorted
+by `taken`, or by the file's time when a photo has no date. Only JPEGs carry
+EXIF that is read; it is read once per photo and kept in memory until the
+photo changes, ahead of time by the search index's walk.
 
 The gallery shows thumbnails from `/api/thumb`: a JPEG of at most 320 pixels,
 made from JPEG, PNG, GIF, WebP and BMP photos up to 100 megapixels, turned by

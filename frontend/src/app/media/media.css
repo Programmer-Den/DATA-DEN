@@ -22,7 +22,25 @@
   color: #c62828;
 }
 
+.years {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.25rem 0;
+  background: Canvas;
+}
+
+.years button {
+  padding: 0.15rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
 h2 {
+  scroll-margin-top: 2.5rem;
   margin: 1.5rem 0 0.5rem;
   font-size: 1rem;
 }

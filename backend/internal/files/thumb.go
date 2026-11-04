@@ -3,7 +3,6 @@ package files
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -218,64 +217,4 @@ func orient(src image.Image, orientation int) image.Image {
 		}
 	}
 	return dst
-}
-
-// exifOrientation reads the orientation from a JPEG's EXIF data, 1 (as
-// stored) when there is none.
-func exifOrientation(r io.Reader) int {
-	// EXIF sits in an APP1 segment near the start of the file.
-	head := make([]byte, 128<<10)
-	n, _ := io.ReadFull(r, head)
-	head = head[:n]
-	if len(head) < 4 || head[0] != 0xFF || head[1] != 0xD8 {
-		return 1
-	}
-	for i := 2; i+4 <= len(head) && head[i] == 0xFF; {
-		marker := head[i+1]
-		length := int(binary.BigEndian.Uint16(head[i+2:]))
-		if marker == 0xDA || length < 2 || i+2+length > len(head) {
-			// Image data starts, or the segment is cut off.
-			return 1
-		}
-		segment := head[i+4 : i+2+length]
-		if marker == 0xE1 && bytes.HasPrefix(segment, []byte("Exif\x00\x00")) {
-			return tiffOrientation(segment[6:])
-		}
-		i += 2 + length
-	}
-	return 1
-}
-
-// tiffOrientation finds tag 0x0112 in the first directory of TIFF data.
-func tiffOrientation(tiff []byte) int {
-	if len(tiff) < 8 {
-		return 1
-	}
-	var order binary.ByteOrder
-	switch string(tiff[:2]) {
-	case "II":
-		order = binary.LittleEndian
-	case "MM":
-		order = binary.BigEndian
-	default:
-		return 1
-	}
-	dir := int(order.Uint32(tiff[4:]))
-	if dir < 8 || dir+2 > len(tiff) {
-		return 1
-	}
-	count := int(order.Uint16(tiff[dir:]))
-	for i := range count {
-		entry := dir + 2 + i*12
-		if entry+12 > len(tiff) {
-			return 1
-		}
-		if order.Uint16(tiff[entry:]) == 0x0112 {
-			if v := int(order.Uint16(tiff[entry+8:])); v >= 1 && v <= 8 {
-				return v
-			}
-			return 1
-		}
-	}
-	return 1
 }

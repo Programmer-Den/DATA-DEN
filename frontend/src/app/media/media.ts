@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
-import { Item, Kind, downloadUrl, thumbUrl, viewUrl } from './item';
+import { Item, Kind, downloadUrl, takenAt, thumbUrl, viewUrl } from './item';
 import { Viewer } from './viewer';
 
 interface Media {
@@ -13,7 +13,15 @@ interface Media {
 /** Photos of one month, such as "Oktober 2026". */
 interface Month {
   name: string;
+  /** Set on the newest month of a year, the target of the year list. */
+  year?: number;
   items: { item: Item; index: number }[];
+}
+
+/** A year of the timeline and the index of its newest photo. */
+interface Year {
+  year: number;
+  first: number;
 }
 
 /** Files shown at first and added by "Mehr anzeigen", so thousands of photos stay quick. */
@@ -24,8 +32,8 @@ const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' });
 
 /**
  * Every photo, video or document of the data directory, newest first: photos
- * as a gallery by month, videos as tiles, documents as a list. A click opens
- * the viewer.
+ * as a timeline by month taken with a list of years to jump to, videos as
+ * tiles, documents as a list. A click opens the viewer.
  */
 @Component({
   selector: 'app-media',
@@ -56,14 +64,29 @@ export class MediaView {
   protected readonly shown = computed(() => this.found().slice(0, this.limit()));
   protected readonly months = computed<Month[]>(() => {
     const months: Month[] = [];
+    let year: number | undefined;
     this.shown().forEach((item, index) => {
-      const name = monthName.format(new Date(item.modified));
+      const when = takenAt(item);
+      const name = monthName.format(when);
       if (months.at(-1)?.name !== name) {
-        months.push({ name, items: [] });
+        const newYear = when.getFullYear() !== year ? when.getFullYear() : undefined;
+        year = when.getFullYear();
+        months.push({ name, year: newYear, items: [] });
       }
       months.at(-1)!.items.push({ item, index });
     });
     return months;
+  });
+  /** The years of all photos found, newest first, for jumping in the timeline. */
+  protected readonly years = computed<Year[]>(() => {
+    const years: Year[] = [];
+    this.found().forEach((item, index) => {
+      const year = takenAt(item).getFullYear();
+      if (!years.some((y) => y.year === year)) {
+        years.push({ year, first: index });
+      }
+    });
+    return years;
   });
 
   protected readonly page = PAGE;
@@ -83,6 +106,15 @@ export class MediaView {
       next: (media) => this.items.set(media.items),
       error: (err: unknown) => this.error.set(errorMessage(err)),
     });
+  }
+
+  /** Shows the photos up to the year and scrolls to it. */
+  protected jump(year: Year): void {
+    if (year.first >= this.limit()) {
+      this.limit.set(year.first + PAGE);
+    }
+    // After Angular has drawn the photos added.
+    setTimeout(() => document.getElementById(`year-${year.year}`)?.scrollIntoView());
   }
 
   protected filter(value: string): void {
@@ -109,6 +141,6 @@ export class MediaView {
   }
 
   protected date(item: Item): string {
-    return date.format(new Date(item.modified));
+    return date.format(takenAt(item));
   }
 }

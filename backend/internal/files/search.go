@@ -94,6 +94,7 @@ func (f *Files) refreshIndex() int {
 	f.index.mu.RUnlock()
 
 	files := make(map[string]*indexed, len(old))
+	photos := map[string]bool{}
 	_ = fs.WalkDir(f.root.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || name == "." {
 			return nil
@@ -112,6 +113,12 @@ func (f *Files) refreshIndex() int {
 			return nil
 		}
 		entry := entryOf(info)
+		if entry.Kind == "photo" {
+			// Reads the EXIF data of new photos ahead, so the timeline
+			// answers quickly.
+			f.photoMeta(name, info)
+			photos[name] = true
+		}
 		if prev, ok := old[name]; ok && prev.entry.Size == entry.Size && prev.entry.Modified.Equal(entry.Modified) && prev.entry.Dir == entry.Dir {
 			files[name] = prev
 			return nil
@@ -124,6 +131,8 @@ func (f *Files) refreshIndex() int {
 		files[name] = item
 		return nil
 	})
+
+	f.prunePhotos(photos)
 
 	f.index.mu.Lock()
 	f.index.files = files
