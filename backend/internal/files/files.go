@@ -68,6 +68,9 @@ type Files struct {
 	account string
 	// audit notes changes in the audit log; nil notes nothing.
 	audit Recorder
+	// moved is told that from was moved to to, so shared folders follow;
+	// nil for none.
+	moved func(from, to string)
 	// versionMu keeps two changes of the versions, or of a file and its
 	// versions, from running at the same time.
 	versionMu sync.Mutex
@@ -83,10 +86,17 @@ type Files struct {
 type Recorder func(r *http.Request, account, action, target string)
 
 // note records action on target in the audit log.
+// In a shared folder, it is the account working there that did it, in the
+// owner's space.
 func (f *Files) note(r *http.Request, action, target string) {
-	if f.audit != nil {
-		f.audit(r, f.account, action, target)
+	if f.audit == nil {
+		return
 	}
+	if a, ok := r.Context().Value(actingKey{}).(acting); ok {
+		f.audit(r, a.user, action, a.owner+":"+target)
+		return
+	}
+	f.audit(r, f.account, action, target)
 }
 
 // Open opens the data directory dir.

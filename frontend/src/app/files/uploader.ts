@@ -7,6 +7,8 @@ import { errorMessage } from '../auth.service';
 export interface Job {
   file: File;
   path: string;
+  /** The shared folder of another account the path is in, if any. */
+  grant?: string;
 }
 
 export type UploadStatus = 'wartet' | 'lädt hoch' | 'fertig' | 'Fehler' | 'existiert schon';
@@ -111,9 +113,10 @@ export class Uploader {
   private async uploadOne(id: number, job: Job, endpoint: string, replace = false): Promise<void> {
     this.set(id, { status: 'lädt hoch' });
     let starting = true;
+    const grant = job.grant ? '?grant=' + job.grant : '';
     try {
       const started = await firstValueFrom(
-        this.http.post<{ id: string; offset: number }>(endpoint, {
+        this.http.post<{ id: string; offset: number }>(endpoint + grant, {
           path: job.path,
           size: job.file.size,
           ...(replace ? { replace } : {}),
@@ -126,7 +129,12 @@ export class Uploader {
       let saved: string | undefined;
       while (offset < job.file.size) {
         try {
-          const answer = await this.sendChunk(id, `${endpoint}/${started.id}`, job.file, offset);
+          const answer = await this.sendChunk(
+            id,
+            `${endpoint}/${started.id}${grant}`,
+            job.file,
+            offset,
+          );
           offset = answer.offset;
           duplicates = answer.duplicates;
           saved = answer.name;
@@ -137,7 +145,7 @@ export class Uploader {
           }
           // Asks where the server stands and goes on from there.
           const state = await firstValueFrom(
-            this.http.get<{ offset: number }>(`${endpoint}/${started.id}`),
+            this.http.get<{ offset: number }>(`${endpoint}/${started.id}${grant}`),
           );
           offset = state.offset;
         }

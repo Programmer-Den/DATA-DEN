@@ -119,6 +119,9 @@ func (f *Files) move(w http.ResponseWriter, r *http.Request) {
 	f.moveShares(from, to)
 	f.sumMoved(from, to)
 	f.versionsMoved(from, to)
+	if f.moved != nil {
+		f.moved(from, to)
+	}
 	slog.Info("moved", "from", "/"+from, "to", "/"+to)
 	f.note(r, "move", "/"+from+" → /"+to)
 	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + to})

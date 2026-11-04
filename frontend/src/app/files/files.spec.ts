@@ -21,6 +21,7 @@ describe('Files', () => {
     });
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(Files);
+    fixture.detectChanges();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [photos, notes] });
     await fixture.whenStable();
   });
@@ -109,6 +110,7 @@ describe('Files management', () => {
     });
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(Files);
+    fixture.detectChanges();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [photos, notes] });
     await fixture.whenStable();
   });
@@ -227,6 +229,7 @@ describe('Files upload', () => {
     });
     const http = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(Files);
+    fixture.detectChanges();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [photos] });
     await fixture.whenStable();
 

@@ -59,11 +59,12 @@ func New(cfg Config) http.Handler {
 			cfg.Data.Register(mux, cfg.Auth.Require)
 			cfg.Data.RegisterShares(mux, cfg.Auth.Require, cfg.Auth)
 			cfg.Data.RegisterDAV(mux, cfg.Auth.RequireToken)
+			cfg.Data.RegisterGrants(mux, cfg.Auth.Require)
 		} else {
 			missing := func(w http.ResponseWriter, _ *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Datenordner nicht verfügbar"})
 			}
-			for _, route := range slices.Concat(files.Routes, files.ShareRoutes) {
+			for _, route := range slices.Concat(files.Routes, files.ShareRoutes, files.GrantRoutes) {
 				mux.HandleFunc(route, cfg.Auth.Require(missing))
 			}
 			mux.HandleFunc("/api/s/", missing)

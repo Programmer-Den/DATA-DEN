@@ -38,7 +38,7 @@ func (f *Files) usage() (int64, error) {
 		if d.IsDir() && (name == usersDir || name == thumbDir || name == uploadDir || name == sharesDir) {
 			return fs.SkipDir
 		}
-		if d.Type().IsRegular() {
+		if d.Type().IsRegular() && name != grantsFile {
 			if info, err := d.Info(); err == nil {
 				total += info.Size()
 			}

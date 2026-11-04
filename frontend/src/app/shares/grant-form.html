@@ -1,0 +1,38 @@
+<div class="share-form" role="group" [attr.aria-label]="'„' + name() + '“ mit einem Konto teilen'">
+  <strong>„{{ name() }}“ mit einem Konto teilen</strong>
+  @if (done(); as grant) {
+    <p>
+      {{ grant.to }} sieht „{{ grant.name }}“ jetzt unter „Geteilt mit mir“ ({{
+        grant.write ? 'darf ändern' : 'nur lesen'
+      }}).
+    </p>
+    <button type="button" (click)="closed.emit()">Fertig</button>
+  } @else if (accounts(); as accounts) {
+    @if (accounts.length === 0) {
+      <p class="hint">Es gibt noch keine anderen Konten.</p>
+      <button type="button" (click)="closed.emit()">Schließen</button>
+    } @else {
+      <form (submit)="create($event, to.value, write.checked)">
+        <label>
+          Konto
+          <select #to name="to">
+            @for (account of accounts; track account) {
+              <option [value]="account">{{ account }}</option>
+            }
+          </select>
+        </label>
+        <label class="check">
+          <input #write name="write" type="checkbox" />
+          Darf ändern: hochladen, umbenennen, verschieben, löschen
+        </label>
+        <button type="submit" [disabled]="busy()">Teilen</button>
+        <button type="button" (click)="closed.emit()">Abbrechen</button>
+      </form>
+    }
+  } @else if (!error()) {
+    <p>Lade …</p>
+  }
+  @if (error(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+</div>

@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Grant } from './grant';
 import { Share } from './share';
 import { ShareForm } from './share-form';
 import { SharesView } from './shares';
@@ -26,6 +27,16 @@ const gone: Share = {
   missing: true,
 };
 
+const projekt: Grant = {
+  id: 'a'.repeat(32),
+  owner: 'chef',
+  path: '/Projekt',
+  name: 'Projekt',
+  to: 'anna',
+  write: true,
+  created: '2026-11-01T10:00:00Z',
+};
+
 function setup(): HttpTestingController {
   TestBed.configureTestingModule({
     providers: [provideHttpClient(), provideHttpClientTesting()],
@@ -45,6 +56,7 @@ describe('SharesView', () => {
     http = setup();
     fixture = TestBed.createComponent(SharesView);
     http.expectOne('/api/shares').flush({ maxDays: 365, items: [folder, gone] });
+    http.expectOne('/api/grants').flush({ mine: [projekt], withMe: [] });
     await fixture.whenStable();
   });
 
@@ -57,8 +69,13 @@ describe('SharesView', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
+  /** The rows of the links; the shared folders follow in a second table. */
+  function linkRows(): NodeListOf<HTMLElement> {
+    return page().querySelectorAll('table')[0].querySelectorAll('tbody tr');
+  }
+
   it('lists the links, until when they work and whether they need a password', () => {
-    const rows = page().querySelectorAll('tbody tr');
+    const rows = linkRows();
     expect(rows.length).toBe(2);
     expect(rows[0].textContent).toContain('📁 2026');
     expect(rows[0].textContent).toContain('/Fotos/2026');
@@ -71,7 +88,7 @@ describe('SharesView', () => {
   it('copies a link', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    button(page().querySelectorAll('tbody tr')[0] as HTMLElement, 'kopieren').click();
+    button(linkRows()[0] as HTMLElement, 'kopieren').click();
     await fixture.whenStable();
     expect(writeText).toHaveBeenCalledWith(`${location.origin}/s/${id}`);
     expect(page().querySelector('[role=status]')?.textContent).toContain('kopiert');
@@ -79,7 +96,7 @@ describe('SharesView', () => {
 
   it('revokes only after asking', async () => {
     vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
-    const row = page().querySelectorAll('tbody tr')[0] as HTMLElement;
+    const row = linkRows()[0] as HTMLElement;
     button(row, 'Widerrufen').click();
     http.expectNone('/api/shares/delete');
     button(row, 'Widerrufen').click();
@@ -90,6 +107,22 @@ describe('SharesView', () => {
     http.expectOne('/api/shares').flush({ maxDays: 365, items: [] });
     await fixture.whenStable();
     expect(page().textContent).toContain('Keine Freigaben');
+  });
+
+  it('lists the folders shared with other accounts and ends one', async () => {
+    const row = page().querySelectorAll('table')[1].querySelector('tbody tr') as HTMLElement;
+    expect(row.textContent).toContain('Projekt');
+    expect(row.textContent).toContain('anna');
+    expect(row.textContent).toContain('Lesen und Schreiben');
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+    button(row, 'Beenden').click();
+    const req = http.expectOne('/api/grants/delete');
+    expect(req.request.body).toEqual({ id: projekt.id });
+    req.flush({ id: projekt.id });
+    await fixture.whenStable();
+    http.expectOne('/api/grants').flush({ mine: [], withMe: [] });
+    await fixture.whenStable();
+    expect(page().textContent).toContain('Keine geteilten Ordner');
   });
 });
 

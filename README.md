@@ -284,6 +284,25 @@ API: `POST /api/s/{id}/uploads {"path": "/a.jpg", "size"}`, then
 `PUT /api/s/{id}/uploads/{upload}` and `GET /api/s/{id}/uploads/{upload}`
 as for `/api/uploads`.
 
+A folder can also be shared with another account (👥 on a folder's row):
+to read only, or also to change it (upload, new folders, rename, move,
+delete). The other account finds it under **Geteilt mit mir** and works in
+it as in its own space, but cannot go above the shared folder or follow a
+symlink out of it. What it uploads counts against the owner's quota, what it
+deletes goes into the owner's recycle bin, and the owner's versions, search,
+links and checks stay the owner's. The **Freigaben** tab lists the folders
+one shares, to end them; the other account can leave one. Sharing a folder
+again with the same account changes the rights. Moving or renaming keeps a
+shared folder working, deleting an account ends its shared folders, and the
+other account is notified (event `share`). The audit log names the account
+that worked in the folder, with the owner before the path (`chef:/Projekt/a.jpg`).
+All shared folders are in `.data-den-grants.json` at the top of the data
+directory. API: `GET /api/accounts`, `GET /api/grants` (`mine`, `withMe`),
+`POST /api/grants {"path", "to", "write"}`, `POST /api/grants/delete {"id"}`;
+within a shared folder the usual `/api/files`, `/api/download`, `/api/view`,
+`/api/media`, `/api/thumb`, `/api/uploads`, `/api/folders`, `/api/move` and
+`/api/delete` with `?grant=<id>`, every path within the folder.
+
 Every file gets a SHA-256 checksum, kept in `.data-den-sums/index.json` in
 the data directory (hidden like the other `.data-den-*` folders; deleting it
 is safe and only costs reading every file again). An upload's checksum is

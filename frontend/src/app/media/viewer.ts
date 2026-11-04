@@ -28,8 +28,10 @@ export class Viewer {
   readonly closed = output<void>();
 
   protected readonly item = computed<Item | undefined>(() => this.items()[this.index()]);
-  protected readonly url = computed(() => viewUrl(this.item()?.path ?? ''));
-  protected readonly download = computed(() => downloadUrl(this.item()?.path ?? ''));
+  protected readonly url = computed(() => viewUrl(this.item()?.path ?? '', this.item()?.grant));
+  protected readonly download = computed(() =>
+    downloadUrl(this.item()?.path ?? '', this.item()?.grant),
+  );
   /** What to show the file with. */
   protected readonly shape = computed(() => {
     const item = this.item();

@@ -1,11 +1,15 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
+import { Grant, Grants, rights } from './grant';
 import { Share, copy, shareLink } from './share';
 
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 
-/** The links given out: copy them again or revoke them. */
+/**
+ * The links given out: copy them again or revoke them. Also the folders
+ * shared with other accounts, to end.
+ */
 @Component({
   selector: 'app-shares',
   templateUrl: './shares.html',
@@ -15,6 +19,9 @@ export class SharesView {
   private readonly http = inject(HttpClient);
 
   protected readonly shares = signal<Share[] | null>(null);
+  /** The folders I share with other accounts. */
+  protected readonly grants = signal<Grant[] | null>(null);
+  protected readonly rights = rights;
   protected readonly error = signal<string | null>(null);
   /** What the last action did, such as "Link kopiert". */
   protected readonly done = signal<string | null>(null);
@@ -22,6 +29,34 @@ export class SharesView {
 
   constructor() {
     this.load();
+    this.loadGrants();
+  }
+
+  private loadGrants(): void {
+    this.http.get<Grants>('/api/grants').subscribe({
+      next: (answer) => this.grants.set(answer.mine),
+      error: (err: unknown) => this.error.set(errorMessage(err)),
+    });
+  }
+
+  protected endGrant(grant: Grant): void {
+    if (!confirm(`„${grant.name}“ nicht mehr mit ${grant.to} teilen?`)) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.done.set(null);
+    this.http.post('/api/grants/delete', { id: grant.id }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.done.set(`„${grant.name}“ wird nicht mehr mit ${grant.to} geteilt`);
+        this.loadGrants();
+      },
+      error: (err: unknown) => {
+        this.busy.set(false);
+        this.error.set(errorMessage(err));
+      },
+    });
   }
 
   private load(): void {

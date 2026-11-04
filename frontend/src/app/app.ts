@@ -12,6 +12,7 @@ import { StartFolder } from './files/start-folder';
 import { PublicShare } from './public/public-share';
 import { SearchView } from './search/search';
 import { SharesView } from './shares/shares';
+import { Shared } from './shared/shared';
 import { StatusView } from './status/status';
 import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
@@ -21,6 +22,7 @@ type View =
   | 'files'
   | Kind
   | 'shares'
+  | 'shared'
   | 'trash'
   | 'status'
   | 'checks'
@@ -46,6 +48,7 @@ interface Health {
     PublicShare,
     SearchView,
     SharesView,
+    Shared,
     TrashView,
     StatusView,
     ChecksView,
@@ -74,6 +77,7 @@ export class App {
     { view: 'video', name: 'Videos' },
     { view: 'document', name: 'Dokumente' },
     { view: 'shares', name: 'Freigaben' },
+    { view: 'shared', name: 'Geteilt mit mir' },
     { view: 'trash', name: 'Papierkorb' },
     { view: 'status', name: 'Status' },
     { view: 'checks', name: 'Prüfung' },

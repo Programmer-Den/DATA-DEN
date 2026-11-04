@@ -150,6 +150,19 @@ func setTrashDays(data *files.Spaces) error {
 
 // damagedMessage tells the admins about files a check found damaged in the
 // space of account.
+// sharedMessage tells an account about a folder shared with it.
+func sharedMessage(g files.Grant) notify.Message {
+	what := "zum Lesen"
+	if g.Write {
+		what = "zum Lesen und Schreiben"
+	}
+	return notify.Message{
+		Kind:  notify.KindShare,
+		Title: g.Owner + " teilt „" + g.Name + "“ mit dir",
+		Body:  "Der Ordner „" + g.Name + "“ ist " + what + " für dich freigegeben. Du findest ihn unter „Geteilt mit mir“.",
+	}
+}
+
 func damagedMessage(account string, paths []string) notify.Message {
 	const show = 20
 	body := fmt.Sprintf("Die Prüfung hat im Bereich von %s %d beschädigte Dateien gefunden:\n\n", account, len(paths))
@@ -216,7 +229,11 @@ func run() error {
 		Damaged: func(account string, paths []string) {
 			notifier.NotifySystem(damagedMessage(account, paths))
 		},
-		Places: namer,
+		Places:   namer,
+		Accounts: func() []string { return login.Names() },
+		Shared: func(g files.Grant) {
+			notifier.Notify(g.To, sharedMessage(g))
+		},
 	})
 	accounts, notifyDir, eventsDir := "", "", ""
 	if err != nil {

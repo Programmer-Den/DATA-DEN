@@ -38,6 +38,8 @@ export const ACTIONS: Record<string, string> = {
   'share-delete': 'Link gelöscht',
   'share-download': 'Über einen Link geladen',
   'share-upload': 'Über einen Upload-Link hochgeladen',
+  'grant-create': 'Ordner mit einem Konto geteilt',
+  'grant-delete': 'Geteilten Ordner beendet',
   'share-password-failed': 'Falsches Link-Passwort',
   'integrity-accept': 'Beschädigte Datei als richtig übernommen',
   'version-restore': 'Ältere Version wiederhergestellt',

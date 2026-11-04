@@ -1,9 +1,11 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
 import { Item, Kind, downloadUrl } from '../media/item';
 import { Viewer } from '../media/viewer';
+import { Grant } from '../shares/grant';
+import { GrantForm } from '../shares/grant-form';
 import { ShareForm } from '../shares/share-form';
 import { StartFolder } from './start-folder';
 import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
@@ -31,15 +33,24 @@ interface Crumb {
 
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 
-/** The folders of the data directory: open, download and upload files. */
+/**
+ * The folders of the data directory: open, download and upload files. With
+ * a grant, the same for a folder another account shares.
+ */
 @Component({
   selector: 'app-files',
-  imports: [Viewer, ShareForm, Versions],
+  imports: [Viewer, ShareForm, GrantForm, Versions],
   templateUrl: './files.html',
   styleUrl: './files.css',
 })
-export class Files {
+export class Files implements OnInit {
   private readonly http = inject(HttpClient);
+  private readonly startFolder = inject(StartFolder);
+
+  /** The folder of another account to show instead of my own space. */
+  readonly grant = input<Grant | null>(null);
+  /** True when the folders may be changed: always in my own space. */
+  protected readonly canWrite = computed(() => this.grant()?.write ?? true);
 
   /** The folder shown, "/" for the top. */
   protected readonly path = signal('/');
@@ -48,7 +59,7 @@ export class Files {
   protected readonly crumbs = computed<Crumb[]>(() => {
     const parts = this.path().split('/').filter(Boolean);
     return [
-      { name: 'Start', path: '/' },
+      { name: this.grant()?.name ?? 'Start', path: '/' },
       ...parts.map((name, i) => ({ name, path: '/' + parts.slice(0, i + 1).join('/') })),
     ];
   });
@@ -56,7 +67,7 @@ export class Files {
   protected readonly files = computed<Item[]>(() =>
     (this.entries() ?? [])
       .filter((entry) => !entry.dir)
-      .map((entry) => ({ ...entry, path: this.child(entry) })),
+      .map((entry) => ({ ...entry, path: this.child(entry), grant: this.grant()?.id })),
   );
   /** The file open in the viewer, an index into files, or null. */
   protected readonly viewing = signal<number | null>(null);
@@ -73,6 +84,8 @@ export class Files {
   protected readonly busy = signal(false);
   /** The file or folder a link is being made for, or null. */
   protected readonly sharing = signal<{ path: string; name: string; dir: boolean } | null>(null);
+  /** The folder being shared with another account, or null. */
+  protected readonly granting = signal<{ path: string; name: string } | null>(null);
   /** The file whose older versions are shown, or null. */
   protected readonly versions = signal<{ path: string; name: string } | null>(null);
   /** True while uploads wait for the answer whether to replace existing files. */
@@ -82,15 +95,24 @@ export class Files {
   /** What was just moved to the recycle bin, for undo. */
   protected readonly deleted = signal<{ id: string; name: string } | null>(null);
 
-  constructor() {
-    this.open(inject(StartFolder).take());
+  ngOnInit(): void {
+    // A folder picked elsewhere is one of my own space.
+    this.open(this.grant() ? '/' : this.startFolder.take());
+  }
+
+  /** The query that puts a request into the shared folder, if any. */
+  private get grantQuery(): string {
+    const grant = this.grant();
+    return grant ? '?grant=' + grant.id : '';
   }
 
   protected open(path: string): void {
     this.error.set(null);
     this.viewing.set(null);
     this.renaming.set(null);
-    this.http.get<Listing>('/api/files', { params: { path } }).subscribe({
+    const grant = this.grant();
+    const params: Record<string, string> = grant ? { path, grant: grant.id } : { path };
+    this.http.get<Listing>('/api/files', { params }).subscribe({
       next: (listing) => {
         this.path.set(listing.path);
         this.entries.set(listing.entries);
@@ -104,7 +126,7 @@ export class Files {
   }
 
   protected downloadUrl(entry: Entry): string {
-    return downloadUrl(this.child(entry));
+    return downloadUrl(this.child(entry), this.grant()?.id);
   }
 
   protected view(entry: Entry): void {
@@ -136,6 +158,10 @@ export class Files {
     this.sharing.set({ path: this.child(entry), name: entry.name, dir: entry.dir });
   }
 
+  protected shareWithAccount(entry: Entry): void {
+    this.granting.set({ path: this.child(entry), name: entry.name });
+  }
+
   protected showVersions(entry: Entry): void {
     this.versions.set({ path: this.child(entry), name: entry.name });
   }
@@ -156,9 +182,13 @@ export class Files {
 
   /** Moves to the recycle bin; the bar that follows can undo it. */
   protected remove(entry: Entry): void {
-    this.change<{ id: string }>('/api/delete', { path: this.child(entry) }, (answer) =>
-      this.deleted.set({ id: answer.id, name: entry.name }),
-    );
+    // In another account's folder, only its owner can restore from the
+    // recycle bin; there is no id then.
+    this.change<{ id?: string }>('/api/delete', { path: this.child(entry) }, (answer) => {
+      if (answer.id) {
+        this.deleted.set({ id: answer.id, name: entry.name });
+      }
+    });
   }
 
   protected undoDelete(): void {
@@ -173,7 +203,7 @@ export class Files {
     this.busy.set(true);
     this.error.set(null);
     this.deleted.set(null);
-    this.http.post<T>(url, body).subscribe({
+    this.http.post<T>(url + this.grantQuery, body).subscribe({
       next: (answer) => {
         this.busy.set(false);
         done?.(answer);
@@ -229,7 +259,10 @@ export class Files {
   }
 
   private start(jobs: Job[]): Promise<void> {
-    return this.refreshAfter(this.uploader.upload(jobs));
+    const grant = this.grant()?.id;
+    return this.refreshAfter(
+      this.uploader.upload(grant ? jobs.map((job) => ({ ...job, grant })) : jobs),
+    );
   }
 
   private async refreshAfter(uploads: Promise<void>): Promise<void> {
