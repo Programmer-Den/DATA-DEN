@@ -25,6 +25,9 @@
       @case ('files') {
         <app-files />
       }
+      @case ('trash') {
+        <app-trash />
+      }
       @default {
         <app-media [kind]="$any(view())" />
       }

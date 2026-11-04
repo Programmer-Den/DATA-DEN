@@ -4,8 +4,9 @@ import { AuthService, errorMessage } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
 import { MediaView } from './media/media';
+import { TrashView } from './trash/trash';
 
-type View = 'files' | Kind;
+type View = 'files' | Kind | 'trash';
 
 interface Health {
   status: string;
@@ -14,7 +15,7 @@ interface Health {
 
 @Component({
   selector: 'app-root',
-  imports: [Files, MediaView],
+  imports: [Files, MediaView, TrashView],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
@@ -31,6 +32,7 @@ export class App {
     { view: 'photo', name: 'Fotos' },
     { view: 'video', name: 'Videos' },
     { view: 'document', name: 'Dokumente' },
+    { view: 'trash', name: 'Papierkorb' },
   ];
   protected readonly view = signal<View>('files');
 

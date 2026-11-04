@@ -83,10 +83,20 @@ HEIC, are shown as they are. Thumbnails of deleted photos stay; deleting
 
 In the folder view, **Neuer Ordner** creates a folder in the open folder;
 each row can be renamed (✎), moved (↪: open the target folder, then
-**Hierher verschieben**) and deleted (🗑, after a question; a folder goes with
-everything in it, and there is no recycle bin). The API is
+**Hierher verschieben**) and deleted (🗑). The API is
 `POST /api/folders {"path"}`, `POST /api/move {"from", "to"}` and
-`POST /api/delete {"path"}`, JSON only. Nothing is ever overwritten
+`POST /api/delete {"path"}`, JSON only.
+
+Deleting moves the file or folder into the recycle bin,
+`.data-den-trash/` in the data directory (hidden; a rename, so quick even for
+large folders), and the folder view offers **Rückgängig** right away. The
+**Papierkorb** tab lists what was deleted, where it was and until when it
+stays; each item can be restored to its old place (its folder is made again
+if needed, an item already there is never overwritten) or deleted for good,
+and the whole bin emptied. After 30 days an item is deleted for good, checked
+at start and whenever the bin is opened. API: `GET /api/trash`,
+`POST /api/trash/restore {"id"}`, `POST /api/trash/delete {"id"}`,
+`POST /api/trash/empty {}`. Nothing is ever overwritten
 ("Existiert bereits"), a folder cannot move into itself, and the data
 directory itself and the `.data-den-*` folders cannot be changed.
 

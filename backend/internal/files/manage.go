@@ -14,7 +14,7 @@ import (
 //
 //	POST /api/folders {"path": "/Fotos/2026"}                -> 201, a new folder
 //	POST /api/move    {"from": "/a.jpg", "to": "/Fotos/b.jpg"} -> 200, rename or move
-//	POST /api/delete  {"path": "/Fotos/a.jpg"}                -> 200, a file or a whole folder
+//	POST /api/delete  {"path": "/Fotos/a.jpg"}                -> {"id": "..."}, into the recycle bin
 //
 // Nothing is ever overwritten, and the data directory itself and the
 // server's own folders cannot be changed.
@@ -133,6 +133,7 @@ func (f *Files) rename(from, to string, dir bool) error {
 	return f.root.Remove(from)
 }
 
+// remove moves a file or folder into the recycle bin.
 func (f *Files) remove(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Path string `json:"path"`
@@ -145,14 +146,17 @@ func (f *Files) remove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Ungültiger Name")
 		return
 	}
-	if _, err := f.root.Lstat(name); err != nil {
+	info, err := f.root.Lstat(name)
+	if err != nil {
 		openError(w, err)
 		return
 	}
-	if err := f.root.RemoveAll(name); err != nil {
+	id, err := f.toTrash(name, info)
+	if err != nil {
 		f.diskError(w, "deleting", err)
 		return
 	}
-	slog.Info("deleted", "path", "/"+name)
-	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + name})
+	slog.Info("moved to the recycle bin", "path", "/"+name)
+	// The id lets the page undo it at once.
+	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + name, "id": id})
 }
