@@ -23,14 +23,28 @@ From Debian's own packages:
 sudo apt install docker.io docker-compose      # docker-compose brings `docker compose`
 ```
 
-## 2. Get the files
+## 2. Log in to ghcr.io
+
+The package is private, so the VM logs in once with a token that may only
+read packages. On GitHub under **Settings › Developer settings › Personal
+access tokens › Tokens (classic)**, create a token with only the scope
+`read:packages` and, if you like, an expiry date. Then in the VM:
+
+```bash
+sudo docker login ghcr.io -u <your username>    # the token as the password
+```
+
+Docker keeps the login in `/root/.docker/config.json`, so pulls and updates
+work from then on. When the token expires, create a new one and log in again.
+
+## 3. Get the files
 
 ```bash
 mkdir -p ~/data-den/tls && cd ~/data-den
 scp <you>@<your PC>:<repo>/deploy/compose.yaml .     # or copy it over another way
 ```
 
-## 3. Certificate for the way from the Pi
+## 4. Certificate for the way from the Pi
 
 A self-signed certificate for 10 years is enough: only the Pi talks to the
 VM, and it can pin exactly this certificate.
@@ -44,7 +58,7 @@ sudo chown 65532 tls/key.pem && sudo chmod 400 tls/key.pem
 
 Copy `tls/cert.pem` (never the key) to the Pi for its gateway.
 
-## 4. Settings
+## 5. Settings
 
 Create the hash of the password and the `.env` with the settings from the
 main [README](../README.md#login):
@@ -78,7 +92,7 @@ The image's user must be able to write to the mirror:
 sudo chown -R 65532:65532 /srv/data-den
 ```
 
-## 5. Start
+## 6. Start
 
 ```bash
 sudo docker compose up -d
@@ -89,10 +103,8 @@ curl -k https://localhost:8443/api/health
 It starts again with the VM. From another device than the Pi, port 8443 is
 not reachable.
 
-If `docker compose pull` says *denied* or *unauthorized*, the package is still
-private: on GitHub under **Packages › data-den › Package settings › Change
-visibility** make it public, or log in once with `sudo docker login ghcr.io`
-and a token that may read packages.
+If a pull says *denied* or *unauthorized*, the login is missing or its token
+has expired: log in again as in step 2.
 
 ## Update
 
