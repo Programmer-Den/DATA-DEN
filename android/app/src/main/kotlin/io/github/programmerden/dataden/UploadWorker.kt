@@ -39,7 +39,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : Worker(context,
         val media = try {
             scanMedia(applicationContext, settings).filter { it.key !in done }
         } catch (_: SecurityException) {
-            return stop(R.string.problem_permission)
+            return halt(R.string.problem_permission)
         }
         if (media.isEmpty()) {
             status.finished()
@@ -73,18 +73,18 @@ class UploadWorker(context: Context, params: WorkerParameters) : Worker(context,
                 // Deleted since the scan.
                 Log.i(TAG, "skipped ${item.name}: ${e.message}")
             } catch (_: SecurityException) {
-                return stop(R.string.problem_permission)
+                return halt(R.string.problem_permission)
             } catch (_: UnauthorizedException) {
-                return stop(R.string.problem_unauthorized)
+                return halt(R.string.problem_unauthorized)
             } catch (_: QuotaException) {
-                return stop(R.string.problem_quota)
+                return halt(R.string.problem_quota)
             } catch (e: LockedOutException) {
                 status.finished(e.message.orEmpty())
                 return Result.retry()
             } catch (e: ApiException) {
                 if (e.status == 403) {
                     // Such as a read-only app password.
-                    return stop(applicationContext.getString(R.string.problem_forbidden, e.message.orEmpty()))
+                    return halt(applicationContext.getString(R.string.problem_forbidden, e.message.orEmpty()))
                 }
                 if (e.status >= 500) {
                     status.finished(e.message.orEmpty())
@@ -105,9 +105,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : Worker(context,
     }
 
     /** Stops until the person fixes the problem in the app. */
-    private fun stop(message: Int): Result = stop(applicationContext.getString(message))
+    private fun halt(message: Int): Result = halt(applicationContext.getString(message))
 
-    private fun stop(text: String): Result {
+    private fun halt(text: String): Result {
         status.finished(text)
         problem(applicationContext, text)
         return Result.failure()
