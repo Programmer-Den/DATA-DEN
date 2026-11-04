@@ -1,0 +1,65 @@
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+} @else if (results(); as results) {
+  <p class="count">
+    @if (results.total === 0) {
+      Nichts gefunden für „{{ term() }}“.
+    } @else if (results.total > results.items.length) {
+      {{ results.items.length }} von {{ results.total }} Treffern für „{{ term() }}“
+    } @else {
+      {{ results.total }} Treffer für „{{ term() }}“
+    }
+  </p>
+  @if (!results.ready) {
+    <p class="hint">Der Suchindex wird noch aufgebaut, es fehlen vielleicht Treffer.</p>
+  }
+  <ul class="hits">
+    @for (hit of results.items; track hit.path) {
+      <li>
+        <span class="icon" aria-hidden="true">{{ icon(hit) }}</span>
+        <div class="body">
+          <button type="button" class="link name" (click)="open(hit)">
+            @for (part of mark(hit.name, words()); track $index) {
+              @if (part.hit) {
+                <mark>{{ part.text }}</mark>
+              } @else {
+                <span>{{ part.text }}</span>
+              }
+            }
+          </button>
+          <div class="meta">
+            <button type="button" class="link" (click)="openFolder.emit(folder(hit))">
+              {{ folder(hit) }}
+            </button>
+            @if (!hit.dir) {
+              · {{ formatSize(hit.size) }}
+            }
+            · {{ date(hit) }}
+          </div>
+          @if (hit.snippet) {
+            <p class="snippet">
+              @for (part of mark(hit.snippet, words()); track $index) {
+                @if (part.hit) {
+                  <mark>{{ part.text }}</mark>
+                } @else {
+                  <span>{{ part.text }}</span>
+                }
+              }
+            </p>
+          }
+        </div>
+      </li>
+    }
+  </ul>
+} @else {
+  <p>Suche …</p>
+}
+
+@if (viewing() !== null) {
+  <app-viewer
+    [items]="previews()"
+    [index]="viewing()!"
+    (indexChange)="viewing.set($event)"
+    (closed)="viewing.set(null)"
+  />
+}

@@ -5,6 +5,7 @@ import { formatSize } from '../format';
 import { Item, Kind, downloadUrl } from '../media/item';
 import { Viewer } from '../media/viewer';
 import { ShareForm } from '../shares/share-form';
+import { StartFolder } from './start-folder';
 import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
 
 export interface Entry {
@@ -75,7 +76,7 @@ export class Files {
   protected readonly deleted = signal<{ id: string; name: string } | null>(null);
 
   constructor() {
-    this.open('/');
+    this.open(inject(StartFolder).take());
   }
 
   protected open(path: string): void {

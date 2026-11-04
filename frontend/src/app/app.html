@@ -19,6 +19,17 @@
         <button type="button" (click)="view.set('status')">Details</button>
       </div>
     }
+    <form class="search" role="search" (submit)="search($event, searchInput.value)">
+      <input
+        #searchInput
+        type="search"
+        name="q"
+        aria-label="Dateien und Text durchsuchen"
+        placeholder="Dateien und Text durchsuchen"
+        [value]="query()"
+      />
+      <button type="submit">Suchen</button>
+    </form>
     <nav class="tabs" aria-label="Ansichten">
       @for (tab of tabs(); track tab.view) {
         <button
@@ -49,6 +60,9 @@
       }
       @case ('users') {
         <app-users />
+      }
+      @case ('search') {
+        <app-search [query]="query()" (openFolder)="showFolder($event)" />
       }
       @default {
         <app-media [kind]="$any(view())" />

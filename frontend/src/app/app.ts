@@ -5,14 +5,16 @@ import { AuthService, errorMessage } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
 import { MediaView } from './media/media';
+import { StartFolder } from './files/start-folder';
 import { PublicShare } from './public/public-share';
+import { SearchView } from './search/search';
 import { SharesView } from './shares/shares';
 import { StatusView } from './status/status';
 import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
 import { UsersView } from './users/users';
 
-type View = 'files' | Kind | 'shares' | 'trash' | 'status' | 'account' | 'users';
+type View = 'files' | Kind | 'shares' | 'trash' | 'status' | 'account' | 'users' | 'search';
 
 /** How often the warnings about space and the RAID are checked. */
 export const STATUS_INTERVAL = 5 * 60 * 1000;
@@ -28,6 +30,7 @@ interface Health {
     Files,
     MediaView,
     PublicShare,
+    SearchView,
     SharesView,
     TrashView,
     StatusView,
@@ -60,6 +63,9 @@ export class App {
   protected readonly view = signal<View>('files');
   /** The id of a share link /s/<id> this page was opened with, or null. */
   protected readonly shareId = shareIdOf(location.pathname);
+  /** What was searched for last. */
+  protected readonly query = signal('');
+  private readonly startFolder = inject(StartFolder);
 
   constructor() {
     if (this.shareId) {
@@ -100,6 +106,20 @@ export class App {
         this.loginError.set(errorMessage(err));
       },
     });
+  }
+
+  protected search(event: Event, query: string): void {
+    event.preventDefault();
+    if (query.trim()) {
+      this.query.set(query.trim());
+      this.view.set('search');
+    }
+  }
+
+  /** Shows a folder, such as one found in the search, in the folder view. */
+  protected showFolder(path: string): void {
+    this.startFolder.set(path);
+    this.view.set('files');
   }
 
   protected logout(): void {
