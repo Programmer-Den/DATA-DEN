@@ -36,5 +36,6 @@
     <string name="problem_title">DATA-DEN: Upload angehalten</string>
     <string name="problem_unauthorized">Das App-Passwort gilt nicht mehr. Bitte in der App ein neues eintragen.</string>
     <string name="problem_quota">Dein Speicherplatz auf dem DATA-DEN ist voll.</string>
+    <string name="problem_forbidden">Der Server lässt nicht hochladen (%1$s). Ein App-Passwort, das nur lesen darf, reicht nicht.</string>
     <string name="problem_permission">Die App darf nicht mehr auf Fotos zugreifen. Bitte in der App erneut erlauben.</string>
 </resources>

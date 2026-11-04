@@ -82,6 +82,10 @@ class UploadWorker(context: Context, params: WorkerParameters) : Worker(context,
                 status.finished(e.message.orEmpty())
                 return Result.retry()
             } catch (e: ApiException) {
+                if (e.status == 403) {
+                    // Such as a read-only app password.
+                    return stop(applicationContext.getString(R.string.problem_forbidden, e.message.orEmpty()))
+                }
                 if (e.status >= 500) {
                     status.finished(e.message.orEmpty())
                     return Result.retry()
@@ -101,8 +105,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : Worker(context,
     }
 
     /** Stops until the person fixes the problem in the app. */
-    private fun stop(message: Int): Result {
-        val text = applicationContext.getString(message)
+    private fun stop(message: Int): Result = stop(applicationContext.getString(message))
+
+    private fun stop(text: String): Result {
         status.finished(text)
         problem(applicationContext, text)
         return Result.failure()

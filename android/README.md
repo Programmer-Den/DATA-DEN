@@ -7,7 +7,8 @@ in the web interface.
 ## Set up
 
 1. In the web interface, create an app password under the account settings.
-   It starts with `dd_`, works only for files, never for the account itself,
+   It starts with `dd_`, must be allowed to write (not read-only), works only
+   for files, never for the account itself,
    and can be revoked there without changing the password.
 2. Install the app (see below), open it and enter the server's address (for
    example `nas.example.org`; only HTTPS is accepted), the app password and
