@@ -203,3 +203,59 @@ a {
   font-size: 0.8rem;
   opacity: 0.6;
 }
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.inline input {
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+}
+
+.new-album {
+  margin-bottom: 1rem;
+}
+
+.choose {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, Canvas 85%, LinkText);
+}
+
+.choose select {
+  font: inherit;
+}
+
+.hint,
+.notice {
+  opacity: 0.8;
+}
+
+.photos .selected {
+  outline: 3px solid LinkText;
+  outline-offset: -3px;
+}
+
+.photos .selected img {
+  opacity: 0.7;
+}
+
+.no-cover {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 2rem;
+}

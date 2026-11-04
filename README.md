@@ -197,8 +197,20 @@ is first listed. The Orte view credits the names to the OpenStreetMap
 contributors, as their licence (ODbL) asks. **Orte** has an album per town,
 most photos first. **Reisen** finds trips: photos taken away from home (the
 town with the most photos), ended by a photo at home or three days without
-one; at least three photos make a trip. Albums are made in the browser from
-`/api/media`, nothing is stored.
+one; at least three photos make a trip. These albums are made in the browser
+from `/api/media`, nothing is stored.
+
+**Eigene Alben** are put together by hand: **Neues Album** creates one, and
+**Auswählen** in the timeline or any album chooses photos to add to it,
+without moving or copying them. In an own album, chosen photos can be taken
+out again (the files stay), and the album renamed or deleted (the photos
+stay). Each account keeps its albums in `.data-den-albums/albums.json` in its
+space, as the paths of the files; moving a file or folder takes them along,
+and a file in the recycle bin is back in its albums when restored. API:
+`GET /api/albums`, `POST /api/albums {"name"}`,
+`POST /api/albums/rename {"id", "name"}`, `POST /api/albums/delete {"id"}`,
+`POST /api/albums/add {"id", "paths"}` (photos and videos only),
+`POST /api/albums/remove {"id", "paths"}`.
 
 The gallery shows thumbnails from `/api/thumb`: a JPEG of at most 320 pixels,
 made from JPEG, PNG, GIF, WebP and BMP photos up to 100 megapixels, turned by

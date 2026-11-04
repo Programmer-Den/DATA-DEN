@@ -15,8 +15,20 @@
 @if (album(); as album) {
   <div class="album-head">
     <button type="button" (click)="openAlbum(null)">‹ Alle Alben</button>
-    <h2>{{ album.name }}</h2>
-    <span class="count">{{ span(album) }}</span>
+    @if (renaming()) {
+      <form class="inline" (submit)="renameAlbum($event, renameInput.value)">
+        <input #renameInput aria-label="Name des Albums" maxlength="100" [value]="album.name" />
+        <button type="submit">Speichern</button>
+        <button type="button" (click)="renaming.set(false)">Abbrechen</button>
+      </form>
+    } @else {
+      <h2>{{ album.name }}</h2>
+      <span class="count">{{ span(album) }}</span>
+      @if (album.own) {
+        <button type="button" (click)="renaming.set(true)">Umbenennen</button>
+        <button type="button" (click)="deleteAlbum()">Album löschen</button>
+      }
+    }
   </div>
 }
 
@@ -32,17 +44,66 @@
     <span class="count">{{ albums().length }} Alben</span>
   } @else if (items()) {
     <span class="count">{{ found().length }} von {{ all().length }}</span>
+    @if (kind() === 'photo') {
+      <button type="button" [attr.aria-pressed]="selected() !== null" (click)="choose(!selected())">
+        {{ selected() ? 'Fertig' : 'Auswählen' }}
+      </button>
+    }
   }
 </div>
+
+@if (selected(); as selected) {
+  <div class="choose" role="region" aria-label="Auswahl">
+    <span>{{ selected.size }} ausgewählt</span>
+    @if (album()?.own) {
+      <button type="button" [disabled]="selected.size === 0" (click)="removeSelected()">
+        Aus Album nehmen
+      </button>
+    } @else if ((own() ?? []).length > 0) {
+      <select
+        aria-label="Album"
+        [value]="target()"
+        (change)="target.set($any($event.target).value)"
+      >
+        @for (a of own(); track a.id) {
+          <option [value]="a.id">{{ a.name }}</option>
+        }
+      </select>
+      <button type="button" [disabled]="selected.size === 0" (click)="addSelected()">
+        Zum Album hinzufügen
+      </button>
+    } @else {
+      <span class="hint">Lege zuerst unter „Eigene Alben“ ein Album an.</span>
+    }
+  </div>
+}
+@if (notice(); as notice) {
+  <p class="notice" role="status">{{ notice }}</p>
+}
 
 @if (error(); as error) {
   <p class="error" role="alert">{{ error }}</p>
 } @else if (items() === null) {
   <p>Lade …</p>
 } @else if (showAlbums()) {
+  @if (mode() === 'own') {
+    <form class="inline new-album" (submit)="createAlbum($event, nameInput.value)">
+      <input
+        #nameInput
+        name="name"
+        aria-label="Name des neuen Albums"
+        placeholder="Name des neuen Albums"
+        maxlength="100"
+      />
+      <button type="submit">Neues Album</button>
+    </form>
+  }
   @if (albums().length === 0) {
     <p class="empty">
-      @if (mode() === 'places') {
+      @if (mode() === 'own') {
+        Noch keine eigenen Alben. Lege eines an, dann wähle in der Zeitleiste mit „Auswählen“ die
+        Fotos dafür.
+      } @else if (mode() === 'places') {
         Keine Fotos mit Ort gefunden. Den Ort schreiben Kameras und Handys mit GPS in die Fotos;
         neue Orte werden nach und nach bei OpenStreetMap nachgeschlagen.
       } @else {
@@ -54,7 +115,11 @@
       @for (a of albums(); track a.id) {
         <li>
           <button type="button" (click)="openAlbum(a)">
-            <img [src]="tileUrl(a.items[0])" alt="" loading="lazy" (error)="noThumb(a.items[0])" />
+            @if (a.items[0]; as cover) {
+              <img [src]="tileUrl(cover)" alt="" loading="lazy" (error)="noThumb(cover)" />
+            } @else {
+              <span class="no-cover" aria-hidden="true">🖼</span>
+            }
             <span class="title">{{ a.name }}</span>
             <span class="meta">{{ a.items.length }} Fotos · {{ span(a) }}</span>
           </button>
@@ -97,7 +162,9 @@
               <button
                 type="button"
                 [title]="entry.item.path + ' · ' + date(entry.item)"
-                (click)="open.set(entry.index)"
+                [class.selected]="selected()?.has(entry.item.path)"
+                [attr.aria-pressed]="selected() ? selected()!.has(entry.item.path) : null"
+                (click)="tile(entry.index, entry.item)"
               >
                 <img
                   [src]="tileUrl(entry.item)"
