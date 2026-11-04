@@ -64,4 +64,20 @@ expect 0 'BACKUP_KEEP_MONTHLY=12' ./setup-backup.sh on --print /mnt/backup
 # The backup run refuses to start without its settings.
 expect 1 'RESTIC_REPOSITORY is not set' env -u RESTIC_REPOSITORY ./backup.sh
 
+expect 2 'Usage' ./setup-updates.sh
+expect 2 'Usage' ./setup-updates.sh start
+expect 2 'Usage' ./setup-updates.sh on --force
+expect 2 'Usage' ./setup-updates.sh off now
+expect 2 'Usage' ./setup-updates.sh status now
+for bad in 5:00 24:00 05:60 'x' '05:00"; evil'; do
+	expect 2 'needs a time' ./setup-updates.sh on --print --reboot "$bad"
+done
+expect 2 'needs a time' ./setup-updates.sh on --print --reboot
+expect 0 'Automatic-Reboot-Time "05:00"' ./setup-updates.sh on --print
+expect 0 'Automatic-Reboot-Time "04:30"' ./setup-updates.sh on --print --reboot 04:30
+expect 0 'Automatic-Reboot "false"' ./setup-updates.sh on --print --no-reboot
+expect 0 'APT::Periodic::Unattended-Upgrade "1"' ./setup-updates.sh on --print
+# shellcheck disable=SC2016 # the ${distro_codename} is meant literally
+expect 0 'codename=${distro_codename}-security' ./setup-updates.sh on --print
+
 exit "$failed"
