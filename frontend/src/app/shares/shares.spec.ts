@@ -114,7 +114,12 @@ describe('ShareForm', () => {
   it('makes a link for 7 days without a password by default', async () => {
     page().querySelector('form')!.dispatchEvent(new Event('submit'));
     const req = http.expectOne('/api/shares');
-    expect(req.request.body).toEqual({ path: '/Fotos/2026', days: 7, password: '' });
+    expect(req.request.body).toEqual({
+      path: '/Fotos/2026',
+      days: 7,
+      password: '',
+      upload: false,
+    });
     req.flush({ ...folder, password: false });
     await fixture.whenStable();
     expect(page().querySelector<HTMLInputElement>('input[readonly]')!.value).toBe(
@@ -127,10 +132,30 @@ describe('ShareForm', () => {
     page().querySelector<HTMLInputElement>('input[type=password]')!.value = 'geheim';
     page().querySelector('form')!.dispatchEvent(new Event('submit'));
     const req = http.expectOne('/api/shares');
-    expect(req.request.body).toEqual({ path: '/Fotos/2026', days: 30, password: 'geheim' });
+    expect(req.request.body).toEqual({
+      path: '/Fotos/2026',
+      days: 30,
+      password: 'geheim',
+      upload: false,
+    });
     req.flush({ error: 'Nicht gefunden' }, { status: 404, statusText: 'Not Found' });
     await fixture.whenStable();
     expect(page().querySelector('[role=alert]')?.textContent).toContain('Nicht gefunden');
+  });
+
+  it('offers an upload link only for a folder', async () => {
+    expect(page().querySelector('input[type=checkbox]')).toBeNull();
+    fixture.componentRef.setInput('dir', true);
+    await fixture.whenStable();
+    const upload = page().querySelector<HTMLInputElement>('input[type=checkbox]')!;
+    upload.checked = true;
+    upload.dispatchEvent(new Event('change'));
+    page().querySelector('form')!.dispatchEvent(new Event('submit'));
+    const req = http.expectOne('/api/shares');
+    expect(req.request.body).toEqual({ path: '/Fotos/2026', days: 7, password: '', upload: true });
+    req.flush({ ...folder, upload: true });
+    await fixture.whenStable();
+    expect(page().textContent).toContain('Dateien in den Ordner legen');
   });
 
   it('closes', () => {

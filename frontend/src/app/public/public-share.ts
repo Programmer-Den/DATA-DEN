@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { Entry } from '../files/files';
+import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from '../files/uploader';
 import { formatSize } from '../format';
 
 /** What a link shares, as /api/s/{id} tells it. */
@@ -10,6 +11,8 @@ interface Shared {
   dir: boolean;
   size?: number;
   expires: string;
+  /** True for an upload link: files go in, nothing is shown. */
+  upload?: boolean;
 }
 
 interface Listing {
@@ -24,14 +27,20 @@ interface Crumb {
 
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 
-/** The page behind a share link: no login, maybe a password, then download. */
+/**
+ * The page behind a share link: no login, maybe a password, then download,
+ * or for an upload link a place to drop files.
+ */
 @Component({
   selector: 'app-public-share',
   templateUrl: './public-share.html',
   styleUrl: './public-share.css',
+  // Its own uploads, apart from those behind the login.
+  providers: [Uploader],
 })
 export class PublicShare implements OnInit {
   private readonly http = inject(HttpClient);
+  protected readonly uploader = inject(Uploader);
 
   /** The id from the link /s/<id>. */
   readonly id = input.required<string>();
@@ -53,6 +62,8 @@ export class PublicShare implements OnInit {
     ];
   });
   protected readonly formatSize = formatSize;
+  /** True while files are dragged over an upload link's page. */
+  protected readonly dragging = signal(false);
 
   private get base(): string {
     return '/api/s/' + this.id();
@@ -90,7 +101,7 @@ export class PublicShare implements OnInit {
 
   private show(shared: Shared): void {
     this.shared.set(shared);
-    if (shared.dir) {
+    if (shared.dir && !shared.upload) {
       this.open('/');
     }
   }
@@ -118,6 +129,41 @@ export class PublicShare implements OnInit {
   /** The open folder as one ZIP. */
   protected zipUrl(): string {
     return this.base + '/zip?path=' + encodeURIComponent(this.path());
+  }
+
+  protected percent(item: UploadItem): number {
+    return item.size === 0 ? 100 : Math.floor((item.loaded / item.size) * 100);
+  }
+
+  protected pick(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (input.files) {
+      void this.drop(pickedJobs(input.files, '/'));
+    }
+    // The same files can be picked again after an error.
+    input.value = '';
+  }
+
+  protected dragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.dragging.set(true);
+  }
+
+  protected async dropped(event: DragEvent): Promise<void> {
+    event.preventDefault();
+    this.dragging.set(false);
+    if (event.dataTransfer) {
+      // Read before the first await: the browser empties the DataTransfer
+      // once the drop handler returns.
+      const jobs = droppedJobs(event.dataTransfer, '/');
+      await this.drop(await jobs);
+    }
+  }
+
+  /** Uploads the files through the link, each by its own name only. */
+  private async drop(jobs: Job[]): Promise<void> {
+    const files = jobs.map((job) => ({ file: job.file, path: '/' + job.file.name }));
+    await this.uploader.upload(files, this.base + '/uploads');
   }
 
   protected date(when: string): string {

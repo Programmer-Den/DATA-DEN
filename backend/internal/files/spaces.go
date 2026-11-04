@@ -67,6 +67,9 @@ var publicShareRoutes = []string{
 	"GET /api/s/{id}/files",
 	"GET /api/s/{id}/download",
 	"GET /api/s/{id}/zip",
+	"POST /api/s/{id}/uploads",
+	"PUT /api/s/{id}/uploads/{upload}",
+	"GET /api/s/{id}/uploads/{upload}",
 }
 
 // SpacesConfig says whose space a request is for.
@@ -230,22 +233,26 @@ func (s *Spaces) RegisterShares(mux *http.ServeMux, require func(http.HandlerFun
 // serveShare answers a share link from the space that holds it.
 func (s *Spaces) serveShare(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	f := s.owner
+	f, name := s.owner, s.cfg.Owner
 	if trashID.MatchString(id) {
 		if _, err := s.owner.root.Lstat(shareFile(id)); err != nil {
-			f = s.shareSpace(id)
+			f, name = s.shareSpace(id)
 		}
+	}
+	// Files dropped through an upload link count against the space's quota.
+	if s.cfg.Quota != nil {
+		f.quota.Store(s.cfg.Quota(name))
 	}
 	// A space without the share answers like an unknown link.
 	f.mux.ServeHTTP(w, r)
 }
 
 // shareSpace is the space of another account that holds the share id, or
-// the owner's when none does.
-func (s *Spaces) shareSpace(id string) *Files {
+// the owner's when none does, with the name of its account.
+func (s *Spaces) shareSpace(id string) (*Files, string) {
 	entries, err := fs.ReadDir(s.owner.root.FS(), usersDir)
 	if err != nil {
-		return s.owner
+		return s.owner, s.cfg.Owner
 	}
 	for _, e := range entries {
 		if !e.IsDir() || !accountName.MatchString(e.Name()) {
@@ -253,11 +260,11 @@ func (s *Spaces) shareSpace(id string) *Files {
 		}
 		if _, err := s.owner.root.Lstat(path.Join(usersDir, e.Name(), shareFile(id))); err == nil {
 			if f, err := s.space(e.Name()); err == nil {
-				return f
+				return f, e.Name()
 			}
 		}
 	}
-	return s.owner
+	return s.owner, s.cfg.Owner
 }
 
 // Usage is how many bytes the account name stores, recycle bin included.
