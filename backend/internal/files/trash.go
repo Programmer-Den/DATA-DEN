@@ -230,6 +230,7 @@ func (f *Files) restore(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = f.root.RemoveAll(path.Join(trashDir, item.ID))
 	slog.Info("restored", "path", item.Path)
+	f.note(r, "restore", item.Path)
 	writeJSON(w, http.StatusOK, map[string]string{"path": item.Path})
 }
 
@@ -244,6 +245,7 @@ func (f *Files) deleteForGood(w http.ResponseWriter, r *http.Request) {
 	}
 	f.forgetUsage()
 	slog.Info("deleted for good", "path", item.Path)
+	f.note(r, "purge", item.Path)
 	writeJSON(w, http.StatusOK, map[string]string{"path": item.Path})
 }
 
@@ -261,5 +263,6 @@ func (f *Files) emptyTrash(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slog.Info("recycle bin emptied")
+	f.note(r, "trash-empty", "")
 	writeJSON(w, http.StatusOK, map[string]string{})
 }

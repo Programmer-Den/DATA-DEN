@@ -109,6 +109,7 @@ func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
 		if !f.finish(w, id, u) {
 			return
 		}
+		f.note(r, "upload", "/"+u.path)
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "offset": u.offset})
 }
@@ -162,6 +163,7 @@ func (f *Files) putChunk(w http.ResponseWriter, r *http.Request) {
 		if !f.finish(w, id, u) {
 			return
 		}
+		f.note(r, "upload", "/"+u.path)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset})
 }

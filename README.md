@@ -100,6 +100,20 @@ sudo docker compose start data-den
 The secrets are stored in the accounts file, the recovery codes only as
 SHA-256 hashes.
 
+### Audit log
+
+The **Protokoll** tab shows who did what, when and from which address:
+logins (also failed ones and wrong codes), logouts, password and 2FA
+changes, accounts created, changed or deleted, and changes to files
+(uploads, new folders, moves and renames, the recycle bin) and share links
+(created, deleted, files fetched through a link, wrong link passwords).
+Admins see everyone's entries and can filter by user; everyone else sees
+their own. Viewing and downloading within one's own space is not logged.
+
+The log is `.data-den-audit/audit.log` in the data directory, one JSON line
+per entry, readable only by the server. At 5 MB it moves to `audit.log.1`,
+replacing the older one, so the latest 5 to 10 MB are kept.
+
 ## Files
 
 After the login the website has four tabs. **Dateien** shows the folders of

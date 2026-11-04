@@ -246,6 +246,7 @@ func (f *Files) createShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("share link created", "path", s.Path, "expires", s.Expires, "password", s.PasswordHash != "")
+	f.note(r, "share-create", s.Path)
 	writeJSON(w, http.StatusCreated, s.answer())
 }
 
@@ -269,6 +270,7 @@ func (f *Files) deleteShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("share link revoked", "path", s.Path)
+	f.note(r, "share-delete", s.Path)
 	writeJSON(w, http.StatusOK, map[string]string{"id": s.ID})
 }
 
@@ -472,6 +474,10 @@ func (f *Files) shareDownload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// A video is fetched in many ranges; only the start counts.
+	if rng := r.Header.Get("Range"); rng == "" || strings.HasPrefix(rng, "bytes=0-") {
+		f.note(r, "share-download", "/"+name)
+	}
 	f.serveDownload(w, r, name)
 }
 
@@ -491,6 +497,7 @@ func (f *Files) shareZip(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	f.note(r, "share-download", "/"+name+" (ZIP)")
 	info, err := f.root.Stat(name)
 	if err != nil {
 		openError(w, err)

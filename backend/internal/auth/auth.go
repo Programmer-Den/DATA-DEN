@@ -50,6 +50,9 @@ type Config struct {
 	// Removed is called before an account is deleted, to move its files
 	// aside; nil does nothing.
 	Removed func(name string) error
+	// Audit notes logins and changes to accounts in the audit log; nil
+	// notes nothing.
+	Audit func(r *http.Request, user, action, target string)
 	// TrustedProxy is the address of the reverse proxy (the Pi). Only for
 	// requests from it is X-Forwarded-For used as the client's address.
 	TrustedProxy string
@@ -237,6 +240,7 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 		a.fail(ip)
 		// fail2ban on the Pi matches this line.
 		slog.Warn("login failed", "ip", ip, "username", body.Username)
+		a.note(r, body.Username, "login-failed", "")
 		writeError(w, http.StatusUnauthorized, "Benutzername oder Passwort falsch")
 		return
 	}
@@ -250,6 +254,7 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 			a.fail(ip)
 			// fail2ban on the Pi matches this line.
 			slog.Warn("login failed", "ip", ip, "username", body.Username, "reason", "code")
+			a.note(r, account.Name, "login-failed", "Code")
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "Der Code stimmt nicht", "twoFactor": true})
 			return
 		}
@@ -268,8 +273,27 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	a.mu.Unlock()
 
 	slog.Info("login", "ip", ip, "username", account.Name)
+	a.note(r, account.Name, "login", "")
 	http.SetCookie(w, cookie(token, expires))
 	writeJSON(w, http.StatusOK, a.sessionInfo(account))
+}
+
+// note records in the audit log that user did action to target.
+func (a *Auth) note(r *http.Request, user, action, target string) {
+	if a.cfg.Audit != nil {
+		a.cfg.Audit(r, user, action, target)
+	}
+}
+
+// ClientIP is the address r came from, see clientIP.
+func (a *Auth) ClientIP(r *http.Request) string {
+	return a.clientIP(r)
+}
+
+// IsAdmin reports whether the user of a request that passed Require is an
+// admin.
+func IsAdmin(r *http.Request) bool {
+	return user(r).Admin
 }
 
 // Wait is how long the client of r is still locked out after too many
@@ -285,13 +309,18 @@ func (a *Auth) Failed(r *http.Request, share string) {
 	a.fail(ip)
 	// fail2ban on the Pi matches this line.
 	slog.Warn("login failed", "ip", ip, "share", share)
+	a.note(r, "", "share-password-failed", share)
 }
 
 func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(CookieName); err == nil {
 		a.mu.Lock()
+		s, ok := a.sessions[c.Value]
 		delete(a.sessions, c.Value)
 		a.mu.Unlock()
+		if ok {
+			a.note(r, s.username, "logout", "")
+		}
 	}
 	http.SetCookie(w, cookie("", time.Unix(0, 0)))
 	w.WriteHeader(http.StatusNoContent)

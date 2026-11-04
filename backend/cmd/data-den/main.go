@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/audit"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
@@ -152,10 +153,18 @@ func run() error {
 	}
 	dataDir := dataDir()
 	var login *auth.Auth
+	// The audit log only writes once the data directory is known to be there.
+	auditCfg := audit.Config{
+		IP:    func(r *http.Request) string { return login.ClientIP(r) },
+		User:  auth.Username,
+		Admin: auth.IsAdmin,
+	}
+	var auditLog *audit.Log
 	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
 		Owner: os.Getenv("DATA_DEN_USERNAME"),
 		User:  auth.Username,
 		Quota: func(name string) int64 { return login.Quota(name) },
+		Audit: func(r *http.Request, user, action, target string) { auditLog.Record(r, user, action, target) },
 	})
 	accounts := ""
 	if err != nil {
@@ -166,7 +175,9 @@ func run() error {
 			return err
 		}
 		accounts = accountsFile(dataDir)
+		auditCfg.File = filepath.Join(dataDir, ".data-den-audit", "audit.log")
 	}
+	auditLog = audit.New(auditCfg)
 	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
 	if err != nil {
 		return err
@@ -196,6 +207,7 @@ func run() error {
 			}
 			return data.Retire(name)
 		},
+		Audit: auditLog.Record,
 	})
 	if err != nil {
 		return err
@@ -205,7 +217,7 @@ func run() error {
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},

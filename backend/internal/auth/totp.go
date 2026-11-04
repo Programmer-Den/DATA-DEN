@@ -256,6 +256,7 @@ func (a *Auth) enableTwoFactor(w http.ResponseWriter, r *http.Request) {
 	}
 	delete(a.pendingSecrets, name)
 	slog.Info("two-factor login turned on", "username", name)
+	a.note(r, name, "2fa-on", "")
 	writeJSON(w, http.StatusOK, map[string]any{"recovery": codes})
 }
 
@@ -286,6 +287,7 @@ func (a *Auth) disableTwoFactor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("two-factor login turned off", "username", name)
+	a.note(r, name, "2fa-off", "")
 	writeJSON(w, http.StatusOK, map[string]string{})
 }
 
