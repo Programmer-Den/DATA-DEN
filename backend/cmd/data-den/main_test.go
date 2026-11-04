@@ -73,7 +73,7 @@ func TestHealthcheckNothingListening(t *testing.T) {
 }
 
 func TestSetTrashDays(t *testing.T) {
-	data, err := files.Open(t.TempDir())
+	data, err := files.OpenSpaces(t.TempDir(), files.SpacesConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

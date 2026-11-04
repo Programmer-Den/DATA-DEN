@@ -24,7 +24,8 @@ downloads, uploads and a status page.
 
 ## Login
 
-One account. Its password is stored only as a bcrypt hash:
+The owner's account comes from the settings below. Its password is stored
+only as a bcrypt hash:
 
 ```bash
 cd backend && go run ./cmd/data-den hash-password       # or: docker run --rm -i data-den hash-password
@@ -37,7 +38,7 @@ Compose reads its `$` signs as variables.
 
 | Setting | Meaning |
 |---|---|
-| `DATA_DEN_USERNAME` | The account's name |
+| `DATA_DEN_USERNAME` | The owner's account name |
 | `DATA_DEN_PASSWORD_HASH` | The hash from `hash-password`; without it nobody can log in |
 | `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
@@ -51,6 +52,30 @@ sessions live in memory, so a restart logs out. After 5 failed logins from
 one address within 15 minutes, that address waits until the 15 minutes are
 over. Each failed login is logged as `login failed ip=<address>` for
 fail2ban on the Pi.
+
+## Accounts
+
+The owner is always an admin. Admins add further accounts in the
+**Benutzer** tab: a name (a-z, 0-9, `.`, `-`, `_`), a first password (at
+least 10 characters), whether it is an admin too, and a quota in GB (empty
+for no limit). They can change the quota and admin role, set a new password
+and delete an account later; the owner's account can only be changed in the
+settings. In the **Konto** tab everyone sees how much they store of their
+quota and changes their own password; a new password logs out the other
+devices.
+
+Each account has its own space and sees no one else's files. The owner's
+space is the data directory itself, so the files from before there were
+accounts stay where they are; every other account gets
+`.data-den-users/<name>` in it, which the owner never sees. The recycle bin
+counts towards the quota, thumbnails do not. The search, the recycle bin
+and the share links work within each account's own space. An upload that would go over
+the quota is refused before it starts. Deleting an account moves its folder
+to `.data-den-users/.deleted/<name>-<time>`, so its files can still be
+recovered in the VM.
+
+The accounts are kept in `.data-den-accounts/accounts.json` in the data
+directory, readable only by the server, with bcrypt hashes of the passwords.
 
 ## Files
 

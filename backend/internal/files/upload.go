@@ -76,6 +76,13 @@ func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "Datei existiert bereits")
 		return
 	}
+	if ok, err := f.fits(body.Size); err != nil {
+		f.diskError(w, "counting the usage", err)
+		return
+	} else if !ok {
+		writeError(w, http.StatusInsufficientStorage, "Dein Speicherplatz ist voll")
+		return
+	}
 
 	id, err := newID()
 	if err != nil {
@@ -195,6 +202,7 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) bool {
 		f.diskError(w, "finishing an upload", err)
 		return false
 	}
+	f.addUsage(u.size)
 	slog.Info("uploaded", "path", "/"+u.path, "size", u.size)
 	return true
 }

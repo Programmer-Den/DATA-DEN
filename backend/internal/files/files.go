@@ -14,6 +14,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,6 +50,12 @@ type Files struct {
 	// trashDays is how long a deleted item can be restored.
 	trashDays int
 	index     index
+	// quota is how many bytes may be stored, 0 for no limit.
+	quota atomic.Int64
+	// used caches what usage found.
+	used usedCache
+	// mux serves the API of this space alone, for Spaces.
+	mux *http.ServeMux
 }
 
 // Open opens the data directory dir.
@@ -57,13 +64,26 @@ func Open(dir string) (*Files, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newFiles(root), nil
+}
+
+func newFiles(root *os.Root) *Files {
 	return &Files{
 		root:       root,
 		uploads:    uploads{byID: map[string]*upload{}},
 		shares:     shares{unlocked: map[string]unlock{}},
 		thumbSlots: make(chan struct{}, thumbWorkers),
 		trashDays:  DefaultTrashDays,
-	}, nil
+	}
+}
+
+// serve sets up mux with the API of this space; the login was checked
+// before.
+func (f *Files) serve() {
+	f.mux = http.NewServeMux()
+	pass := func(h http.HandlerFunc) http.HandlerFunc { return h }
+	f.Register(f.mux, pass)
+	f.RegisterShares(f.mux, pass, f.shares.guard)
 }
 
 // Close releases the data directory.
@@ -72,12 +92,13 @@ func (f *Files) Close() error {
 }
 
 // Register adds /api/files, /api/download, /api/view, /api/media,
-// /api/thumb, /api/uploads, /api/folders, /api/move, /api/delete,
-// /api/trash and /api/search to mux, behind require (the login check). The
-// share links are added by RegisterShares.
+// /api/thumb, /api/usage, /api/uploads, /api/folders, /api/move,
+// /api/delete, /api/trash and /api/search (all of Routes) to mux, behind
+// require (the login check). The share links are added by RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
+	mux.HandleFunc("GET /api/usage", require(f.showUsage))
 	f.registerViews(mux, require)
 	f.registerManage(mux, require)
 	f.registerTrash(mux, require)

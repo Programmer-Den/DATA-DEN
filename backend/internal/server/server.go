@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
@@ -22,9 +23,10 @@ type Config struct {
 	Version string
 	// Auth adds the login API; nil leaves it out.
 	Auth *auth.Auth
-	// Data is the data directory, served behind the login. Nil with Auth set
-	// means the directory is missing: its API answers 503.
-	Data *files.Files
+	// Data is the data directory, each account's space served behind the
+	// login. Nil with Auth set means the directory is missing: its API
+	// answers 503.
+	Data *files.Spaces
 	// Status adds the status page's API behind the login; nil leaves it out.
 	Status *status.Status
 }
@@ -47,22 +49,9 @@ func New(cfg Config) http.Handler {
 			missing := func(w http.ResponseWriter, _ *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Datenordner nicht verfügbar"})
 			}
-			mux.HandleFunc("GET /api/files", cfg.Auth.Require(missing))
-			mux.HandleFunc("GET /api/download", cfg.Auth.Require(missing))
-			mux.HandleFunc("GET /api/view", cfg.Auth.Require(missing))
-			mux.HandleFunc("GET /api/media", cfg.Auth.Require(missing))
-			mux.HandleFunc("GET /api/thumb", cfg.Auth.Require(missing))
-			mux.HandleFunc("/api/uploads/", cfg.Auth.Require(missing))
-			mux.HandleFunc("POST /api/uploads", cfg.Auth.Require(missing))
-			mux.HandleFunc("POST /api/folders", cfg.Auth.Require(missing))
-			mux.HandleFunc("POST /api/move", cfg.Auth.Require(missing))
-			mux.HandleFunc("POST /api/delete", cfg.Auth.Require(missing))
-			mux.HandleFunc("GET /api/trash", cfg.Auth.Require(missing))
-			mux.HandleFunc("GET /api/search", cfg.Auth.Require(missing))
-			mux.HandleFunc("POST /api/trash/", cfg.Auth.Require(missing))
-			mux.HandleFunc("GET /api/shares", cfg.Auth.Require(missing))
-			mux.HandleFunc("POST /api/shares", cfg.Auth.Require(missing))
-			mux.HandleFunc("POST /api/shares/delete", cfg.Auth.Require(missing))
+			for _, route := range slices.Concat(files.Routes, files.ShareRoutes) {
+				mux.HandleFunc(route, cfg.Auth.Require(missing))
+			}
 			mux.HandleFunc("/api/s/", missing)
 		}
 	}

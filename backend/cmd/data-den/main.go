@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -102,7 +103,7 @@ func tlsFiles() (certFile, keyFile string) {
 }
 
 // setTrashDays applies DATA_DEN_TRASH_DAYS, if set, to data.
-func setTrashDays(data *files.Files) error {
+func setTrashDays(data *files.Spaces) error {
 	value := os.Getenv("DATA_DEN_TRASH_DAYS")
 	if value == "" {
 		return nil
@@ -123,26 +124,19 @@ func run() error {
 	if (certFile == "") != (keyFile == "") {
 		return errors.New("set both DATA_DEN_TLS_CERT and DATA_DEN_TLS_KEY, or neither")
 	}
-	login, err := auth.New(auth.Config{
-		Username:     os.Getenv("DATA_DEN_USERNAME"),
-		PasswordHash: os.Getenv("DATA_DEN_PASSWORD_HASH"),
-		TrustedProxy: os.Getenv("DATA_DEN_TRUSTED_PROXY"),
-	})
-	if err != nil {
-		return err
-	}
-	if os.Getenv("DATA_DEN_PASSWORD_HASH") == "" {
-		slog.Warn("no DATA_DEN_PASSWORD_HASH set, so nobody can log in; create one with: data-den hash-password")
-	}
-	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
-	if err != nil {
-		return err
-	}
 	dataDir := os.Getenv("DATA_DEN_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "/data"
 	}
-	data, err := files.Open(dataDir)
+	var login *auth.Auth
+	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
+		Owner: os.Getenv("DATA_DEN_USERNAME"),
+		User:  auth.Username,
+		Quota: func(name string) int64 { return login.Quota(name) },
+	})
+	// The accounts live in the data directory, next to the files, in a
+	// folder the API never serves.
+	accountsFile := ""
 	if err != nil {
 		slog.Warn("the data directory cannot be opened, so no files are served; set DATA_DEN_DATA_DIR", "dir", dataDir, "err", err)
 	} else {
@@ -150,6 +144,11 @@ func run() error {
 		if err := setTrashDays(data); err != nil {
 			return err
 		}
+		accountsFile = filepath.Join(dataDir, ".data-den-accounts", "accounts.json")
+	}
+	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
+	if err != nil {
+		return err
 	}
 	stat := status.New(status.Config{
 		DataDir:     dataDir,
@@ -159,6 +158,30 @@ func run() error {
 		Version:     version.Version,
 		Started:     time.Now(),
 	})
+	login, err = auth.New(auth.Config{
+		Username:     os.Getenv("DATA_DEN_USERNAME"),
+		PasswordHash: os.Getenv("DATA_DEN_PASSWORD_HASH"),
+		TrustedProxy: os.Getenv("DATA_DEN_TRUSTED_PROXY"),
+		AccountsFile: accountsFile,
+		Usage: func(name string) (int64, error) {
+			if data == nil {
+				return 0, errors.New("no data directory")
+			}
+			return data.Usage(name)
+		},
+		Removed: func(name string) error {
+			if data == nil {
+				return nil
+			}
+			return data.Retire(name)
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if os.Getenv("DATA_DEN_PASSWORD_HASH") == "" {
+		slog.Warn("no DATA_DEN_PASSWORD_HASH set, so nobody can log in; create one with: data-den hash-password")
+	}
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat}),
@@ -176,10 +199,9 @@ func run() error {
 		_ = srv.Shutdown(shutdown)
 	}()
 	if data != nil {
-		// The search index, built in the background so the server answers
-		// at once.
-		go data.Index(ctx.Done())
-		go data.PurgeTrashEvery(ctx, time.Hour)
+		// The search indexes, built in the background so the server answers
+		// at once, and the recycle bins emptied on time.
+		data.Run(ctx)
 	}
 
 	slog.Info("DATA-DEN listening", "addr", addr, "https", certFile != "", "version", version.Version)

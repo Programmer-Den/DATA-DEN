@@ -1,0 +1,68 @@
+.hint {
+  opacity: 0.7;
+}
+
+.done {
+  color: #2e7d32;
+}
+
+.error {
+  color: #c62828;
+}
+
+h2 {
+  margin-top: 2rem;
+  font-size: 1.1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.size {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.quota {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.quota input {
+  width: 7rem;
+}
+
+.actions {
+  text-align: right;
+}
+
+.actions button {
+  margin: 0.1rem 0 0.1rem 0.3rem;
+}
+
+.create {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 20rem;
+}
+
+.create label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.create .check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
