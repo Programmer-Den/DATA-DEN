@@ -67,6 +67,8 @@ type Files struct {
 	// versionMu keeps two changes of the versions, or of a file and its
 	// versions, from running at the same time.
 	versionMu sync.Mutex
+	// damaged is told about the files a check found damaged; nil tells no one.
+	damaged func(account string, paths []string)
 }
 
 // Recorder notes in the audit log that account did action to target, in the

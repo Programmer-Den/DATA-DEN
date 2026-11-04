@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -133,6 +134,14 @@ func TestCheckMakesChecksumsAndFindsDuplicates(t *testing.T) {
 
 func TestCheckFindsDamage(t *testing.T) {
 	data, f, h := sumsSetup(t)
+	var told [][]string
+	f.account = "anna"
+	f.damaged = func(account string, paths []string) {
+		if account != "anna" {
+			t.Errorf("told about the space of %q", account)
+		}
+		told = append(told, paths)
+	}
 	ctx := context.Background()
 	f.check(ctx, false)
 	damage(t, data, "Fotos/a.jpg", "Fotos/X.jpg")
@@ -150,6 +159,11 @@ func TestCheckFindsDamage(t *testing.T) {
 	d := state.Damaged[0]
 	if d.Path != "/Fotos/a.jpg" || d.Expected != sha("Fotos/a.jpg") || d.Actual != sha("Fotos/X.jpg") || d.Found.IsZero() {
 		t.Errorf("damaged %+v", d)
+	}
+	// Told once, not again on the next check.
+	f.check(ctx, true)
+	if len(told) != 1 || !slices.Equal(told[0], []string{"/Fotos/a.jpg"}) {
+		t.Errorf("told %v", told)
 	}
 
 	// A file put right again, for example by the mirror, is fine again.

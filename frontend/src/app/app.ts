@@ -6,6 +6,7 @@ import { AuthService, errorMessage, needsCode } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
 import { MediaView } from './media/media';
+import { NotificationsView } from './notifications/notifications';
 import { ChecksView } from './checks/checks';
 import { StartFolder } from './files/start-folder';
 import { PublicShare } from './public/public-share';
@@ -24,6 +25,7 @@ type View =
   | 'status'
   | 'checks'
   | 'account'
+  | 'notifications'
   | 'users'
   | 'search'
   | 'audit';
@@ -50,6 +52,7 @@ interface Health {
     AccountView,
     UsersView,
     AuditView,
+    NotificationsView,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -75,6 +78,7 @@ export class App {
     { view: 'status', name: 'Status' },
     { view: 'checks', name: 'Prüfung' },
     { view: 'account', name: 'Konto' },
+    { view: 'notifications', name: 'Benachrichtigungen' },
     ...(this.auth.admin() ? [{ view: 'users' as const, name: 'Benutzer' }] : []),
     { view: 'audit', name: 'Protokoll' },
   ]);

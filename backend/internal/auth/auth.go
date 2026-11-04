@@ -166,6 +166,13 @@ func (a *Auth) Quota(name string) int64 {
 	return account.Quota
 }
 
+// Admin reports whether name is an account with admin rights; the owner's
+// always has them.
+func (a *Auth) Admin(name string) bool {
+	account, ok := a.account(name)
+	return ok && account.Admin
+}
+
 // Require only lets requests with a valid session or app password through.
 // A read-only app password only gets GET and HEAD.
 func (a *Auth) Require(next http.HandlerFunc) http.HandlerFunc {

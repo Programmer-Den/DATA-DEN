@@ -82,6 +82,9 @@ type SpacesConfig struct {
 	Quota func(name string) int64
 	// Audit notes changes to files in the audit log; nil notes nothing.
 	Audit Recorder
+	// Damaged is told about the files a check found damaged in the space
+	// of account; nil tells no one.
+	Damaged func(account string, paths []string)
 }
 
 // Spaces serves each account its own space in the data directory.
@@ -105,7 +108,7 @@ func OpenSpaces(dir string, cfg SpacesConfig) (*Spaces, error) {
 	if err != nil {
 		return nil, err
 	}
-	owner.account, owner.audit = cfg.Owner, cfg.Audit
+	owner.account, owner.audit, owner.damaged = cfg.Owner, cfg.Audit, cfg.Damaged
 	owner.serve()
 	return &Spaces{
 		cfg: cfg, owner: owner, byName: map[string]*Files{},
@@ -331,7 +334,7 @@ func (s *Spaces) space(name string) (*Files, error) {
 	f.thumbSlots = s.owner.thumbSlots
 	f.trashDays = s.trashDays
 	f.shares.guard = s.guard
-	f.account, f.audit = name, s.cfg.Audit
+	f.account, f.audit, f.damaged = name, s.cfg.Audit, s.cfg.Damaged
 	f.serve()
 	s.byName[name] = f
 	s.startLocked(name, f)
