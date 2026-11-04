@@ -19,6 +19,8 @@ export interface UploadItem {
   loaded: number;
   status: UploadStatus;
   error?: string;
+  /** Files that already had the same content, such as "/Fotos/a.jpg". */
+  duplicates?: string[];
 }
 
 /** Uploads at the same time. */
@@ -81,9 +83,12 @@ export class Uploader {
       );
       let offset = started.offset;
       let failures = 0;
+      let duplicates: string[] | undefined;
       while (offset < job.file.size) {
         try {
-          offset = await this.sendChunk(id, started.id, job.file, offset);
+          const answer = await this.sendChunk(id, started.id, job.file, offset);
+          offset = answer.offset;
+          duplicates = answer.duplicates;
           failures = 0;
         } catch (err) {
           if (++failures >= ATTEMPTS) {
@@ -96,18 +101,25 @@ export class Uploader {
           offset = state.offset;
         }
       }
-      this.set(id, { loaded: job.file.size, status: 'fertig' });
+      this.set(id, {
+        loaded: job.file.size,
+        status: 'fertig',
+        ...(duplicates?.length ? { duplicates } : {}),
+      });
     } catch (err) {
       this.set(id, { status: 'Fehler', error: errorMessage(err) });
     }
   }
 
-  /** Sends the chunk at offset and returns the server's new offset. */
+  /**
+   * Sends the chunk at offset and returns the server's answer: its new
+   * offset and, after the last chunk, the files with the same content.
+   */
   private async sendChunk(id: number, uploadId: string, file: File, offset: number) {
     const chunk = file.slice(offset, offset + CHUNK_SIZE);
     const response = await lastValueFrom(
       this.http
-        .put<{ offset: number }>(`/api/uploads/${uploadId}`, chunk, {
+        .put<{ offset: number; duplicates?: string[] }>(`/api/uploads/${uploadId}`, chunk, {
           headers: { 'Upload-Offset': String(offset), 'Content-Type': 'application/octet-stream' },
           observe: 'events',
           reportProgress: true,
@@ -121,9 +133,9 @@ export class Uploader {
           filter((event) => event instanceof HttpResponse),
         ),
     );
-    const next = response.body!.offset;
-    this.set(id, { loaded: next });
-    return next;
+    const answer = response.body!;
+    this.set(id, { loaded: answer.offset });
+    return answer;
   }
 }
 

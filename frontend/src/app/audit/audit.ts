@@ -33,6 +33,7 @@ export const ACTIONS: Record<string, string> = {
   'share-delete': 'Link gelöscht',
   'share-download': 'Über einen Link geladen',
   'share-password-failed': 'Falsches Link-Passwort',
+  'integrity-accept': 'Beschädigte Datei als richtig übernommen',
 };
 
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'medium' });

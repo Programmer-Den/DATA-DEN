@@ -103,14 +103,17 @@ func TestFilesWithoutDataDirectory(t *testing.T) {
 		t.Fatalf("login: status %d", rec.Code)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/files?path=/", nil)
-	for _, c := range rec.Result().Cookies() {
-		req.AddCookie(c)
-	}
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("/api/files without data directory: status %d, want 503", rec.Code)
+	cookies := rec.Result().Cookies()
+	for _, endpoint := range []string{"/api/files?path=/", "/api/duplicates", "/api/integrity"} {
+		req := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s without data directory: status %d, want 503", endpoint, rec.Code)
+		}
 	}
 	// Share links answer without a login.
 	if rec := get(t, h, "/api/s/0123456789abcdef0123456789abcdef"); rec.Code != http.StatusServiceUnavailable {

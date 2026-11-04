@@ -1,0 +1,100 @@
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (integrity(); as state) {
+  <section aria-labelledby="integrity-title">
+    <h2 id="integrity-title">Beschädigte Dateien</h2>
+    <p class="hint">
+      Jede Datei hat eine Prüfsumme. Neue Dateien bekommen ihre beim Hochladen oder in der nächsten
+      Stunde, und jede Datei wird mindestens alle {{ state.verifyDays }} Tage neu gelesen und
+      verglichen.
+    </p>
+    <p class="summary">
+      {{ state.files }} Dateien mit Prüfsumme.
+      @if (state.lastCheck) {
+        Letzte Prüfung: {{ date(state.lastCheck) }}.
+      }
+    </p>
+    @if (state.running) {
+      <p class="running" role="status">
+        Prüfung läuft: {{ state.done }} von {{ state.total }} Dateien
+        <progress max="100" [value]="percent(state)"></progress>
+      </p>
+    }
+    @if (state.damaged.length === 0) {
+      <p class="ok">Keine beschädigten Dateien gefunden.</p>
+    } @else {
+      <p class="warning">
+        Diese Dateien haben sich auf der Platte verändert, ohne dass sie geändert wurden. Am besten
+        aus einer Kopie wiederherstellen.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Datei</th>
+            <th scope="col" class="size">Größe</th>
+            <th scope="col">Gefunden</th>
+            <th scope="col"><span class="visually-hidden">Aktionen</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (file of state.damaged; track file.path) {
+            <tr class="damaged">
+              <td>{{ file.path }}</td>
+              <td class="size">{{ formatSize(file.size) }}</td>
+              <td>{{ date(file.found) }}</td>
+              <td class="actions">
+                <button type="button" [disabled]="busy()" (click)="accept(file)">
+                  Als richtig übernehmen
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+    <button type="button" [disabled]="busy() || state.running" (click)="checkAll()">
+      Jetzt alle Dateien prüfen
+    </button>
+  </section>
+}
+
+@if (duplicates(); as duplicates) {
+  <section aria-labelledby="duplicates-title">
+    <h2 id="duplicates-title">Duplikate</h2>
+    @if (duplicates.groups.length === 0) {
+      <p class="empty">Keine Dateien mit gleichem Inhalt.</p>
+    } @else {
+      <p class="hint">
+        {{ duplicates.groups.length }} Gruppen mit gleichem Inhalt; wer je eine Datei behält, spart
+        {{ formatSize(duplicates.wasted) }}.
+      </p>
+      @for (group of duplicates.groups; track group.sha256) {
+        <div class="group">
+          <p class="group-size">{{ group.paths.length }} × {{ formatSize(group.size) }}</p>
+          <ul>
+            @for (path of group.paths; track path) {
+              <li>
+                <span>{{ path }}</span>
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  [attr.aria-label]="path + ' löschen'"
+                  (click)="remove(path)"
+                >
+                  🗑
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    }
+  </section>
+} @else if (!error()) {
+  <p>Lade …</p>
+}

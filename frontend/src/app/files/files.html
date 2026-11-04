@@ -183,6 +183,9 @@
               : {{ item.error }}
             }
           </span>
+          @if (item.duplicates; as duplicates) {
+            <span class="duplicate">Gleicher Inhalt schon da: {{ duplicates.join(', ') }}</span>
+          }
         </li>
       }
     </ul>

@@ -197,6 +197,25 @@ a bcrypt hash. API: `GET /api/shares`,
 `POST /api/s/{id}/unlock {"password"}`, `GET /api/s/{id}/files?path=`,
 `GET /api/s/{id}/download?path=` and `GET /api/s/{id}/zip?path=`.
 
+Every file gets a SHA-256 checksum, kept in `.data-den-sums/index.json` in
+the data directory (hidden like the other `.data-den-*` folders; deleting it
+is safe and only costs reading every file again). An upload's checksum is
+taken from the bytes as they arrive, and the last chunk's answer lists the
+files that already have the same content, which the upload list shows.
+Every hour the server walks the data directory: new and changed files (other
+size or time) get a checksum, and every file is read again at least every
+30 days. A file whose content changed while its size and time did not is
+damaged on the disk: RAID 1 keeps both disks equal, not correct. The log
+says so as an error, and the **Prüfung** tab lists it; once the file is put
+back from a copy, or looked at and found fine, **Als richtig übernehmen**
+takes its content as it is. The same tab starts a check of every file now,
+shows its progress, and lists the duplicates, most space to gain first, each
+with 🗑 to move one into the recycle bin. Moves and the recycle bin keep the
+checksums. Each account has its own checksums and sees only its own
+duplicates; the checks of all accounts read one file at a time. API:
+`GET /api/duplicates`, `GET /api/integrity`,
+`POST /api/integrity/check {}`, `POST /api/integrity/accept {"path"}`.
+
 Uploads take many files or whole folders at once, picked with the two
 buttons or dragged onto the page, into the open folder. Three files upload
 at a time, each with its own progress bar. Every file goes in chunks of
