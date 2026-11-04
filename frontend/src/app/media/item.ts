@@ -19,6 +19,8 @@ export interface Item {
   lon?: number;
   /** The town nearest to where a photo was taken. */
   place?: string;
+  /** The shared folder the file is in, when it is another account's. */
+  grant?: string;
 }
 
 /** When a photo was taken, or else when the file was last changed. */
@@ -27,19 +29,24 @@ export function takenAt(item: Item): Date {
   return new Date(item.taken ?? item.modified);
 }
 
+/** The query of a file's address: its path and, in a shared folder, the grant. */
+function query(path: string, grant?: string): string {
+  return '?path=' + encodeURIComponent(path) + (grant ? '&grant=' + grant : '');
+}
+
 /** The file for the browser to show. */
-export function viewUrl(path: string): string {
-  return '/api/view?path=' + encodeURIComponent(path);
+export function viewUrl(path: string, grant?: string): string {
+  return '/api/view' + query(path, grant);
 }
 
 /** A small JPEG of a photo for the gallery. */
-export function thumbUrl(path: string): string {
-  return '/api/thumb?path=' + encodeURIComponent(path);
+export function thumbUrl(path: string, grant?: string): string {
+  return '/api/thumb' + query(path, grant);
 }
 
 /** The file to save. */
-export function downloadUrl(path: string): string {
-  return '/api/download?path=' + encodeURIComponent(path);
+export function downloadUrl(path: string, grant?: string): string {
+  return '/api/download' + query(path, grant);
 }
 
 /** True for a PDF; other previewable documents are plain text. */

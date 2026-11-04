@@ -55,3 +55,48 @@
 } @else if (!error()) {
   <p>Lade …</p>
 }
+
+@if (grants(); as grants) {
+  <h2>Mit anderen Konten geteilte Ordner</h2>
+  <p class="hint">Ordner teilst du in der Dateiansicht über 👥.</p>
+  @if (grants.length === 0) {
+    <p class="empty">Keine geteilten Ordner.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Ordner</th>
+          <th scope="col">Ort</th>
+          <th scope="col">Mit</th>
+          <th scope="col">Rechte</th>
+          <th scope="col"><span class="visually-hidden">Aktionen</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (grant of grants; track grant.id) {
+          <tr>
+            <td>
+              📁 {{ grant.name }}
+              @if (grant.missing) {
+                <span class="missing">(nicht mehr vorhanden)</span>
+              }
+            </td>
+            <td>{{ grant.path }}</td>
+            <td>{{ grant.to }}</td>
+            <td>{{ rights(grant) }}</td>
+            <td class="actions">
+              <button
+                type="button"
+                [disabled]="busy()"
+                [attr.aria-label]="grant.name + ' nicht mehr mit ' + grant.to + ' teilen'"
+                (click)="endGrant(grant)"
+              >
+                Beenden
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+}

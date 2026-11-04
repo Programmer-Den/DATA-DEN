@@ -28,6 +28,19 @@ describe('Uploader', () => {
 
   afterEach(() => http.verify());
 
+  it('uploads into a folder another account shares', async () => {
+    const grant = 'a'.repeat(32);
+    const done = uploader.upload([{ file: file('a.txt', 3), path: '/a.txt', grant }]);
+    await settle();
+    http.expectOne(`/api/uploads?grant=${grant}`).flush({ id: 'u1', offset: 0 });
+    await settle();
+    const chunk = http.expectOne(`/api/uploads/u1?grant=${grant}`);
+    expect(chunk.request.method).toBe('PUT');
+    chunk.flush({ offset: 3 });
+    await done;
+    expect(uploader.items()[0].status).toBe('fertig');
+  });
+
   it('uploads a file in chunks', async () => {
     const size = CHUNK_SIZE + 10;
     const done = uploader.upload([{ file: file('video.mp4', size), path: '/video.mp4' }]);

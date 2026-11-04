@@ -88,6 +88,12 @@ type SpacesConfig struct {
 	// Places names the towns where photos were taken; nil leaves them
 	// unnamed.
 	Places Namer
+	// Accounts are the names of all accounts, the ones a folder can be
+	// shared with; nil shares with no one.
+	Accounts func() []string
+	// Shared is told about a folder newly shared with another account; nil
+	// tells no one.
+	Shared func(Grant)
 }
 
 // Spaces serves each account its own space in the data directory.
@@ -103,6 +109,8 @@ type Spaces struct {
 	ctx context.Context
 	// stop ends the background work of each space but the owner's.
 	stop map[string]context.CancelFunc
+	// grantsMu orders the changes to grantsFile.
+	grantsMu sync.Mutex
 }
 
 // OpenSpaces opens the data directory dir.
@@ -114,10 +122,12 @@ func OpenSpaces(dir string, cfg SpacesConfig) (*Spaces, error) {
 	owner.account, owner.audit, owner.damaged = cfg.Owner, cfg.Audit, cfg.Damaged
 	owner.places = cfg.Places
 	owner.serve()
-	return &Spaces{
+	s := &Spaces{
 		cfg: cfg, owner: owner, byName: map[string]*Files{},
 		trashDays: DefaultTrashDays, stop: map[string]context.CancelFunc{},
-	}, nil
+	}
+	owner.moved = func(from, to string) { s.grantsMoved(cfg.Owner, from, to) }
+	return s, nil
 }
 
 // SetTrashDays sets the recycle bin's waiting time of every space; see
@@ -192,6 +202,10 @@ func (s *Spaces) Close() error {
 func (s *Spaces) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	handler := require(func(w http.ResponseWriter, r *http.Request) {
 		name := s.cfg.User(r)
+		if id := r.URL.Query().Get("grant"); id != "" {
+			s.serveGrant(w, r, name, id)
+			return
+		}
 		f, err := s.space(name)
 		if err != nil {
 			slog.Error("opening a space", "username", name, "err", err)
@@ -309,6 +323,7 @@ func (s *Spaces) Retire(name string) error {
 	if name == s.cfg.Owner || !accountName.MatchString(name) {
 		return errors.New("not a space that can be retired")
 	}
+	s.retireGrants(name)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if f, ok := s.byName[name]; ok {
@@ -360,6 +375,7 @@ func (s *Spaces) space(name string) (*Files, error) {
 	f.shares.guard = s.guard
 	f.account, f.audit, f.damaged = name, s.cfg.Audit, s.cfg.Damaged
 	f.places = s.cfg.Places
+	f.moved = func(from, to string) { s.grantsMoved(name, from, to) }
 	f.serve()
 	s.byName[name] = f
 	s.startLocked(name, f)

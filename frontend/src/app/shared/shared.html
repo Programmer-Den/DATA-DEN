@@ -1,0 +1,56 @@
+@if (opened(); as grant) {
+  <p class="bar">
+    <button type="button" (click)="opened.set(null)">← Geteilt mit mir</button>
+    <span class="hint">„{{ grant.name }}“ von {{ grant.owner }} · {{ rights(grant) }}</span>
+  </p>
+  <app-files [grant]="grant" />
+} @else {
+  @if (error(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+  @if (grants(); as grants) {
+    @if (grants.length === 0) {
+      <p class="empty">Niemand teilt gerade einen Ordner mit dir.</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Ordner</th>
+            <th scope="col">Von</th>
+            <th scope="col">Rechte</th>
+            <th scope="col"><span class="visually-hidden">Aktionen</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (grant of grants; track grant.id) {
+            <tr>
+              <td>
+                @if (grant.missing) {
+                  📁 {{ grant.name }} <span class="missing">(nicht mehr vorhanden)</span>
+                } @else {
+                  <button type="button" class="link" (click)="opened.set(grant)">
+                    📁 {{ grant.name }}
+                  </button>
+                }
+              </td>
+              <td>{{ grant.owner }}</td>
+              <td>{{ rights(grant) }}</td>
+              <td class="actions">
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  [attr.aria-label]="grant.name + ' verlassen'"
+                  (click)="leave(grant)"
+                >
+                  Verlassen
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  } @else if (!error()) {
+    <p>Lade …</p>
+  }
+}

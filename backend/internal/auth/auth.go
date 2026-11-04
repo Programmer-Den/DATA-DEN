@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -158,6 +159,18 @@ func user(r *http.Request) Account {
 // Owner is the account whose files are the data directory itself.
 func (a *Auth) Owner() string {
 	return a.cfg.Username
+}
+
+// Names are all accounts, the owner's first and the others by name.
+func (a *Auth) Names() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	names := make([]string, 0, len(a.accounts)+1)
+	for _, account := range a.accounts {
+		names = append(names, account.Name)
+	}
+	slices.Sort(names)
+	return append([]string{a.cfg.Username}, names...)
 }
 
 // Quota is how many bytes the account name may store, 0 for no limit.
