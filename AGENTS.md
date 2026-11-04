@@ -10,6 +10,7 @@ DATA-DEN is a self-hosted NAS: a web interface to upload, download and manage fi
 
 - `backend/`: Go (version in `go.mod`), one binary that serves the API and the embedded website; `gofmt`, golangci-lint (`.golangci.yml`), govulncheck
 - `frontend/`: Angular with TypeScript, tests with Vitest; Prettier and ESLint. `npm run build` writes into `backend/internal/web/files/build/`
+- `android/`: the Android app for automatic photo upload, Kotlin with Gradle; `core/` (the upload protocol) is plain Kotlin tested on the JVM with JUnit
 - `Dockerfile`: one distroless image for amd64 and arm64, cross-compiled
 - `runner/`: the two light self-hosted runners (Docker Desktop on the Windows PC)
 - `vm/`: the storage VM, PowerShell for Hyper-V and Bash for the Debian VM; PSScriptAnalyzer and shellcheck
@@ -36,6 +37,7 @@ Before submitting changes:
 - VM scripts: `vm/test-vm-scripts.sh`
 - Backend, in `backend/`: `gofmt -l .`, `golangci-lint run`, `go test ./...`, `go mod tidy -diff`
 - Frontend, in `frontend/`: `npm run format:check`, `npm run lint`, `npm test`, `npm run build`
+- Android app, in `android/`: `./gradlew :core:test :app:lintDebug :app:assembleDebug`
 - Add tests for new code
 - Keep CI fast: every check that runs on a pull request should finish within a few minutes
 

@@ -281,6 +281,12 @@ with "Datei existiert bereits". Unfinished chunks wait in
 `.data-den-uploads/` in the data directory, which the folder view hides; a
 restart of the server removes them.
 
+## Android app
+
+The PWA cannot upload in the background, so [android/](android/README.md)
+holds a small native app that uploads new photos and videos from the phone's
+camera on its own, with an app password instead of the account password.
+
 ## Status
 
 The **Status** tab shows the free space on the data disk, the state of the
@@ -360,8 +366,8 @@ docker run --rm -p 8080:8080 data-den
 
 Every pull request runs the shared checks of
 [repo-base](https://github.com/Programmer-Den/repo-base) (secrets, links,
-PR template), the Go and Angular jobs, and builds the image for amd64 and
-arm64. They run on the light self-hosted runners once those are set up
+PR template), the Go and Angular jobs, tests and builds the Android app, and
+builds the image for amd64 and arm64. They run on the light self-hosted runners once those are set up
 ([runner/README.md](runner/README.md)), otherwise on GitHub's runners.
 
 Contributions follow [AGENTS.md](AGENTS.md); security issues go to
