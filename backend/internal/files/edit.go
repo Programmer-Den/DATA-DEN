@@ -126,7 +126,7 @@ func (f *Files) writeText(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "Der Text ist zu groß")
 		return
 	}
-	version, ok := f.save(w, name, body.Version, body.Backup, strings.NewReader(body.Content))
+	info, ok := f.save(w, name, body.Version, body.Backup, strings.NewReader(body.Content))
 	if !ok {
 		return
 	}
@@ -135,14 +135,14 @@ func (f *Files) writeText(w http.ResponseWriter, r *http.Request) {
 		action = "create"
 	}
 	f.note(r, action, "/"+name)
-	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + name, "version": version})
+	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + name, "version": versionOf(info)})
 }
 
-// save writes content to name and returns its new version. expected is the
+// save writes content to name and returns how it is now. expected is the
 // version the writer started from, "" for a new file; backup keeps the old
 // file as a version first. It answers the request itself and
 // returns false when that fails.
-func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, content io.Reader) (string, bool) {
+func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, content io.Reader) (fs.FileInfo, bool) {
 	f.versionMu.Lock()
 	defer f.versionMu.Unlock()
 
@@ -151,41 +151,41 @@ func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, 
 		info, err := f.root.Lstat(name)
 		if err != nil {
 			openError(w, err)
-			return "", false
+			return nil, false
 		}
 		if !info.Mode().IsRegular() {
 			writeError(w, http.StatusBadRequest, "Keine Datei")
-			return "", false
+			return nil, false
 		}
 		if versionOf(info) != expected {
 			writeError(w, http.StatusConflict, "Die Datei wurde inzwischen geändert")
-			return "", false
+			return nil, false
 		}
 		oldSize = info.Size()
 	} else if _, err := f.root.Lstat(name); err == nil {
 		writeError(w, http.StatusConflict, "Datei existiert bereits")
-		return "", false
+		return nil, false
 	}
 	if dir, err := f.root.Stat(path.Dir(name)); err != nil || !dir.IsDir() {
 		writeError(w, http.StatusNotFound, "Ordner nicht gefunden")
-		return "", false
+		return nil, false
 	}
 
 	if err := f.root.MkdirAll(editDir, 0o750); err != nil {
 		f.diskError(w, "creating the folder for saving", err)
-		return "", false
+		return nil, false
 	}
 	id, err := newID()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Speichern fehlgeschlagen")
-		return "", false
+		return nil, false
 	}
 	temp := path.Join(editDir, id)
 	defer func() { _ = f.root.Remove(temp) }()
 	file, err := f.root.OpenFile(temp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 	if err != nil {
 		f.diskError(w, "creating a file to save", err)
-		return "", false
+		return nil, false
 	}
 	sum := sha256.New()
 	size, err := io.Copy(hashingWriter{file, sum}, content)
@@ -196,8 +196,12 @@ func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, 
 		err = closeErr
 	}
 	if err != nil {
+		if tooLarge := new(http.MaxBytesError); errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "Die Datei ist zu groß")
+			return nil, false
+		}
 		f.diskError(w, "saving a file", err)
-		return "", false
+		return nil, false
 	}
 
 	// What is added: the whole file when the old one is kept as a version,
@@ -208,10 +212,10 @@ func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, 
 	}
 	if ok, err := f.fits(added); err != nil {
 		f.diskError(w, "counting the usage", err)
-		return "", false
+		return nil, false
 	} else if !ok {
 		writeError(w, http.StatusInsufficientStorage, "Dein Speicherplatz ist voll")
-		return "", false
+		return nil, false
 	}
 
 	if expected != "" && backup {
@@ -221,7 +225,7 @@ func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, 
 		}
 		if err != nil {
 			f.diskError(w, "keeping the old version", err)
-			return "", false
+			return nil, false
 		}
 		slog.Info("old content kept as a version", "path", "/"+name)
 	}
@@ -237,10 +241,10 @@ func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, 
 	if err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			writeError(w, http.StatusConflict, "Datei existiert bereits")
-			return "", false
+			return nil, false
 		}
 		f.diskError(w, "saving a file", err)
-		return "", false
+		return nil, false
 	}
 	if backup {
 		f.pruneVersions(name)
@@ -249,9 +253,9 @@ func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, 
 	info, err := f.root.Stat(name)
 	if err != nil {
 		f.diskError(w, "reading a saved file", err)
-		return "", false
+		return nil, false
 	}
 	f.uploaded(name, info, hex.EncodeToString(sum.Sum(nil)))
 	slog.Info("saved", "path", "/"+name, "size", size)
-	return versionOf(info), true
+	return info, true
 }

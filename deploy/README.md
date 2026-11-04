@@ -106,6 +106,38 @@ not reachable.
 If a pull says *denied* or *unauthorized*, the login is missing or its token
 has expired: log in again as in step 2.
 
+## Office documents (optional)
+
+With Collabora Online (CODE, LibreOffice in the browser) Word, Excel and
+PowerPoint files and their OpenDocument counterparts (DOC, DOCX, ODT, RTF,
+XLS, XLSX, ODS, PPT, PPTX, ODP) can be edited in the web interface: 📝 in
+the folder view or **Bearbeiten** in the viewer. `compose.office.yaml` adds
+it as a second container:
+
+```bash
+cd ~/data-den
+scp <you>@<your PC>:<repo>/deploy/compose.office.yaml .
+sudo docker compose -f compose.yaml -f compose.office.yaml up -d
+sudo docker compose -f compose.yaml -f compose.office.yaml logs -f collabora   # "Ready to accept connections"
+```
+
+- Collabora listens only on `127.0.0.1:9980` in the VM. The browser reaches
+  it through DATA-DEN (`/browser/`, `/cool/`, `/hosting/`, behind the
+  login), so neither the Pi's gateway nor the VM's firewall needs anything
+  new. Its admin console is never passed on.
+- Collabora loads and saves the documents from DATA-DEN's second port,
+  `127.0.0.1:9981` (WOPI), with a token for each opened document that holds
+  for 10 hours. It never sees the data directory.
+- Collabora saves by itself every few minutes and when the document is
+  closed. The first save of each opening keeps the file as it was as a
+  version (🕘 **Ältere Versionen**). A document changed elsewhere meanwhile is not overwritten.
+- It needs about 1 GB of RAM more, with a few documents open; give the VM
+  6 GB or more (`-MemoryGB 6` in `vm/New-DataDenVM.ps1`) if it gets tight.
+
+Use the same `-f` files for `pull`, `up`, `ps` and `logs` from then on.
+Without `compose.office.yaml`, office documents are only downloaded, as
+before.
+
 ## Update
 
 ```bash
@@ -113,6 +145,9 @@ cd ~/data-den
 sudo docker compose pull && sudo docker compose up -d
 sudo docker image prune -f
 ```
+
+With office documents: `sudo docker compose -f compose.yaml -f compose.office.yaml pull`
+and `... up -d` the same way.
 
 `sudo docker compose logs -f` shows what the server does, including the
 failed logins.

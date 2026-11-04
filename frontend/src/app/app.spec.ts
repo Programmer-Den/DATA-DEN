@@ -37,6 +37,7 @@ describe('App', () => {
       await fixture.whenStable();
       http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
       http.expectOne('/api/status').flush(status);
+      for (const office of http.match('/api/office')) office.flush({ extensions: [] });
     } else {
       req.flush({ error: 'Nicht angemeldet' }, { status: 401, statusText: 'Unauthorized' });
     }
@@ -87,6 +88,7 @@ describe('App', () => {
     await fixture.whenStable();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
     http.expectOne('/api/status').flush(fine);
+    for (const office of http.match('/api/office')) office.flush({ extensions: [] });
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Angemeldet als chriszly');
     expect(page(fixture).textContent).toContain('DATA-DEN 1.2.3');
@@ -112,6 +114,7 @@ describe('App', () => {
     await fixture.whenStable();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
     http.expectOne('/api/status').flush(fine);
+    for (const office of http.match('/api/office')) office.flush({ extensions: [] });
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Angemeldet als chriszly');
   });
@@ -177,6 +180,7 @@ describe('App', () => {
     banner.querySelector('button')!.click();
     await fixture.whenStable();
     http.expectOne('/api/status').flush(fine);
+    for (const office of http.match('/api/office')) office.flush({ extensions: [] });
     await fixture.whenStable();
     expect(page(fixture).querySelector('.warnings')).toBeNull();
     expect(page(fixture).textContent).toContain('Alles in Ordnung');

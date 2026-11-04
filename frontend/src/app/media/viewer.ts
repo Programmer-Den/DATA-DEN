@@ -3,6 +3,8 @@ import { Component, computed, effect, inject, input, model, output, signal } fro
 import { DomSanitizer } from '@angular/platform-browser';
 import { errorMessage } from '../auth.service';
 import { Editor } from '../editor/editor';
+import { OfficeFormats } from '../office/formats';
+import { OfficeFrame } from '../office/office-frame';
 import { isMarkdown, markdownHtml } from '../editor/markdown';
 import { Item, downloadUrl, isPdf, viewUrl } from './item';
 
@@ -18,12 +20,13 @@ export const MAX_TEXT = 1 << 20;
   selector: 'app-viewer',
   templateUrl: './viewer.html',
   styleUrl: './viewer.css',
-  imports: [Editor],
+  imports: [Editor, OfficeFrame],
   host: { '(document:keydown)': 'key($event)' },
 })
 export class Viewer {
   private readonly http = inject(HttpClient);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly office = inject(OfficeFormats);
 
   readonly items = input.required<Item[]>();
   /** The file shown, an index into items. */
@@ -61,6 +64,8 @@ export class Viewer {
   protected readonly html = computed(() => markdownHtml(this.text() ?? ''));
   /** True while the file is open in the editor. */
   protected readonly editing = signal(false);
+  /** True when the file opens in the office editor instead. */
+  protected readonly officeFile = computed(() => this.office.canEdit(this.item()?.name ?? ''));
   /** Counts the saves, so the text is loaded again after one. */
   private readonly saves = signal(0);
   /** Why the file cannot be shown, or null. */

@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 )
 
@@ -129,5 +131,29 @@ func TestStatusAPI(t *testing.T) {
 	h := New(Config{Files: fstest.MapFS{}, Auth: a, Status: status.New(status.Config{DataDir: t.TempDir()})})
 	if rec := get(t, h, "/api/status"); rec.Code != http.StatusUnauthorized {
 		t.Errorf("/api/status without login: status %d, want 401", rec.Code)
+	}
+}
+
+func TestOfficeNeedsLogin(t *testing.T) {
+	a, err := auth.New(auth.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := files.OpenSpaces(t.TempDir(), files.SpacesConfig{User: auth.Username})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = data.Close() })
+	collabora, _ := url.Parse("http://127.0.0.1:1")
+	office := data.Office(files.OfficeConfig{URL: collabora, WOPI: "http://127.0.0.1:9981"})
+	h := New(Config{Files: fstest.MapFS{"index.html": {Data: []byte("app")}}, Auth: a, Data: data, Office: office})
+	for _, target := range []string{"/api/office", "/browser/abc/cool.html", "/cool/ws", "/hosting/discovery"} {
+		if rec := get(t, h, target); rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s without login: status %d, want 401", target, rec.Code)
+		}
+	}
+	// Everything else is as without office.
+	if rec := get(t, h, "/"); rec.Code != http.StatusOK || rec.Header().Get("X-Frame-Options") != "DENY" {
+		t.Errorf("/: status %d, X-Frame-Options %q", rec.Code, rec.Header().Get("X-Frame-Options"))
 	}
 }
