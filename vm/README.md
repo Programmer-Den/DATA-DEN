@@ -24,6 +24,7 @@ optional backup: [Backup (optional)](#backup-optional).
 | `Set-DataDenNetwork.ps1` | Windows, as administrator | Port ACLs: only the Pi gets in (HTTPS, SSH, ping), the VM may connect out |
 | `setup-raid.sh` | the VM, as root | RAID 1 over both disks with mdadm, mounted at `/srv/data-den` |
 | `setup-firewall.sh`, `nftables.conf` | the VM, as root | nftables: only the Pi gets in |
+| `setup-updates.sh` | the VM, as root | Switches automatic security updates on or off, or shows their status |
 | `setup-backup.sh` | the VM, as root | Switches the optional backup on or off, or shows its status |
 | `backup.sh`, `data-den-backup.service`, `data-den-backup.timer` | the VM, installed by `setup-backup.sh` | The nightly backup run with restic |
 | `test-vm-scripts.sh` | CI | Tests the checks of the shell scripts |
@@ -85,6 +86,7 @@ in the VM:
 ls -l /dev/disk/by-id/ | grep -v part        # the two 4 TB disks
 sudo vm/setup-raid.sh /dev/disk/by-id/<disk 1> /dev/disk/by-id/<disk 2>
 sudo vm/setup-firewall.sh 192.168.1.20       # the Pi's address
+sudo vm/setup-updates.sh on                  # automatic security updates
 ```
 
 `setup-raid.sh` shows both disks and asks you to type `DATA-DEN` before it
@@ -124,6 +126,26 @@ sudo mdadm --manage /dev/md/data-den --add /dev/disk/by-id/<new disk>
 ```
 
 Den-Watcher will report the RAID state as an alarm in a later step.
+
+## Automatic updates
+
+Switch them on once after the firewall:
+
+```bash
+sudo vm/setup-updates.sh on                    # restarts at 05:00 when an update needs it
+sudo vm/setup-updates.sh on --reboot 04:30     # another time
+sudo vm/setup-updates.sh on --no-reboot        # never restarts by itself
+sudo vm/setup-updates.sh status                # on or off, the next run, a pending restart, the last runs
+sudo vm/setup-updates.sh off
+```
+
+unattended-upgrades then installs Debian's security updates every day at
+about 6:00, Docker included, as it comes from Debian (`docker.io`). When a
+kernel or library update needs a restart, the VM restarts at the time given,
+after the nightly backup has started at 3:00; the RAID and DATA-DEN (restart
+policy `unless-stopped`) come back by themselves. Failed runs mail root, like
+mdadm. The DATA-DEN image itself is updated as in
+[deploy/README.md](../deploy/README.md#update).
 
 ## Backup (optional)
 
