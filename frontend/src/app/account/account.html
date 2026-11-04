@@ -44,6 +44,71 @@
   }
 </section>
 
+<section>
+  <h2>Zwei-Faktor-Anmeldung</h2>
+  @if (twoFactor(); as state) {
+    @if (recovery(); as codes) {
+      <div class="recovery">
+        <p>
+          <strong>Wiederherstellungscodes, jetzt sichern!</strong> Jeder Code ersetzt einmal den
+          Code aus der App, falls das Handy verloren geht. Sie werden nur dieses eine Mal angezeigt.
+        </p>
+        <ul>
+          @for (code of codes; track code) {
+            <li>
+              <code>{{ code }}</code>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+    @if (state.enabled) {
+      <p>
+        An. Beim Anmelden ist zusätzlich ein Code aus der App nötig. Noch
+        {{ state.recoveryLeft }} Wiederherstellungscodes übrig.
+      </p>
+      <form #off class="password" (submit)="disable($event, off)">
+        <label>
+          Passwort
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <label>
+          Code aus der App (oder Wiederherstellungscode)
+          <input name="code" autocomplete="one-time-code" required />
+        </label>
+        <button type="submit" [disabled]="busy()">Ausschalten</button>
+      </form>
+    } @else if (setup(); as setup) {
+      <ol class="setup">
+        <li>
+          Den QR-Code mit einer Authenticator-App scannen (etwa Aegis, Google Authenticator oder
+          2FAS).
+          @if (appLink(); as link) {
+            Auf dem Handy selbst geht auch <a [href]="link">dieser Link</a>.
+          }
+          <img [src]="setup.qr" alt="QR-Code für die Authenticator-App" width="232" height="232" />
+          Oder den Schlüssel von Hand eingeben: <code class="secret">{{ setup.secret }}</code>
+        </li>
+        <li>
+          <form class="code" (submit)="enable($event, code.value)">
+            <label>
+              Den Code, den die App jetzt zeigt
+              <input #code name="code" autocomplete="one-time-code" inputmode="numeric" required />
+            </label>
+            <button type="submit" [disabled]="busy()">Einschalten</button>
+          </form>
+        </li>
+      </ol>
+    } @else {
+      <p class="hint">
+        Aus. Mit ihr braucht die Anmeldung zusätzlich einen Code aus einer Authenticator-App auf dem
+        Handy, ein gestohlenes Passwort allein reicht dann nicht mehr.
+      </p>
+      <button type="button" [disabled]="busy()" (click)="startSetup()">Einrichten</button>
+    }
+  }
+</section>
+
 @if (done(); as done) {
   <p class="done" role="status">{{ done }}</p>
 }

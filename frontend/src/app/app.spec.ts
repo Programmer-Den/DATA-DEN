@@ -92,6 +92,30 @@ describe('App', () => {
     expect(page(fixture).textContent).toContain('DATA-DEN 1.2.3');
   });
 
+  it('asks for the code of the second factor', async () => {
+    const fixture = await start(null);
+    await submit(fixture, 'chriszly', 'richtig');
+    http
+      .expectOne('/api/login')
+      .flush(
+        { error: 'Bitte den Code aus der App eingeben', twoFactor: true },
+        { status: 401, statusText: 'Unauthorized' },
+      );
+    await fixture.whenStable();
+    const code = page(fixture).querySelector<HTMLInputElement>('input[name=code]')!;
+    expect(code).not.toBeNull();
+    code.value = '123456';
+    await submit(fixture, 'chriszly', 'richtig');
+    const req = http.expectOne('/api/login');
+    expect(req.request.body).toEqual({ username: 'chriszly', password: 'richtig', code: '123456' });
+    req.flush({ username: 'chriszly', twoFactor: true });
+    await fixture.whenStable();
+    http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
+    http.expectOne('/api/status').flush(fine);
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('Angemeldet als chriszly');
+  });
+
   it("shows the server's message when the login fails", async () => {
     const fixture = await start(null);
     await submit(fixture, 'chriszly', 'falsch');

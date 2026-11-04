@@ -13,6 +13,8 @@ export interface User {
   quota: number;
   /** Bytes stored, -1 when unknown. */
   used: number;
+  /** Whether the login needs a code from an app. */
+  twoFactor: boolean;
 }
 
 const GB = 1024 ** 3;
@@ -102,6 +104,19 @@ export class UsersView {
       this.act(
         this.http.post(`/api/users/${user.name}`, { password }),
         `Passwort von „${user.name}“ geändert`,
+      );
+    }
+  }
+
+  protected resetTwoFactor(user: User): void {
+    if (
+      confirm(
+        `Die Zwei-Faktor-Anmeldung von „${user.name}“ ausschalten, etwa weil das Handy verloren ist?`,
+      )
+    ) {
+      this.act(
+        this.http.post(`/api/users/${user.name}`, { twoFactor: false }),
+        `Zwei-Faktor-Anmeldung von „${user.name}“ ausgeschaltet`,
       );
     }
   }

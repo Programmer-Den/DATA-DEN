@@ -67,6 +67,12 @@
         Passwort
         <input #password name="password" type="password" autocomplete="current-password" required />
       </label>
+      @if (askCode()) {
+        <label>
+          Code aus der App (oder Wiederherstellungscode)
+          <input name="code" autocomplete="one-time-code" inputmode="numeric" required />
+        </label>
+      }
       @if (loginError(); as error) {
         <p class="error" role="alert">{{ error }}</p>
       }
