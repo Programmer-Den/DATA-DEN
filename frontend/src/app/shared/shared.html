@@ -1,7 +1,7 @@
 @if (opened(); as grant) {
   <p class="bar">
     <button type="button" (click)="opened.set(null)">← Geteilt mit mir</button>
-    <span class="hint">„{{ grant.name }}“ von {{ grant.owner }} · {{ rights(grant) }}</span>
+    <span class="hint">„{{ grant.name }}“ · {{ from(grant) }} · {{ rights(grant) }}</span>
   </p>
   <app-files [grant]="grant" />
 } @else {
@@ -33,7 +33,7 @@
                   </button>
                 }
               </td>
-              <td>{{ grant.owner }}</td>
+              <td>{{ from(grant) }}</td>
               <td>{{ rights(grant) }}</td>
               <td class="actions">
                 <button

@@ -67,6 +67,9 @@
       @case ('users') {
         <app-users />
       }
+      @case ('teams') {
+        <app-teams />
+      }
       @case ('search') {
         <app-search [query]="query()" (openFolder)="showFolder($event)" />
       }

@@ -1,0 +1,81 @@
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+<form class="row" (submit)="create($event, teamName)">
+  <label>
+    Neuer Team-Ordner
+    <input
+      #teamName
+      name="name"
+      placeholder="z. B. familie"
+      pattern="[a-z0-9][a-z0-9._\-]{0,31}"
+      title="Kleinbuchstaben, Ziffern, Punkt, Binde- und Unterstrich"
+    />
+  </label>
+  <button type="submit" [disabled]="busy()">Anlegen</button>
+</form>
+<p class="hint">
+  Ein Team-Ordner gehört keinem Konto. Mitglieder finden ihn unter „Geteilt mit mir“; wer ändern
+  darf, kann auch aus seinem Papierkorb wiederherstellen.
+</p>
+
+@if (teams(); as teams) {
+  @if (teams.length === 0) {
+    <p class="empty">Keine Team-Ordner.</p>
+  }
+  @for (team of teams; track team.name) {
+    <section class="team" [attr.aria-label]="'Team-Ordner ' + team.name">
+      <h2>
+        📁 {{ team.name }}
+        <button
+          type="button"
+          [disabled]="busy()"
+          [attr.aria-label]="team.name + ' löschen'"
+          (click)="remove(team)"
+        >
+          Löschen
+        </button>
+      </h2>
+      @if (team.members.length === 0) {
+        <p class="empty">Noch keine Mitglieder.</p>
+      } @else {
+        <ul>
+          @for (member of team.members; track member.to) {
+            <li>
+              {{ member.to }}: {{ rights(member) }}
+              <button
+                type="button"
+                [disabled]="busy()"
+                [attr.aria-label]="member.to + ' aus ' + team.name + ' entfernen'"
+                (click)="removeMember(team, member)"
+              >
+                Entfernen
+              </button>
+            </li>
+          }
+        </ul>
+      }
+      <form class="row" (submit)="setMember($event, team, to.value, write.checked)">
+        <label>
+          Konto
+          <select #to name="to">
+            @for (account of accounts(); track account) {
+              <option [value]="account">{{ account }}</option>
+            }
+          </select>
+        </label>
+        <label class="check">
+          <input #write name="write" type="checkbox" />
+          Darf ändern
+        </label>
+        <button type="submit" [disabled]="busy()">Hinzufügen oder ändern</button>
+      </form>
+    </section>
+  }
+} @else if (!error()) {
+  <p>Lade …</p>
+}

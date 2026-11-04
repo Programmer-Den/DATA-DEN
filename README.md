@@ -303,6 +303,19 @@ within a shared folder the usual `/api/files`, `/api/download`, `/api/view`,
 `/api/media`, `/api/thumb`, `/api/uploads`, `/api/folders`, `/api/move` and
 `/api/delete` with `?grant=<id>`, every path within the folder.
 
+Team folders (**Team-Ordner** tab, admins only) belong to no account: an
+admin creates one, adds accounts as members, each to read only or also to
+change, and removes them again. Members find it under **Geteilt mit mir** and
+use it like a shared folder; those who may change it can also restore from
+its own recycle bin, since no owner is there to do it. A team folder has no
+quota and lives in `.data-den-users/.teams/<name>`; deleting it moves that
+aside to `.data-den-users/.deleted/.team-<name>-<time>`. Members are told
+(event `share`) and every change is in the audit log (`team-*`, and the
+members' work as `@<name>:/path`). API: `GET /api/teams`,
+`POST /api/teams {"name"}`, `POST /api/teams/{name}/delete`,
+`POST /api/teams/{name}/members {"to", "write"}`,
+`POST /api/teams/{name}/members/delete {"to"}`.
+
 Every file gets a SHA-256 checksum, kept in `.data-den-sums/index.json` in
 the data directory (hidden like the other `.data-den-*` folders; deleting it
 is safe and only costs reading every file again). An upload's checksum is

@@ -99,6 +99,14 @@ func (f *Files) note(r *http.Request, action, target string) {
 	f.audit(r, f.account, action, target)
 }
 
+// noteBy records that user did action to target, such as an admin to a team
+// folder.
+func (f *Files) noteBy(r *http.Request, user, action, target string) {
+	if f.audit != nil {
+		f.audit(r, user, action, target)
+	}
+}
+
 // Open opens the data directory dir.
 func Open(dir string) (*Files, error) {
 	root, err := os.OpenRoot(dir)

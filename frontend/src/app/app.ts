@@ -16,6 +16,7 @@ import { Shared } from './shared/shared';
 import { StatusView } from './status/status';
 import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
+import { TeamsView } from './teams/teams';
 import { UsersView } from './users/users';
 
 type View =
@@ -29,6 +30,7 @@ type View =
   | 'account'
   | 'notifications'
   | 'users'
+  | 'teams'
   | 'search'
   | 'audit';
 
@@ -54,6 +56,7 @@ interface Health {
     ChecksView,
     AccountView,
     UsersView,
+    TeamsView,
     AuditView,
     NotificationsView,
   ],
@@ -83,7 +86,12 @@ export class App {
     { view: 'checks', name: 'Prüfung' },
     { view: 'account', name: 'Konto' },
     { view: 'notifications', name: 'Benachrichtigungen' },
-    ...(this.auth.admin() ? [{ view: 'users' as const, name: 'Benutzer' }] : []),
+    ...(this.auth.admin()
+      ? [
+          { view: 'users' as const, name: 'Benutzer' },
+          { view: 'teams' as const, name: 'Team-Ordner' },
+        ]
+      : []),
     { view: 'audit', name: 'Protokoll' },
   ]);
   protected readonly view = signal<View>('files');

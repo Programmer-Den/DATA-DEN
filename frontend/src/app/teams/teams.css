@@ -1,0 +1,54 @@
+.hint,
+.empty {
+  opacity: 0.7;
+}
+
+.done {
+  color: #2e7d32;
+}
+
+.error {
+  color: #c62828;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.row label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.team {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 0.5rem;
+}
+
+.team h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.team ul {
+  padding-left: 1.2rem;
+}
+
+.team li button {
+  margin-left: 0.5rem;
+}
