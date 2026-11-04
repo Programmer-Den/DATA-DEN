@@ -151,6 +151,9 @@ deleted for good, checked at start, every hour and whenever the bin is opened. A
 ("Existiert bereits"), a folder cannot move into itself, and the data
 directory itself and the `.data-den-*` folders cannot be changed.
 
+The search field above the tabs looks through everything at once and lists
+the hits with their folder, the searched words marked; a click opens a file
+in the viewer, or its folder in **Dateien** when the browser cannot show it.
 `GET /api/search?q=` searches the names and paths of all files and folders
 and the text of documents: TXT, MD, CSV and LOG (UTF-8 or Latin-1), PDF,
 Word (`.docx`) and OpenDocument (`.odt`). Every word must match; a match in

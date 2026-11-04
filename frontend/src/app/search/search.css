@@ -1,0 +1,62 @@
+.count,
+.hint {
+  opacity: 0.7;
+}
+
+.error {
+  color: #c62828;
+}
+
+.hits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hits li {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.icon {
+  font-size: 1.3rem;
+}
+
+.body {
+  min-width: 0;
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: LinkText;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.meta {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.snippet {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+mark {
+  border-radius: 0.15rem;
+  background: color-mix(in srgb, #fdd835 60%, transparent);
+  color: inherit;
+}
