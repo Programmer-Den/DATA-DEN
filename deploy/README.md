@@ -60,6 +60,17 @@ DATA_DEN_PASSWORD_HASH='$2a$12$...'
 DATA_DEN_TRUSTED_PROXY=192.168.1.20      # the Pi's address
 ```
 
+For notifications by email, add the mail server
+([README](../README.md#notifications)), for example:
+
+```bash
+DATA_DEN_SMTP_HOST=smtp.gmx.net
+DATA_DEN_SMTP_PORT=587
+DATA_DEN_SMTP_USERNAME=<address>
+DATA_DEN_SMTP_PASSWORD='<app password>'
+DATA_DEN_SMTP_FROM='DATA-DEN <address>'
+```
+
 The data directory, the port and the certificate are set in `compose.yaml`.
 The image's user must be able to write to the mirror:
 

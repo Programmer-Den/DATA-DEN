@@ -22,6 +22,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/audit"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/version"
@@ -145,6 +146,24 @@ func setTrashDays(data *files.Spaces) error {
 	return nil
 }
 
+// damagedMessage tells the admins about files a check found damaged in the
+// space of account.
+func damagedMessage(account string, paths []string) notify.Message {
+	const show = 20
+	body := fmt.Sprintf("Die Prüfung hat im Bereich von %s %d beschädigte Dateien gefunden:\n\n", account, len(paths))
+	if len(paths) == 1 {
+		body = fmt.Sprintf("Die Prüfung hat im Bereich von %s eine beschädigte Datei gefunden:\n\n", account)
+	}
+	for _, p := range paths[:min(len(paths), show)] {
+		body += p + "\n"
+	}
+	if len(paths) > show {
+		body += fmt.Sprintf("… und %d weitere\n", len(paths)-show)
+	}
+	body += "\nDetails und was zu tun ist stehen in DATA-DEN unter Prüfung."
+	return notify.Message{Kind: notify.KindCorrupt, Title: "Beschädigte Dateien gefunden", Body: body}
+}
+
 func run() error {
 	addr := listenAddr()
 	certFile, keyFile := tlsFiles()
@@ -160,13 +179,17 @@ func run() error {
 		Admin: auth.IsAdmin,
 	}
 	var auditLog *audit.Log
+	var notifier *notify.Notifier
 	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
 		Owner: os.Getenv("DATA_DEN_USERNAME"),
 		User:  auth.Username,
 		Quota: func(name string) int64 { return login.Quota(name) },
 		Audit: func(r *http.Request, user, action, target string) { auditLog.Record(r, user, action, target) },
+		Damaged: func(account string, paths []string) {
+			notifier.NotifySystem(damagedMessage(account, paths))
+		},
 	})
-	accounts := ""
+	accounts, notifyDir, eventsDir := "", "", ""
 	if err != nil {
 		slog.Warn("the data directory cannot be opened, so no files are served; set DATA_DEN_DATA_DIR", "dir", dataDir, "err", err)
 	} else {
@@ -176,8 +199,28 @@ func run() error {
 		}
 		accounts = accountsFile(dataDir)
 		auditCfg.File = filepath.Join(dataDir, ".data-den-audit", "audit.log")
+		notifyDir = filepath.Join(dataDir, ".data-den-notify")
+		eventsDir = filepath.Join(dataDir, ".data-den-events")
 	}
 	auditLog = audit.New(auditCfg)
+	mail, err := notify.MailFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	pushContact, err := notify.PushContact(os.Getenv("DATA_DEN_PUSH_CONTACT"), mail)
+	if err != nil {
+		return err
+	}
+	notifier, err = notify.New(notify.Config{
+		Dir:         notifyDir,
+		Mail:        mail,
+		PushContact: pushContact,
+		User:        auth.Username,
+		System:      func(name string) bool { return login.Admin(name) },
+	})
+	if err != nil {
+		return err
+	}
 	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
 	if err != nil {
 		return err
@@ -202,6 +245,7 @@ func run() error {
 			return data.Usage(name)
 		},
 		Removed: func(name string) error {
+			notifier.Forget(name)
 			if data == nil {
 				return nil
 			}
@@ -217,7 +261,7 @@ func run() error {
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
@@ -233,6 +277,8 @@ func run() error {
 		_ = srv.Shutdown(shutdown)
 	}()
 	if data != nil {
+		// The checks of the RAID, the free space and the VM's events.
+		go (&notify.Watcher{Report: stat.Report, EventsDir: eventsDir}).Run(ctx, notifier)
 		// The search indexes, built in the background so the server answers
 		// at once, and the recycle bins emptied on time.
 		data.Run(ctx)

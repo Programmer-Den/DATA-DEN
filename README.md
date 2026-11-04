@@ -44,6 +44,10 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
 | `DATA_DEN_TRASH_DAYS` | How many days, 1 to 3650, a deleted item stays in the recycle bin before it is deleted for good; default 30 |
 | `DATA_DEN_DISK_WARN_PERCENT` | Warn when less than this share of the disk is free, in percent; default `10` |
+| `DATA_DEN_SMTP_HOST`, `DATA_DEN_SMTP_PORT` | The mail server for [notifications](#notifications) by email, such as `smtp.gmx.net` and `587`; without a host no email is sent |
+| `DATA_DEN_SMTP_USERNAME`, `DATA_DEN_SMTP_PASSWORD` | The login at the mail server, often an app password |
+| `DATA_DEN_SMTP_FROM` | The sender, such as `DATA-DEN <nas@example.org>` |
+| `DATA_DEN_PUSH_CONTACT` | The contact the push services see, `mailto:` or `https://`; default the sender above. Without either, no push messages |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
@@ -252,6 +256,41 @@ the mirror is missing, every page shows a warning; below a quarter of that
 every 5 minutes while someone is logged in. Outside the VM there is no RAID,
 and the page says so. `/api/health` stays as it is, without login, for
 Docker's health check.
+
+## Notifications
+
+In the **Benachrichtigungen** tab each account chooses which events reach it
+by email and which by push message:
+
+| Event | Who | When |
+|---|---|---|
+| Disk or RAID failing | admins | A disk of the mirror fails or the RAID stops, and again when it is whole; a disk whose SMART values look bad, reported by the VM |
+| Backup failed | admins | The nightly backup reports a failure |
+| Low disk space | admins | The free space falls below `DATA_DEN_DISK_WARN_PERCENT`, and again below a quarter of it |
+| Damaged files | admins | A check finds files whose content changed on the disk |
+| Shared with me | everyone | Someone shares a file or folder with the account |
+
+Emails go out over the mail server from the `DATA_DEN_SMTP_` settings,
+always encrypted: port 465 speaks TLS from the start, any other port must
+offer STARTTLS. Push messages use Web Push: **Auf diesem Gerät einschalten**
+asks the browser for permission and registers `sw.js`, which shows them. It
+works in Chrome, Edge, Firefox and Safari; on an iPhone or iPad only when
+DATA-DEN was added to the home screen. The server signs push messages with
+a key it makes on its first start, `.data-den-notify/vapid.pem` in the data
+directory, next to the settings in `settings.json`; it only sends to the
+push services of Google, Mozilla, Apple and Microsoft. **Testnachricht
+senden** tries every way an account set up.
+
+The server checks the RAID and the free space every minute. The VM reports
+a failed backup or bad SMART values as a JSON file in `.data-den-events/` in
+the data directory, which the server sends and deletes:
+
+```json
+{"kind": "backup", "title": "Backup fehlgeschlagen", "body": "What went wrong"}
+```
+
+`kind` is `backup` or `disk`. The folder must belong to the image's user
+(65532), so the server can delete the files.
 
 ## Development
 

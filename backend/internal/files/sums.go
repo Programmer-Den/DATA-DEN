@@ -342,6 +342,13 @@ func (f *Files) check(ctx context.Context, all bool) {
 		f.saveSums()
 	}()
 
+	// The files found damaged in this check, told about at its end.
+	var damaged []string
+	defer func() {
+		if len(damaged) > 0 && f.damaged != nil {
+			f.damaged(f.account, damaged)
+		}
+	}()
 	saved := time.Now()
 	for _, file := range todo {
 		select {
@@ -355,7 +362,9 @@ func (f *Files) check(ctx context.Context, all bool) {
 			return
 		}
 		if err == nil {
-			f.record(file.name, sum, info)
+			if f.record(file.name, sum, info) {
+				damaged = append(damaged, "/"+file.name)
+			}
 		} else if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, errChanged) {
 			slog.Error("checking a file: it cannot be read", "path", "/"+file.name, "err", err)
 		}
@@ -370,7 +379,8 @@ func (f *Files) check(ctx context.Context, all bool) {
 }
 
 // record compares what was just read with the checksum kept for the file.
-func (f *Files) record(name, sum string, info fs.FileInfo) {
+// It returns true when it found the file damaged for the first time.
+func (f *Files) record(name, sum string, info fs.FileInfo) (newly bool) {
 	f.sums.mu.Lock()
 	defer f.sums.mu.Unlock()
 	now := time.Now().UTC()
@@ -389,9 +399,11 @@ func (f *Files) record(name, sum string, info fs.FileInfo) {
 		if s.Bad != sum {
 			slog.Error("file damaged: its content changed although its size and time did not", "path", "/"+name, "expected", s.SHA256, "actual", sum)
 			s.Found = now
+			newly = true
 		}
 		s.Checked, s.Bad = now, sum
 	}
+	return newly
 }
 
 func (f *Files) duplicates(w http.ResponseWriter, _ *http.Request) {

@@ -161,6 +161,13 @@ func (a *Auth) Quota(name string) int64 {
 	return account.Quota
 }
 
+// Admin reports whether name is an account with admin rights; the owner's
+// always has them.
+func (a *Auth) Admin(name string) bool {
+	account, ok := a.account(name)
+	return ok && account.Admin
+}
+
 // Require only lets requests with a valid session through.
 func (a *Auth) Require(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
