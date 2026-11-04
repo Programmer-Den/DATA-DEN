@@ -232,10 +232,21 @@ working; in the recycle bin, the link stops working until it is restored.
 Expired links answer like unknown ones and are removed. Each link is a file
 in `.data-den-shares/` in the data directory (hidden), with the password as
 a bcrypt hash. API: `GET /api/shares`,
-`POST /api/shares {"path", "days", "password"}`,
+`POST /api/shares {"path", "days", "password", "upload"}`,
 `POST /api/shares/delete {"id"}`; for the link `GET /api/s/{id}`,
 `POST /api/s/{id}/unlock {"password"}`, `GET /api/s/{id}/files?path=`,
 `GET /api/s/{id}/download?path=` and `GET /api/s/{id}/zip?path=`.
+
+An upload link ("Nur hochladen" when sharing a folder) works the other way:
+whoever has it can drop files into that folder, in chunks like an upload
+behind the login, but sees nothing of what is in it and cannot download.
+Only file names are taken, no subfolders; a name that is taken gets the next
+free one, such as `a (1).jpg`, so nothing is overwritten. The files count
+against the quota of the account that made the link, and each one is in the
+audit log as `share-upload`. Expiry and password work as for other links.
+API: `POST /api/s/{id}/uploads {"path": "/a.jpg", "size"}`, then
+`PUT /api/s/{id}/uploads/{upload}` and `GET /api/s/{id}/uploads/{upload}`
+as for `/api/uploads`.
 
 Every file gets a SHA-256 checksum, kept in `.data-den-sums/index.json` in
 the data directory (hidden like the other `.data-den-*` folders; deleting it

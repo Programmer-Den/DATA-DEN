@@ -90,6 +90,32 @@ describe('PublicShare', () => {
     expect(page().querySelector('a[download]')?.textContent).toContain('notizen.txt');
   });
 
+  it('takes files through an upload link without showing the folder', async () => {
+    http
+      .expectOne(base)
+      .flush({ name: 'Eingang', dir: true, upload: true, expires: '2026-11-08T10:00:00Z' });
+    await fixture.whenStable();
+    // No listing is asked for.
+    http.expectNone(base + '/files?path=/');
+    expect(page().textContent).toContain('„Eingang“');
+    const input = page().querySelector<HTMLInputElement>('input[type=file]')!;
+    const file = new File(['abc'], 'a.jpg');
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.dispatchEvent(new Event('change'));
+    const start = http.expectOne(base + '/uploads');
+    expect(start.request.body).toEqual({ path: '/a.jpg', size: 3 });
+    start.flush({ id: 'u1', offset: 0 });
+    await new Promise((resolve) => setTimeout(resolve));
+    const chunk = http.expectOne(base + '/uploads/u1');
+    expect(chunk.request.method).toBe('PUT');
+    chunk.flush({ offset: 3, name: 'a (1).jpg' });
+    await new Promise((resolve) => setTimeout(resolve));
+    fixture.detectChanges();
+    expect(page().textContent).toContain('fertig');
+    expect(page().textContent).toContain('gespeichert als „a (1).jpg“');
+    expect(page().querySelector('a[download]')).toBeNull();
+  });
+
   it('says when the link is gone', async () => {
     http
       .expectOne(base)

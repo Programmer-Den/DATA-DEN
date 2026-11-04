@@ -59,3 +59,9 @@ td {
   flex: 1 1 20rem;
   min-width: 0;
 }
+
+.share-form label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}

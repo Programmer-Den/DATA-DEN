@@ -23,6 +23,8 @@ export interface UploadItem {
   duplicates?: string[];
   /** True when the upload replaced a file, whose old content is a version now. */
   replaced?: boolean;
+  /** The name an upload link saved the file as, when its own was taken. */
+  saved?: string;
 }
 
 /** Uploads at the same time. */
@@ -45,12 +47,15 @@ export class Uploader {
 
   readonly items = signal<UploadItem[]>([]);
 
-  /** Uploads all jobs; resolves when every one has finished or failed. */
-  async upload(jobs: Job[]): Promise<void> {
+  /**
+   * Uploads all jobs to endpoint, the uploads behind the login or those of
+   * an upload link; resolves when every one has finished or failed.
+   */
+  async upload(jobs: Job[], endpoint = '/api/uploads'): Promise<void> {
     const queue = jobs.map((job) => ({ job, id: this.add(job) }));
     const worker = async () => {
       for (let next = queue.shift(); next; next = queue.shift()) {
-        await this.uploadOne(next.id, next.job);
+        await this.uploadOne(next.id, next.job, endpoint);
       }
     };
     await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, worker));
@@ -76,7 +81,7 @@ export class Uploader {
     });
     const worker = async () => {
       for (let next = queue.shift(); next; next = queue.shift()) {
-        await this.uploadOne(next.id, next.job, true);
+        await this.uploadOne(next.id, next.job, '/api/uploads', true);
       }
     };
     await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, worker));
@@ -103,12 +108,12 @@ export class Uploader {
     );
   }
 
-  private async uploadOne(id: number, job: Job, replace = false): Promise<void> {
+  private async uploadOne(id: number, job: Job, endpoint: string, replace = false): Promise<void> {
     this.set(id, { status: 'lädt hoch' });
     let starting = true;
     try {
       const started = await firstValueFrom(
-        this.http.post<{ id: string; offset: number }>('/api/uploads', {
+        this.http.post<{ id: string; offset: number }>(endpoint, {
           path: job.path,
           size: job.file.size,
           ...(replace ? { replace } : {}),
@@ -118,11 +123,13 @@ export class Uploader {
       let offset = started.offset;
       let failures = 0;
       let duplicates: string[] | undefined;
+      let saved: string | undefined;
       while (offset < job.file.size) {
         try {
-          const answer = await this.sendChunk(id, started.id, job.file, offset);
+          const answer = await this.sendChunk(id, `${endpoint}/${started.id}`, job.file, offset);
           offset = answer.offset;
           duplicates = answer.duplicates;
+          saved = answer.name;
           failures = 0;
         } catch (err) {
           if (++failures >= ATTEMPTS) {
@@ -130,7 +137,7 @@ export class Uploader {
           }
           // Asks where the server stands and goes on from there.
           const state = await firstValueFrom(
-            this.http.get<{ offset: number }>(`/api/uploads/${started.id}`),
+            this.http.get<{ offset: number }>(`${endpoint}/${started.id}`),
           );
           offset = state.offset;
         }
@@ -140,9 +147,16 @@ export class Uploader {
         status: 'fertig',
         ...(duplicates?.length ? { duplicates } : {}),
         ...(replace ? { replaced: true } : {}),
+        ...(saved && saved !== job.file.name ? { saved } : {}),
       });
     } catch (err) {
-      if (starting && !replace && err instanceof HttpErrorResponse && err.status === 409) {
+      if (
+        starting &&
+        !replace &&
+        endpoint === '/api/uploads' &&
+        err instanceof HttpErrorResponse &&
+        err.status === 409
+      ) {
         // The file exists already: the page asks whether to replace it.
         this.existing.set(id, job);
         this.set(id, { status: 'existiert schon' });
@@ -153,14 +167,15 @@ export class Uploader {
   }
 
   /**
-   * Sends the chunk at offset and returns the server's answer: its new
-   * offset and, after the last chunk, the files with the same content.
+   * Sends the chunk at offset to url and returns the server's answer: its
+   * new offset and, after the last chunk, the files with the same content
+   * (behind the login) or the name it was saved as (through an upload link).
    */
-  private async sendChunk(id: number, uploadId: string, file: File, offset: number) {
+  private async sendChunk(id: number, url: string, file: File, offset: number) {
     const chunk = file.slice(offset, offset + CHUNK_SIZE);
     const response = await lastValueFrom(
       this.http
-        .put<{ offset: number; duplicates?: string[] }>(`/api/uploads/${uploadId}`, chunk, {
+        .put<{ offset: number; duplicates?: string[]; name?: string }>(url, chunk, {
           headers: { 'Upload-Offset': String(offset), 'Content-Type': 'application/octet-stream' },
           observe: 'events',
           reportProgress: true,

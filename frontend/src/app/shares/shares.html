@@ -18,6 +18,7 @@
           <th scope="col">Name</th>
           <th scope="col">Ort</th>
           <th scope="col">Gültig bis</th>
+          <th scope="col">Art</th>
           <th scope="col">Passwort</th>
           <th scope="col"><span class="visually-hidden">Aktionen</span></th>
         </tr>
@@ -33,6 +34,7 @@
             </td>
             <td>{{ share.path }}</td>
             <td>{{ date(share.expires) }}</td>
+            <td>{{ share.upload ? 'Hochladen' : 'Ansehen' }}</td>
             <td>{{ share.password ? 'ja' : 'nein' }}</td>
             <td class="actions">
               <button type="button" (click)="copy(share)">Link kopieren</button>

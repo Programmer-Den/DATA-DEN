@@ -45,7 +45,12 @@
   }
 
   @if (sharing(); as target) {
-    <app-share-form [path]="target.path" [name]="target.name" (closed)="sharing.set(null)" />
+    <app-share-form
+      [path]="target.path"
+      [name]="target.name"
+      [dir]="target.dir"
+      (closed)="sharing.set(null)"
+    />
   }
 
   @if (versions(); as file) {

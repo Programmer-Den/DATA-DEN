@@ -35,8 +35,11 @@ const (
 )
 
 type upload struct {
-	mu     sync.Mutex
-	path   string // within the root, such as "Fotos/a.jpg"
+	mu   sync.Mutex
+	path string // within the root, such as "Fotos/a.jpg"
+	// share is the upload link this upload came through, "" for one behind
+	// the login.
+	share  string
 	size   int64
 	offset int64
 	// replace allows overwriting a file, which is kept as a version.
@@ -61,19 +64,8 @@ func (f *Files) registerUploads(mux *http.ServeMux, require func(http.HandlerFun
 }
 
 func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
-	// A JSON body cannot be sent by a plain HTML form on another site.
-	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		writeError(w, http.StatusUnsupportedMediaType, "JSON erwartet")
-		return
-	}
-	var body struct {
-		Path    string `json:"path"`
-		Size    int64  `json:"size"`
-		Replace bool   `json:"replace"`
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, 8192)
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Size < 0 {
-		writeError(w, http.StatusBadRequest, "Ungültige Anfrage")
+	body, ok := readUploadStart(w, r)
+	if !ok {
 		return
 	}
 	name, ok := uploadName(body.Path)
@@ -85,11 +77,47 @@ func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "Datei existiert bereits")
 		return
 	}
-	if ok, err := f.fits(body.Size); err != nil {
+	f.beginUpload(w, r, &upload{path: name, size: body.Size, replace: body.Replace, hash: sha256.New()})
+}
+
+// uploadStart is the body of a request that starts an upload.
+type uploadStart struct {
+	// Path is where the file goes, such as "/Fotos/a.jpg".
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+	// Replace allows overwriting a file, which is kept as a version.
+	Replace bool `json:"replace"`
+}
+
+// readUploadStart reads the body of a request that starts an upload. It
+// answers the request itself and returns false when the body is not
+// acceptable.
+func readUploadStart(w http.ResponseWriter, r *http.Request) (uploadStart, bool) {
+	var body uploadStart
+	// A JSON body cannot be sent by a plain HTML form on another site.
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		writeError(w, http.StatusUnsupportedMediaType, "JSON erwartet")
+		return body, false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8192)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Size < 0 {
+		writeError(w, http.StatusBadRequest, "Ungültige Anfrage")
+		return body, false
+	}
+	return body, true
+}
+
+// beginUpload checks the quota and starts the upload u, answering with its id.
+func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
+	if ok, err := f.fits(u.size); err != nil {
 		f.diskError(w, "counting the usage", err)
 		return
 	} else if !ok {
-		writeError(w, http.StatusInsufficientStorage, "Dein Speicherplatz ist voll")
+		message := "Dein Speicherplatz ist voll"
+		if u.share != "" {
+			message = "Kein Speicherplatz mehr frei"
+		}
+		writeError(w, http.StatusInsufficientStorage, message)
 		return
 	}
 
@@ -109,12 +137,11 @@ func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = chunks.Close()
 
-	u := &upload{path: name, size: body.Size, replace: body.Replace, hash: sha256.New()}
 	f.uploads.mu.Lock()
 	f.uploads.byID[id] = u
 	f.uploads.mu.Unlock()
 
-	if body.Size == 0 {
+	if u.size == 0 {
 		if _, ok := f.finish(w, id, u); !ok {
 			return
 		}
@@ -123,9 +150,26 @@ func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "offset": u.offset})
 }
 
+// noteUpload records a finished upload in the audit log.
+func (f *Files) noteUpload(r *http.Request, u *upload) {
+	action := "upload"
+	switch {
+	case u.share != "":
+		action = "share-upload"
+	case u.replace:
+		action = "replace"
+	}
+	f.note(r, action, "/"+u.path)
+}
+
 func (f *Files) putChunk(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	u := f.upload(id)
+	f.receiveChunk(w, r, r.PathValue("id"), "")
+}
+
+// receiveChunk adds the chunk in r to the upload id, which belongs to the
+// upload link share ("" for an upload behind the login).
+func (f *Files) receiveChunk(w http.ResponseWriter, r *http.Request, id, share string) {
+	u := f.upload(id, share)
 	if u == nil {
 		writeError(w, http.StatusNotFound, "Upload nicht gefunden")
 		return
@@ -174,6 +218,11 @@ func (f *Files) putChunk(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.noteUpload(r, u)
+		if share != "" {
+			// Someone without a login learns nothing about the other files.
+			writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset, "name": path.Base(u.path)})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset, "duplicates": duplicates})
 		return
 	}
@@ -181,7 +230,11 @@ func (f *Files) putChunk(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *Files) uploadState(w http.ResponseWriter, r *http.Request) {
-	u := f.upload(r.PathValue("id"))
+	f.writeUploadState(w, r.PathValue("id"), "")
+}
+
+func (f *Files) writeUploadState(w http.ResponseWriter, id, share string) {
+	u := f.upload(id, share)
 	if u == nil {
 		writeError(w, http.StatusNotFound, "Upload nicht gefunden")
 		return
@@ -213,7 +266,17 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, b
 	if u.replace {
 		link = f.replaceFile
 	}
-	if err := link(chunks, u.path); err != nil {
+	err := link(chunks, u.path)
+	// An upload link never refuses a file: it takes the next free name.
+	for u.share != "" && errors.Is(err, fs.ErrExist) {
+		free, ok := f.freeName(u.path)
+		if !ok {
+			break
+		}
+		u.path = free
+		err = f.root.Link(chunks, u.path)
+	}
+	if err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			writeError(w, http.StatusConflict, "Datei existiert bereits")
 			return nil, false
@@ -231,19 +294,34 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, b
 	return f.uploaded(u.path, info, hex.EncodeToString(u.hash.Sum(nil))), true
 }
 
-// noteUpload records a finished upload in the audit log.
-func (f *Files) noteUpload(r *http.Request, u *upload) {
-	action := "upload"
-	if u.replace {
-		action = "replace"
-	}
-	f.note(r, action, "/"+u.path)
-}
-
-func (f *Files) upload(id string) *upload {
+// upload is the unfinished upload id, if it belongs to the upload link share
+// ("" for one behind the login).
+func (f *Files) upload(id, share string) *upload {
 	f.uploads.mu.Lock()
 	defer f.uploads.mu.Unlock()
-	return f.uploads.byID[id]
+	u := f.uploads.byID[id]
+	if u == nil || u.share != share {
+		return nil
+	}
+	return u
+}
+
+// freeName is name, or when that is taken the first free one of
+// "a (1).jpg", "a (2).jpg" and so on.
+func (f *Files) freeName(name string) (string, bool) {
+	if _, err := f.root.Lstat(name); errors.Is(err, fs.ErrNotExist) {
+		return name, true
+	}
+	dir, file := path.Split(name)
+	ext := path.Ext(file)
+	stem := strings.TrimSuffix(file, ext)
+	for i := 1; i <= 999; i++ {
+		try := dir + stem + " (" + strconv.Itoa(i) + ")" + ext
+		if _, err := f.root.Lstat(try); errors.Is(err, fs.ErrNotExist) {
+			return try, true
+		}
+	}
+	return "", false
 }
 
 func (f *Files) diskError(w http.ResponseWriter, what string, err error) {
