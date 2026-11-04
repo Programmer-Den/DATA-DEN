@@ -27,6 +27,15 @@ updates:
         patterns:
           - "@angular/*"
           - "@angular-devkit/*"
+  - package-ecosystem: gradle
+    directory: /android
+    labels: [dependencies, ui]
+    schedule:
+      interval: weekly
+    groups:
+      kotlin:
+        patterns:
+          - "org.jetbrains.kotlin*"
   - package-ecosystem: docker
     directory: /
     labels: [dependencies, install]

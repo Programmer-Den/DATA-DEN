@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DATA-DEN</string>
+    <string name="intro">Lädt neue Fotos und Videos dieses Handys im Hintergrund auf deinen DATA-DEN hoch. Lege dafür im Web-Interface unter Konto ein App-Passwort an.</string>
+    <string name="server">Adresse des Servers</string>
+    <string name="server_hint">nas.example.org</string>
+    <string name="token">App-Passwort</string>
+    <string name="token_hint">dd_…</string>
+    <string name="token_saved">Gespeichert. Leer lassen, um es zu behalten.</string>
+    <string name="folder">Zielordner</string>
+    <string name="folder_hint">/Fotos/Handy</string>
+    <string name="folder_note">Darin landen die Dateien nach Jahr und Monat der Aufnahme, zum Beispiel /Fotos/Handy/2026/11.</string>
+    <string name="videos">Auch Videos hochladen</string>
+    <string name="camera_only">Nur Kamera-Aufnahmen (Ordner DCIM)</string>
+    <string name="wifi_only">Nur im WLAN</string>
+    <string name="charging_only">Nur beim Laden</string>
+    <string name="existing">Auch Fotos hochladen, die schon auf dem Handy sind</string>
+    <string name="save">Verbinden und speichern</string>
+    <string name="upload_now">Jetzt hochladen</string>
+    <string name="sign_out">Abmelden</string>
+    <string name="checking">Prüfe die Verbindung …</string>
+    <string name="connected">Verbunden als %1$s. Neue Fotos werden automatisch hochgeladen.</string>
+    <string name="not_connected">Noch nicht verbunden.</string>
+    <string name="signed_out">Abgemeldet. Es wird nichts mehr hochgeladen.</string>
+    <string name="token_missing">Bitte das App-Passwort eingeben</string>
+    <string name="folder_invalid">Ungültiger Zielordner</string>
+    <string name="error">Fehler: %1$s</string>
+    <string name="permission_needed">Ohne Zugriff auf Fotos und Videos kann die App nichts hochladen.</string>
+    <string name="status_uploaded">Bisher hochgeladen: %1$d</string>
+    <string name="status_last_run">Zuletzt geprüft: %1$s</string>
+    <string name="status_never">Noch nie geprüft</string>
+    <string name="channel_progress">Upload</string>
+    <string name="channel_problems">Probleme</string>
+    <string name="notify_scanning">Suche neue Fotos …</string>
+    <string name="notify_uploading">Lade %1$d von %2$d hoch: %3$s</string>
+    <string name="problem_title">DATA-DEN: Upload angehalten</string>
+    <string name="problem_unauthorized">Das App-Passwort gilt nicht mehr. Bitte in der App ein neues eintragen.</string>
+    <string name="problem_quota">Dein Speicherplatz auf dem DATA-DEN ist voll.</string>
+    <string name="problem_permission">Die App darf nicht mehr auf Fotos zugreifen. Bitte in der App erneut erlauben.</string>
+</resources>
