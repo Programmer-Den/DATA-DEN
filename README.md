@@ -107,11 +107,10 @@ second factor. Each account creates app passwords for them in the **Konto**
 tab, with a name, optionally read-only and with an end date, confirmed with
 the password. The token (`dd_` and 43 characters) is shown once; the server
 keeps only its SHA-256 hash. Send it as a header, or with Basic auth as the
-username and the token:
+password next to the account's username (curl asks for it with `-u <username>`):
 
 ```bash
-curl -H "Authorization: Bearer dd_..." https://<host>/api/files
-curl -u chriszly:dd_... https://<host>/api/files
+curl -H "Authorization: Bearer $DATA_DEN_TOKEN" https://<host>/api/files
 ```
 
 It works for everything a login can do with files, but not for the
