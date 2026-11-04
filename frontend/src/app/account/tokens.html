@@ -1,0 +1,73 @@
+<section>
+  <h2>App-Passwörter</h2>
+  <p class="hint">
+    Für Skripte, Apps und das Netzlaufwerk (WebDAV): statt Passwort und Code aus der App. Jedes
+    lässt sich einzeln widerrufen. Es geht nicht für die Einstellungen des Kontos.
+  </p>
+  @if (created(); as created) {
+    <div class="recovery">
+      <p>
+        <strong>App-Passwort „{{ created.name }}“, jetzt kopieren!</strong> Es wird nur dieses eine
+        Mal angezeigt. Als Benutzername den eigenen nehmen, oder als Kopfzeile
+        <code>Authorization: Bearer …</code> senden.
+      </p>
+      <code class="secret">{{ created.token }}</code>
+    </div>
+  }
+  @if (tokens(); as tokens) {
+    @if (tokens.length > 0) {
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Rechte</th>
+            <th>Angelegt</th>
+            <th>Läuft ab</th>
+            <th>Zuletzt genutzt</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (token of tokens; track token.id) {
+            <tr>
+              <td>{{ token.name }}</td>
+              <td>{{ token.readOnly ? 'nur lesen' : 'lesen und schreiben' }}</td>
+              <td>{{ formatDay(token.created) }}</td>
+              <td>{{ token.expires ? formatDay(token.expires) : 'nie' }}</td>
+              <td>{{ formatDay(token.lastUsed) }}</td>
+              <td>
+                <button type="button" [disabled]="busy()" (click)="revoke(token)">
+                  Widerrufen
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <p class="hint">Noch keine.</p>
+    }
+  }
+  <form #form class="password new-token" (submit)="create($event, form)">
+    <label>
+      Name, etwa „Backup-Skript“ oder „Laptop“
+      <input name="name" maxlength="64" required />
+    </label>
+    <label class="check">
+      <input name="readOnly" type="checkbox" />
+      Nur lesen
+    </label>
+    <label>
+      Gültig für Tage (leer: bis zum Widerruf)
+      <input name="expiresDays" type="number" min="1" max="3650" inputmode="numeric" />
+    </label>
+    <label>
+      Eigenes Passwort zur Bestätigung
+      <input name="password" type="password" autocomplete="current-password" required />
+    </label>
+    <button type="submit" [disabled]="busy()">App-Passwort anlegen</button>
+  </form>
+  @if (error(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+</section>

@@ -100,6 +100,27 @@ sudo docker compose start data-den
 The secrets are stored in the accounts file, the recovery codes only as
 SHA-256 hashes.
 
+### App passwords
+
+Scripts, apps and network drives should not use the account's password and
+second factor. Each account creates app passwords for them in the **Konto**
+tab, with a name, optionally read-only and with an end date, confirmed with
+the password. The token (`dd_` and 43 characters) is shown once; the server
+keeps only its SHA-256 hash. Send it as a header, or with Basic auth as the
+username and the token:
+
+```bash
+curl -H "Authorization: Bearer dd_..." https://<host>/api/files
+curl -u chriszly:dd_... https://<host>/api/files
+```
+
+It works for everything a login can do with files, but not for the
+account's settings (password, 2FA, app passwords) or for managing accounts.
+A read-only one only reads (GET and HEAD). Each can be revoked in the
+**Konto** tab; an admin can revoke all of an account's in the **Benutzer**
+tab, and deleting an account revokes its own. Wrong tokens count as failed
+logins.
+
 ### Audit log
 
 The **Protokoll** tab shows who did what, when and from which address:
