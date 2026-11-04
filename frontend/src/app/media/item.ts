@@ -21,6 +21,8 @@ export interface Item {
   place?: string;
   /** The shared folder the file is in, when it is another account's. */
   grant?: string;
+  /** True when the editor can open the file (/api/text). */
+  text?: boolean;
 }
 
 /** When a photo was taken, or else when the file was last changed. */

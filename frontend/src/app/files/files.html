@@ -29,8 +29,22 @@
           <button type="submit" [disabled]="busy()">Anlegen</button>
           <button type="button" (click)="creating.set(false)">Abbrechen</button>
         </form>
+      } @else if (writing()) {
+        <form class="inline" (submit)="createText($event, textName.value)">
+          <input
+            #textName
+            aria-label="Name der neuen Textdatei"
+            placeholder="Name, z. B. notizen.md"
+            (keydown.escape)="writing.set(false)"
+          />
+          <button type="submit" [disabled]="busy()">Anlegen</button>
+          <button type="button" (click)="writing.set(false)">Abbrechen</button>
+        </form>
       } @else {
         <button type="button" (click)="creating.set(true)">Neuer Ordner</button>
+        @if (!grant()) {
+          <button type="button" (click)="writing.set(true)">Neue Textdatei</button>
+        }
       }
     </div>
   }
@@ -263,6 +277,11 @@
     [items]="files()"
     [index]="viewing()!"
     (indexChange)="viewing.set($event)"
-    (closed)="viewing.set(null)"
+    (changed)="viewerChanged()"
+    (closed)="closeViewer()"
   />
+}
+
+@if (editing(); as path) {
+  <app-editor [path]="path" [fresh]="true" (closed)="closeEditor()" />
 }

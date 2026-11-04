@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Entry, Files } from './files';
+import { Entry, Files, textName } from './files';
 
 const photos: Entry = { name: 'Fotos', dir: true, size: 0, modified: '2026-10-25T10:00:00Z' };
 const notes: Entry = {
@@ -100,6 +100,15 @@ describe('Files', () => {
   });
 });
 
+describe('textName', () => {
+  it('makes a Markdown file unless a text extension is given', () => {
+    expect(textName(' Einkauf ')).toBe('Einkauf.md');
+    expect(textName('liste.TXT')).toBe('liste.TXT');
+    expect(textName('daten.csv')).toBe('daten.csv');
+    expect(textName('  ')).toBe('');
+  });
+});
+
 describe('Files management', () => {
   let http: HttpTestingController;
   let fixture: ComponentFixture<Files>;
@@ -151,6 +160,25 @@ describe('Files management', () => {
     await fixture.whenStable();
     await reload('/');
     expect(page().querySelector('input[aria-label="Name des neuen Ordners"]')).toBeNull();
+  });
+
+  it('creates a text file and opens it in the editor', async () => {
+    [...page().querySelectorAll('button')]
+      .find((b) => b.textContent?.includes('Neue Textdatei'))!
+      .click();
+    await fixture.whenStable();
+    await submit(page().querySelector('input[aria-label="Name der neuen Textdatei"]')!, 'Einkauf');
+    const req = http.expectOne('/api/text');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ path: '/Einkauf.md', content: '', version: '' });
+    req.flush({ path: '/Einkauf.md', version: 'v1' });
+    await fixture.whenStable();
+    await reload('/');
+    http
+      .expectOne('/api/text?path=/Einkauf.md')
+      .flush({ path: '/Einkauf.md', content: '', version: 'v1' });
+    await fixture.whenStable();
+    expect(page().querySelector('app-editor textarea')).not.toBeNull();
   });
 
   it('renames a file', async () => {

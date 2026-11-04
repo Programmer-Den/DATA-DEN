@@ -6,6 +6,9 @@
       @if (shape() === 'pdf') {
         <a class="button" [href]="url()" target="_blank" rel="noopener">In neuem Tab öffnen</a>
       }
+      @if (item.text && !item.grant) {
+        <button type="button" class="button" (click)="editing.set(true)">Bearbeiten</button>
+      }
       <a class="button" [href]="download()" download>Herunterladen</a>
       <button type="button" class="button" (click)="closed.emit()">Schließen</button>
     </header>
@@ -39,10 +42,12 @@
               <iframe [src]="frameUrl()" [title]="item.name"></iframe>
             }
             @case ('text') {
-              @if (text(); as text) {
-                <pre>{{ text }}</pre>
-              } @else {
+              @if (text() === null) {
                 <p class="message">Lade …</p>
+              } @else if (markdown()) {
+                <article class="markdown" [innerHTML]="html()"></article>
+              } @else {
+                <pre>{{ text() }}</pre>
               }
             }
             @default {
@@ -64,3 +69,7 @@
     </div>
   }
 </div>
+
+@if (editing() && item(); as item) {
+  <app-editor [path]="item.path" (saved)="edited()" (closed)="stopEditing()" />
+}

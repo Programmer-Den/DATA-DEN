@@ -6,6 +6,7 @@ import { Item, Kind, downloadUrl } from '../media/item';
 import { Viewer } from '../media/viewer';
 import { Grant } from '../shares/grant';
 import { GrantForm } from '../shares/grant-form';
+import { Editor } from '../editor/editor';
 import { ShareForm } from '../shares/share-form';
 import { StartFolder } from './start-folder';
 import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
@@ -18,6 +19,7 @@ export interface Entry {
   modified: string;
   kind?: Kind;
   preview?: boolean;
+  text?: boolean;
 }
 
 interface Listing {
@@ -39,7 +41,7 @@ const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 
  */
 @Component({
   selector: 'app-files',
-  imports: [Viewer, ShareForm, GrantForm, Versions],
+  imports: [Viewer, Editor, ShareForm, GrantForm, Versions],
   templateUrl: './files.html',
   styleUrl: './files.css',
 })
@@ -77,6 +79,12 @@ export class Files implements OnInit {
   protected readonly dragging = signal(false);
   /** True while the name of a new folder is asked for. */
   protected readonly creating = signal(false);
+  /** True while the name of a new text file is asked for. */
+  protected readonly writing = signal(false);
+  /** The new text file open in the editor, or null. */
+  protected readonly editing = signal<string | null>(null);
+  /** True when the viewer saved a file, so the folder is loaded again. */
+  private changed = false;
   /** The entry being renamed, by name, or null. */
   protected readonly renaming = signal<string | null>(null);
   /** The file or folder being moved: its path stays while other folders open. */
@@ -140,6 +148,47 @@ export class Files implements OnInit {
       return;
     }
     this.change('/api/folders', { path: this.childPath(name) }, () => this.creating.set(false));
+  }
+
+  /** Makes an empty text file and opens it in the editor. */
+  protected createText(event: Event, name: string): void {
+    event.preventDefault();
+    name = textName(name);
+    if (!name) {
+      return;
+    }
+    const path = this.childPath(name);
+    this.busy.set(true);
+    this.error.set(null);
+    this.http.put('/api/text', { path, content: '', version: '' }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.writing.set(false);
+        this.open(this.path());
+        this.editing.set(path);
+      },
+      error: (err: unknown) => {
+        this.busy.set(false);
+        this.error.set(errorMessage(err));
+      },
+    });
+  }
+
+  protected closeEditor(): void {
+    this.editing.set(null);
+    this.open(this.path());
+  }
+
+  protected closeViewer(): void {
+    this.viewing.set(null);
+    if (this.changed) {
+      this.changed = false;
+      this.open(this.path());
+    }
+  }
+
+  protected viewerChanged(): void {
+    this.changed = true;
   }
 
   protected rename(event: Event, entry: Entry, name: string): void {
@@ -273,4 +322,17 @@ export class Files implements OnInit {
       this.open(folder);
     }
   }
+}
+
+/** The extensions the editor opens. */
+const TEXT_EXTENSIONS = ['.txt', '.md', '.csv', '.log'];
+
+/** The name of a new text file: Markdown unless it names a text extension. */
+export function textName(name: string): string {
+  name = name.trim();
+  if (!name) {
+    return '';
+  }
+  const lower = name.toLowerCase();
+  return TEXT_EXTENSIONS.some((ext) => lower.endsWith(ext)) ? name : name + '.md';
 }
