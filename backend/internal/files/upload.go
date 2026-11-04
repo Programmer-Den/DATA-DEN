@@ -214,6 +214,7 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, b
 		return nil, false
 	}
 	f.addUsage(u.size)
+	f.noteUse(u.path)
 	slog.Info("uploaded", "path", "/"+u.path, "size", u.size)
 	info, err := f.root.Stat(u.path)
 	if err != nil {

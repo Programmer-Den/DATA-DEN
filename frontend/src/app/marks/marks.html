@@ -1,0 +1,124 @@
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+<ng-template #row let-item let-list="list">
+  <span class="icon" aria-hidden="true">{{ item.dir ? '📁' : '📄' }}</span>
+  <div class="body">
+    @if (item.dir || item.preview) {
+      <button type="button" class="link name" (click)="open(item, list)">{{ item.name }}</button>
+    } @else {
+      <a class="name" [href]="downloadUrl(item.path)" download>{{ item.name }}</a>
+    }
+    <div class="meta">
+      <button type="button" class="link" (click)="openFolder.emit(folder(item))">
+        {{ folder(item) }}
+      </button>
+      @if (!item.dir) {
+        · {{ formatSize(item.size) }}
+      }
+      @if (item.used) {
+        · {{ used(item) }}
+      }
+    </div>
+    @if (item.tags?.length) {
+      <div class="tags">
+        @for (tag of item.tags; track tag) {
+          <button type="button" class="tag" (click)="showTag(tag)">{{ tag }}</button>
+        }
+      </div>
+    }
+  </div>
+</ng-template>
+
+@if (marks(); as marks) {
+  @if (empty()) {
+    <p class="hint">
+      Noch nichts markiert. In der Dateiansicht setzt ☆ einen Favoriten und 🏷 Tags; zuletzt
+      geöffnete, heruntergeladene und hochgeladene Dateien erscheinen hier von selbst.
+    </p>
+  }
+
+  @if (marks.tags.length) {
+    <h2>Tags</h2>
+    <div class="tags">
+      @for (tag of marks.tags; track tag.name) {
+        <button
+          type="button"
+          class="tag"
+          [class.active]="tagged()?.tag === tag.name"
+          [attr.aria-pressed]="tagged()?.tag === tag.name"
+          (click)="showTag(tag.name)"
+        >
+          {{ tag.name }} <span class="count">{{ tag.count }}</span>
+        </button>
+      }
+    </div>
+  }
+
+  @if (tagged(); as tagged) {
+    <section class="tagged" aria-label="Dateien mit dem Tag">
+      <p class="heading">
+        Mit dem Tag „{{ tagged.tag }}“
+        <button type="button" class="link" (click)="closeTag()">Schließen</button>
+      </p>
+      @if (tagged.items.length === 0) {
+        <p class="hint">Keine Dateien mit diesem Tag.</p>
+      }
+      <ul class="items">
+        @for (item of tagged.items; track item.path) {
+          <li>
+            <ng-container
+              *ngTemplateOutlet="row; context: { $implicit: item, list: tagged.items }"
+            />
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  @if (marks.favourites.length) {
+    <h2>Favoriten</h2>
+    <ul class="items">
+      @for (item of marks.favourites; track item.path) {
+        <li>
+          <ng-container
+            *ngTemplateOutlet="row; context: { $implicit: item, list: marks.favourites }"
+          />
+          <button
+            type="button"
+            class="star"
+            title="Kein Favorit mehr"
+            [attr.aria-label]="item.name + ' kein Favorit mehr'"
+            [disabled]="busy()"
+            (click)="unfavourite(item)"
+          >
+            ★
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (marks.recent.length) {
+    <h2>Zuletzt verwendet</h2>
+    <ul class="items">
+      @for (item of marks.recent; track item.path) {
+        <li>
+          <ng-container *ngTemplateOutlet="row; context: { $implicit: item, list: marks.recent }" />
+        </li>
+      }
+    </ul>
+  }
+} @else if (!error()) {
+  <p>Lade …</p>
+}
+
+@if (viewing() !== null) {
+  <app-viewer
+    [items]="previews()"
+    [index]="viewing()!"
+    (indexChange)="viewing.set($event)"
+    (closed)="viewing.set(null)"
+  />
+}
