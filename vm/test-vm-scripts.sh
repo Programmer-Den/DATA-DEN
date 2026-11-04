@@ -64,6 +64,37 @@ expect 0 'BACKUP_KEEP_MONTHLY=12' ./setup-backup.sh on --print /mnt/backup
 # The backup run refuses to start without its settings.
 expect 1 'RESTIC_REPOSITORY is not set' env -u RESTIC_REPOSITORY ./backup.sh
 
+# Events for DATA-DEN's notifications.
+events="$(mktemp -d)"
+trap 'rm -rf "$events"' EXIT
+expect 2 'Usage' ./event.sh backup "Titel"
+expect 2 'Unknown kind' env DATA_DEN_EVENTS_DIR="$events" ./event.sh share "Titel" "Text"
+expect 2 'title is empty' env DATA_DEN_EVENTS_DIR="$events" ./event.sh backup "" "Text"
+expect 0 '' env DATA_DEN_EVENTS_DIR="$events" ./event.sh backup 'Backup "kaputt"' $'Zeile 1\nZeile\t2 \\ Ende\x01'
+written="$(cat "$events"/*.json 2>/dev/null || true)"
+want='{"kind": "backup", "title": "Backup \"kaputt\"", "body": "Zeile 1\nZeile\t2 \\ Ende"}'
+if [[ "$written" != "$want" ]]; then
+	printf '[FAIL] event.sh wrote\n%s\nwanted\n%s\n' "$written" "$want" >&2
+	failed=1
+else
+	echo '[PASS] event.sh writes the event as JSON'
+fi
+if compgen -G "$events/.*.tmp" >/dev/null; then
+	echo '[FAIL] event.sh left a temporary file' >&2
+	failed=1
+fi
+rm -f "$events"/*.json
+
+expect 2 'SERVICE_RESULT is not set' env -u SERVICE_RESULT ./backup-result.sh
+expect 0 '' env SERVICE_RESULT=success DATA_DEN_EVENT=false ./backup-result.sh
+expect 0 '' env SERVICE_RESULT=exit-code EXIT_STATUS=1 INVOCATION_ID= DATA_DEN_EVENTS_DIR="$events" DATA_DEN_EVENT=./event.sh ./backup-result.sh
+if ! grep -q '"title": "Backup fehlgeschlagen", "body": "Das nächtliche Backup ist fehlgeschlagen (exit-code, Status 1)' "$events"/*.json; then
+	echo '[FAIL] backup-result.sh did not report the failed run' >&2
+	failed=1
+else
+	echo '[PASS] backup-result.sh reports a failed run'
+fi
+
 expect 2 'Usage' ./setup-updates.sh
 expect 2 'Usage' ./setup-updates.sh start
 expect 2 'Usage' ./setup-updates.sh on --force
