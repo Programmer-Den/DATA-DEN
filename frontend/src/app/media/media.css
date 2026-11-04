@@ -197,3 +197,9 @@ a {
   border-radius: 0.3rem;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
+
+.credit {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}

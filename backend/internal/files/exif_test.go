@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -181,7 +182,14 @@ func TestMediaTimeline(t *testing.T) {
 	if err := os.Chtimes(filepath.Join(data, "ohne.png"), time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
 	}
-	h := handler(t, data)
+	f, err := Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	f.places = towns{"52.52,13.405": "Berlin"}
+	h := http.NewServeMux()
+	f.Register(h, func(next http.HandlerFunc) http.HandlerFunc { return next })
 
 	rec := media(h, "photo")
 	if rec.Code != http.StatusOK {
@@ -204,4 +212,11 @@ func TestMediaTimeline(t *testing.T) {
 	if png := media.Items[1]; png.Taken != "" || png.Lat != nil || png.Place != "" {
 		t.Errorf("ohne.png: %+v", png)
 	}
+}
+
+// towns names positions from a map by "lat,lon".
+type towns map[string]string
+
+func (t towns) Name(lat, lon float64) string {
+	return t[strconv.FormatFloat(lat, 'f', -1, 64)+","+strconv.FormatFloat(lon, 'f', -1, 64)]
 }

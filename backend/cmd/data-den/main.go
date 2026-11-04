@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/places"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/version"
@@ -164,6 +166,28 @@ func damagedMessage(account string, paths []string) notify.Message {
 	return notify.Message{Kind: notify.KindCorrupt, Title: "Beschädigte Dateien gefunden", Body: body}
 }
 
+// newGeocoder names the towns of the photos with Nominatim at
+// DATA_DEN_GEOCODER (OpenStreetMap's by default), keeping the answers in the
+// data directory; "off" names none. It returns a nil Namer when off.
+func newGeocoder(dataDir string) (files.Namer, *places.Geocoder, error) {
+	base := os.Getenv("DATA_DEN_GEOCODER")
+	switch base {
+	case "off":
+		return nil, nil, nil
+	case "":
+		base = places.DefaultURL
+	}
+	if u, err := url.Parse(base); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return nil, nil, fmt.Errorf("DATA_DEN_GEOCODER must be a Nominatim address such as %s, or off, not %q", places.DefaultURL, base)
+	}
+	g := places.New(places.Config{
+		URL:       strings.TrimRight(base, "/"),
+		UserAgent: "DATA-DEN/" + version.Version + " (self-hosted NAS, github.com/Programmer-Den/DATA-DEN)",
+		File:      filepath.Join(dataDir, ".data-den-places", "names.json"),
+	})
+	return g, g, nil
+}
+
 func run() error {
 	addr := listenAddr()
 	certFile, keyFile := tlsFiles()
@@ -180,6 +204,10 @@ func run() error {
 	}
 	var auditLog *audit.Log
 	var notifier *notify.Notifier
+	namer, geocoder, err := newGeocoder(dataDir)
+	if err != nil {
+		return err
+	}
 	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
 		Owner: os.Getenv("DATA_DEN_USERNAME"),
 		User:  auth.Username,
@@ -188,6 +216,7 @@ func run() error {
 		Damaged: func(account string, paths []string) {
 			notifier.NotifySystem(damagedMessage(account, paths))
 		},
+		Places: namer,
 	})
 	accounts, notifyDir, eventsDir := "", "", ""
 	if err != nil {
@@ -276,6 +305,9 @@ func run() error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
+	if geocoder != nil && data != nil {
+		go geocoder.Run(ctx)
+	}
 	if data != nil {
 		// The checks of the RAID, the free space and the VM's events.
 		go (&notify.Watcher{Report: stat.Report, EventsDir: eventsDir}).Run(ctx, notifier)

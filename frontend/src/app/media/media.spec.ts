@@ -109,6 +109,7 @@ describe('MediaView', () => {
       'Berlin',
     ]);
     expect(albums[0].textContent).toContain('2 Fotos · 12.07.2026 – 14.07.2026');
+    expect(page(fixture).querySelector('.credit')?.textContent).toContain('OpenStreetMap');
 
     albums[0].click();
     await fixture.whenStable();

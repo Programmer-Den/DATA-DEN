@@ -85,6 +85,9 @@ type SpacesConfig struct {
 	// Damaged is told about the files a check found damaged in the space
 	// of account; nil tells no one.
 	Damaged func(account string, paths []string)
+	// Places names the towns where photos were taken; nil leaves them
+	// unnamed.
+	Places Namer
 }
 
 // Spaces serves each account its own space in the data directory.
@@ -109,6 +112,7 @@ func OpenSpaces(dir string, cfg SpacesConfig) (*Spaces, error) {
 		return nil, err
 	}
 	owner.account, owner.audit, owner.damaged = cfg.Owner, cfg.Audit, cfg.Damaged
+	owner.places = cfg.Places
 	owner.serve()
 	return &Spaces{
 		cfg: cfg, owner: owner, byName: map[string]*Files{},
@@ -335,6 +339,7 @@ func (s *Spaces) space(name string) (*Files, error) {
 	f.trashDays = s.trashDays
 	f.shares.guard = s.guard
 	f.account, f.audit, f.damaged = name, s.cfg.Audit, s.cfg.Damaged
+	f.places = s.cfg.Places
 	f.serve()
 	s.byName[name] = f
 	s.startLocked(name, f)
