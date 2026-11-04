@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -99,6 +100,22 @@ func tlsFiles() (certFile, keyFile string) {
 	return os.Getenv("DATA_DEN_TLS_CERT"), os.Getenv("DATA_DEN_TLS_KEY")
 }
 
+// setTrashDays applies DATA_DEN_TRASH_DAYS, if set, to data.
+func setTrashDays(data *files.Files) error {
+	value := os.Getenv("DATA_DEN_TRASH_DAYS")
+	if value == "" {
+		return nil
+	}
+	days, err := strconv.Atoi(value)
+	if err != nil {
+		return fmt.Errorf("DATA_DEN_TRASH_DAYS must be a number of days, not %q", value)
+	}
+	if err := data.SetTrashDays(days); err != nil {
+		return fmt.Errorf("DATA_DEN_TRASH_DAYS: %w", err)
+	}
+	return nil
+}
+
 func run() error {
 	addr := listenAddr()
 	certFile, keyFile := tlsFiles()
@@ -125,6 +142,9 @@ func run() error {
 		slog.Warn("the data directory cannot be opened, so no files are served; set DATA_DEN_DATA_DIR", "dir", dataDir, "err", err)
 	} else {
 		defer func() { _ = data.Close() }()
+		if err := setTrashDays(data); err != nil {
+			return err
+		}
 	}
 	srv := &http.Server{
 		Addr:              addr,
@@ -142,6 +162,10 @@ func run() error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
+
+	if data != nil {
+		go data.PurgeTrashEvery(ctx, time.Hour)
+	}
 
 	slog.Info("DATA-DEN listening", "addr", addr, "https", certFile != "", "version", version.Version)
 	if certFile != "" {

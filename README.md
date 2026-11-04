@@ -41,6 +41,7 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_PASSWORD_HASH` | The hash from `hash-password`; without it nobody can log in |
 | `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
+| `DATA_DEN_TRASH_DAYS` | How many days, 1 to 3650, a deleted item stays in the recycle bin before it is deleted for good; default 30 |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
@@ -94,8 +95,8 @@ large folders), and the folder view offers **Rückgängig** right away. The
 **Papierkorb** tab lists what was deleted, where it was and until when it
 stays; each item can be restored to its old place (its folder is made again
 if needed, an item already there is never overwritten) or deleted for good,
-and the whole bin emptied. After 30 days an item is deleted for good, checked
-at start and whenever the bin is opened. API: `GET /api/trash`,
+and the whole bin emptied. After 30 days (`DATA_DEN_TRASH_DAYS`) an item is
+deleted for good, checked at start, every hour and whenever the bin is opened. API: `GET /api/trash`,
 `POST /api/trash/restore {"id"}`, `POST /api/trash/delete {"id"}`,
 `POST /api/trash/empty {}`. Nothing is ever overwritten
 ("Existiert bereits"), a folder cannot move into itself, and the data

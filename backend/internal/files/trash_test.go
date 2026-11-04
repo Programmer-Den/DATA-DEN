@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,7 @@ func trash(t *testing.T, h http.Handler) []TrashItem {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Days != TrashDays {
+	if body.Days != DefaultTrashDays {
 		t.Errorf("days %d", body.Days)
 	}
 	return body.Items
@@ -141,7 +142,7 @@ func TestTrashPurgedAfterWaiting(t *testing.T) {
 	items := trash(t, h)
 	// Back-date the folder's deletion past the waiting time.
 	old := items[0]
-	old.Deleted = time.Now().AddDate(0, 0, -TrashDays-1)
+	old.Deleted = time.Now().AddDate(0, 0, -DefaultTrashDays-1)
 	b, err := json.Marshal(old)
 	if err != nil {
 		t.Fatal(err)
@@ -152,5 +153,73 @@ func TestTrashPurgedAfterWaiting(t *testing.T) {
 	left := trash(t, h)
 	if len(left) != 1 || left[0].ID != items[1].ID || exists(data, trashDir+"/"+old.ID) {
 		t.Errorf("left %+v", left)
+	}
+}
+
+func TestSetTrashDays(t *testing.T) {
+	f, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	for _, bad := range []int{-1, 0, MaxTrashDays + 1} {
+		if f.SetTrashDays(bad) == nil {
+			t.Errorf("%d days: no error", bad)
+		}
+	}
+	if f.TrashDays() != DefaultTrashDays {
+		t.Errorf("after bad values: %d days", f.TrashDays())
+	}
+	if err := f.SetTrashDays(7); err != nil || f.TrashDays() != 7 {
+		t.Errorf("7 days: %v, %d", err, f.TrashDays())
+	}
+}
+
+// backdate makes the item id look deleted the given days ago.
+func backdate(t *testing.T, data string, item TrashItem, days int) {
+	t.Helper()
+	item.Deleted = time.Now().AddDate(0, 0, -days)
+	b, err := json.Marshal(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(data, trashDir, item.ID, "info.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPurgeTrashEvery(t *testing.T) {
+	data, h := tree(t)
+	f, err := Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if err := f.SetTrashDays(2); err != nil {
+		t.Fatal(err)
+	}
+	post(h, "/api/delete", `{"path":"/notizen.txt"}`)
+	post(h, "/api/delete", `{"path":"/Fotos"}`)
+	items := trash(t, h)
+	backdate(t, data, items[0], 3)
+	backdate(t, data, items[1], 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		f.PurgeTrashEvery(ctx, time.Millisecond)
+		close(done)
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for exists(data, trashDir+"/"+items[0].ID) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	<-done
+	if exists(data, trashDir+"/"+items[0].ID) {
+		t.Error("the item older than 2 days is still there")
+	}
+	if !exists(data, trashDir+"/"+items[1].ID) {
+		t.Error("the item from yesterday is gone")
 	}
 }
