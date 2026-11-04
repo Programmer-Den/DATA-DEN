@@ -240,6 +240,16 @@ load it again. The API is `GET /api/text?path` → `{"content", "version"}` and
 `version` creates a new file and never overwrites one. A save is written to
 `.data-den-edits/` first and then replaces the file in one step.
 
+Office documents (Word, Excel, PowerPoint and OpenDocument) can be edited
+too, with Collabora Online in a second container in the VM:
+[deploy/README.md](deploy/README.md#office-documents-optional). It is
+switched on with `DATA_DEN_OFFICE_URL` (where DATA-DEN reaches Collabora,
+such as `http://127.0.0.1:9980`) and `DATA_DEN_WOPI_ADDR` (DATA-DEN's port
+for Collabora to load and save documents, `127.0.0.1:9981` unless set); the
+API is `GET /api/office` → `{"extensions"}` and `POST /api/office {"path"}`
+→ the editor's address and a token. Without them office documents are only
+downloaded.
+
 Deleting moves the file or folder into the recycle bin,
 `.data-den-trash/` in the data directory (hidden; a rename, so quick even for
 large folders), and the folder view offers **Rückgängig** right away. The

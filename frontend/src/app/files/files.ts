@@ -7,6 +7,8 @@ import { Viewer } from '../media/viewer';
 import { Grant } from '../shares/grant';
 import { GrantForm } from '../shares/grant-form';
 import { Editor } from '../editor/editor';
+import { OfficeFormats } from '../office/formats';
+import { OfficeFrame } from '../office/office-frame';
 import { ShareForm } from '../shares/share-form';
 import { StartFolder } from './start-folder';
 import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
@@ -41,7 +43,7 @@ const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 
  */
 @Component({
   selector: 'app-files',
-  imports: [Viewer, Editor, ShareForm, GrantForm, Versions],
+  imports: [Viewer, Editor, OfficeFrame, ShareForm, GrantForm, Versions],
   templateUrl: './files.html',
   styleUrl: './files.css',
 })
@@ -83,6 +85,9 @@ export class Files implements OnInit {
   protected readonly writing = signal(false);
   /** The new text file open in the editor, or null. */
   protected readonly editing = signal<string | null>(null);
+  /** The office document open in Collabora, or null. */
+  protected readonly officeEditing = signal<string | null>(null);
+  protected readonly office = inject(OfficeFormats);
   /** True when the viewer saved a file, so the folder is loaded again. */
   private changed = false;
   /** The entry being renamed, by name, or null. */
@@ -172,6 +177,15 @@ export class Files implements OnInit {
         this.error.set(errorMessage(err));
       },
     });
+  }
+
+  protected editOffice(entry: Entry): void {
+    this.officeEditing.set(this.child(entry));
+  }
+
+  protected closeOffice(): void {
+    this.officeEditing.set(null);
+    this.open(this.path());
   }
 
   protected closeEditor(): void {

@@ -36,6 +36,9 @@ type Config struct {
 	// Notify adds the notification settings behind the login; nil leaves
 	// them out.
 	Notify *notify.Notifier
+	// Office adds editing office documents with Collabora behind the
+	// login; nil leaves it out.
+	Office *files.Office
 }
 
 // New returns the handler for the website and the API.
@@ -54,6 +57,9 @@ func New(cfg Config) http.Handler {
 		}
 		if cfg.Notify != nil {
 			cfg.Notify.Register(mux, cfg.Auth.Require)
+		}
+		if cfg.Office != nil {
+			cfg.Office.Register(mux, cfg.Auth.Require)
 		}
 		if cfg.Data != nil {
 			cfg.Data.Register(mux, cfg.Auth.Require)
@@ -76,7 +82,21 @@ func New(cfg Config) http.Handler {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
 	mux.Handle("/", site(cfg.Files))
-	return securityHeaders(mux)
+	handler := securityHeaders(mux)
+	if cfg.Auth == nil || cfg.Office == nil {
+		return handler
+	}
+	// Collabora's pages bring their own headers.
+	office := cfg.Auth.Require(cfg.Office.Proxy().ServeHTTP)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, prefix := range files.OfficePaths {
+			if strings.HasPrefix(r.URL.Path, prefix) {
+				office(w, r)
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // site serves the built website. Paths without a file get index.html, so the

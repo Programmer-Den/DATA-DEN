@@ -41,3 +41,9 @@ updates:
     labels: [dependencies, install]
     schedule:
       interval: weekly
+  # Collabora in deploy/compose.office.yaml.
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    labels: [dependencies, install]
+    schedule:
+      interval: weekly

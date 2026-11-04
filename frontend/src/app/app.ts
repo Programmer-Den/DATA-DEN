@@ -8,6 +8,7 @@ import { Kind } from './media/item';
 import { MediaView } from './media/media';
 import { NotificationsView } from './notifications/notifications';
 import { ChecksView } from './checks/checks';
+import { OfficeFormats } from './office/formats';
 import { StartFolder } from './files/start-folder';
 import { PublicShare } from './public/public-share';
 import { SearchView } from './search/search';
@@ -100,6 +101,7 @@ export class App {
   /** What was searched for last. */
   protected readonly query = signal('');
   private readonly startFolder = inject(StartFolder);
+  private readonly office = inject(OfficeFormats);
 
   constructor() {
     if (this.shareId) {
@@ -118,7 +120,10 @@ export class App {
     // status page.
     effect(() => {
       if (this.auth.user()) {
-        untracked(() => this.status.refresh());
+        untracked(() => {
+          this.status.refresh();
+          this.office.load();
+        });
       }
     });
     const timer = setInterval(() => {

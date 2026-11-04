@@ -136,6 +136,17 @@
               <td class="size">{{ entry.dir ? '' : formatSize(entry.size) }}</td>
               <td>{{ modified(entry) }}</td>
               <td class="actions">
+                @if (!entry.dir && !grant() && office.canEdit(entry.name)) {
+                  <button
+                    type="button"
+                    class="icon"
+                    title="In Office bearbeiten"
+                    [attr.aria-label]="entry.name + ' in Office bearbeiten'"
+                    (click)="editOffice(entry)"
+                  >
+                    📝
+                  </button>
+                }
                 @if (!entry.dir) {
                   <a
                     class="icon"
@@ -280,6 +291,10 @@
     (changed)="viewerChanged()"
     (closed)="closeViewer()"
   />
+}
+
+@if (officeEditing(); as path) {
+  <app-office-frame [path]="path" (closed)="closeOffice()" />
 }
 
 @if (editing(); as path) {
