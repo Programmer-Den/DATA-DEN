@@ -1,0 +1,106 @@
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (settings(); as settings) {
+  <form (submit)="save($event)">
+    <section aria-labelledby="events-title">
+      <h2 id="events-title">Was soll dich erreichen?</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Ereignis</th>
+            <th scope="col" class="way">E-Mail</th>
+            <th scope="col" class="way">Push</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (info of settings.kinds; track info.kind) {
+            <tr>
+              <td>{{ info.name }}</td>
+              <td class="way">
+                <input
+                  type="checkbox"
+                  [attr.aria-label]="info.name + ' per E-Mail'"
+                  [checked]="ways(info.kind).email"
+                  [disabled]="!settings.mail"
+                  (change)="toggle(info.kind, 'email', $any($event.target).checked)"
+                />
+              </td>
+              <td class="way">
+                <input
+                  type="checkbox"
+                  [attr.aria-label]="info.name + ' per Push'"
+                  [checked]="ways(info.kind).push"
+                  [disabled]="!settings.pushKey"
+                  (change)="toggle(info.kind, 'push', $any($event.target).checked)"
+                />
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="email-title">
+      <h2 id="email-title">E-Mail</h2>
+      @if (settings.mail) {
+        <label>
+          E-Mail-Adresse
+          <input
+            type="email"
+            name="email"
+            autocomplete="email"
+            [value]="email()"
+            (input)="email.set($any($event.target).value)"
+          />
+        </label>
+      } @else {
+        <p class="hint">
+          Der Server verschickt keine E-Mails: dafür braucht er die DATA_DEN_SMTP_-Einstellungen
+          (README.md, „Benachrichtigungen“).
+        </p>
+      }
+    </section>
+
+    <button type="submit" [disabled]="busy()">Speichern</button>
+  </form>
+
+  <section aria-labelledby="push-title">
+    <h2 id="push-title">Push auf diesem Gerät</h2>
+    @if (!settings.pushKey) {
+      <p class="hint">
+        Der Server verschickt keine Push-Nachrichten (README.md, „Benachrichtigungen“).
+      </p>
+    } @else if (!supported) {
+      <p class="hint">
+        Dieser Browser kann keine Push-Nachrichten empfangen. Auf iPhone und iPad geht es nur, wenn
+        DATA-DEN über „Zum Home-Bildschirm“ als App installiert ist.
+      </p>
+    } @else if (here()) {
+      <p class="ok">Dieses Gerät bekommt Push-Nachrichten.</p>
+      <button type="button" [disabled]="busy()" (click)="turnOff()">Ausschalten</button>
+    } @else {
+      @if (blocked()) {
+        <p class="warning">
+          Benachrichtigungen sind für DATA-DEN im Browser blockiert; erlaube sie in den
+          Website-Einstellungen.
+        </p>
+      }
+      <button type="button" [disabled]="busy()" (click)="turnOn()">
+        Auf diesem Gerät einschalten
+      </button>
+    }
+    <p class="hint">
+      {{ settings.devices.length }}
+      {{ settings.devices.length === 1 ? 'Gerät bekommt' : 'Geräte bekommen' }} Push-Nachrichten.
+    </p>
+  </section>
+
+  <button type="button" [disabled]="busy()" (click)="test()">Testnachricht senden</button>
+} @else if (!error()) {
+  <p>Lade …</p>
+}

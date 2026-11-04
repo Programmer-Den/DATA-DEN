@@ -72,7 +72,7 @@ export class Files {
   protected readonly moving = signal<{ path: string; name: string } | null>(null);
   protected readonly busy = signal(false);
   /** The file or folder a link is being made for, or null. */
-  protected readonly sharing = signal<{ path: string; name: string } | null>(null);
+  protected readonly sharing = signal<{ path: string; name: string; dir: boolean } | null>(null);
   /** The file whose older versions are shown, or null. */
   protected readonly versions = signal<{ path: string; name: string } | null>(null);
   /** True while uploads wait for the answer whether to replace existing files. */
@@ -133,7 +133,7 @@ export class Files {
   }
 
   protected share(entry: Entry): void {
-    this.sharing.set({ path: this.child(entry), name: entry.name });
+    this.sharing.set({ path: this.child(entry), name: entry.name, dir: entry.dir });
   }
 
   protected showVersions(entry: Entry): void {

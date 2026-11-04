@@ -3,6 +3,7 @@ package files
 import (
 	"archive/zip"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
@@ -27,7 +28,7 @@ import (
 // Behind the login, with a JSON body:
 //
 //	GET  /api/shares                                     -> {"items": [...]}, newest first
-//	POST /api/shares {"path": "/Fotos", "days": 7, "password": ""} -> 201, the new share
+//	POST /api/shares {"path": "/Fotos", "days": 7, "password": "", "upload": false} -> 201, the new share
 //	POST /api/shares/delete {"id": "..."}                -> 200, the link stops working
 //
 // For everyone with the link /s/<id>:
@@ -37,6 +38,15 @@ import (
 //	GET  /api/s/{id}/files?path=/2026      -> a folder within a shared folder
 //	GET  /api/s/{id}/download?path=/a.jpg  -> a file; no path for a shared file
 //	GET  /api/s/{id}/zip?path=/2026        -> a folder within a shared folder as one ZIP
+//
+// An upload link ("upload": true, only for a folder) works the other way:
+// whoever has it can drop files into the folder, like an upload behind the
+// login (see upload.go), but cannot see what is in it. A file whose name is
+// taken gets the next free one, such as "a (1).jpg"; nothing is overwritten.
+//
+//	POST /api/s/{id}/uploads {"path": "/a.jpg", "size": 123} -> {"id": "...", "offset": 0}
+//	PUT  /api/s/{id}/uploads/{upload}, header Upload-Offset  -> {"offset": n}, with "name" at the end
+//	GET  /api/s/{id}/uploads/{upload}                        -> {"offset": n}
 //
 // Each share is sharesDir/<id>.json. The id is the secret part of the link.
 // A link that expired or was revoked answers like one that never existed.
@@ -64,6 +74,8 @@ type Share struct {
 	PasswordHash string `json:"passwordHash,omitempty"`
 	// Password is true in answers when the link asks for a password.
 	Password bool `json:"password"`
+	// Upload is true for an upload link: files go in, nothing comes out.
+	Upload bool `json:"upload,omitempty"`
 	// Missing is true in answers when the file or folder is gone, for
 	// example moved to the recycle bin.
 	Missing bool `json:"missing,omitempty"`
@@ -112,6 +124,9 @@ func (f *Files) RegisterShares(mux *http.ServeMux, require func(http.HandlerFunc
 	mux.HandleFunc("GET /api/s/{id}/files", f.shareList)
 	mux.HandleFunc("GET /api/s/{id}/download", f.shareDownload)
 	mux.HandleFunc("GET /api/s/{id}/zip", f.shareZip)
+	mux.HandleFunc("POST /api/s/{id}/uploads", f.shareStartUpload)
+	mux.HandleFunc("PUT /api/s/{id}/uploads/{upload}", f.sharePutChunk)
+	mux.HandleFunc("GET /api/s/{id}/uploads/{upload}", f.shareUploadState)
 }
 
 func shareFile(id string) string {
@@ -190,6 +205,7 @@ func (f *Files) createShare(w http.ResponseWriter, r *http.Request) {
 		Path     string `json:"path"`
 		Days     int    `json:"days"`
 		Password string `json:"password"`
+		Upload   bool   `json:"upload"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -216,6 +232,10 @@ func (f *Files) createShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Ungültiger Pfad")
 		return
 	}
+	if body.Upload && !info.IsDir() {
+		writeError(w, http.StatusBadRequest, "Hochladen geht nur in einen Ordner")
+		return
+	}
 	id, err := newID()
 	if err != nil {
 		f.diskError(w, "creating a share", err)
@@ -229,6 +249,7 @@ func (f *Files) createShare(w http.ResponseWriter, r *http.Request) {
 		Dir:     info.IsDir(),
 		Created: now,
 		Expires: now.AddDate(0, 0, body.Days),
+		Upload:  body.Upload,
 	}
 	if body.Password != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 12)
@@ -245,7 +266,7 @@ func (f *Files) createShare(w http.ResponseWriter, r *http.Request) {
 		f.diskError(w, "creating a share", err)
 		return
 	}
-	slog.Info("share link created", "path", s.Path, "expires", s.Expires, "password", s.PasswordHash != "")
+	slog.Info("share link created", "path", s.Path, "expires", s.Expires, "password", s.PasswordHash != "", "upload", s.Upload)
 	f.note(r, "share-create", s.Path)
 	writeJSON(w, http.StatusCreated, s.answer())
 }
@@ -327,8 +348,12 @@ func (f *Files) shared(w http.ResponseWriter, r *http.Request) (Share, bool) {
 // in a shared "/Fotos", into a name within the root, such as "Fotos/2026".
 // It also returns the path within the share, such as "2026" ("." for the
 // shared folder itself). It answers the request itself and returns false
-// when the path is not acceptable.
+// when the path is not acceptable, and always for an upload link.
 func (f *Files) sharedName(w http.ResponseWriter, s Share, p string) (name, rel string, ok bool) {
+	if s.Upload {
+		writeError(w, http.StatusNotFound, "Nicht gefunden")
+		return "", "", false
+	}
 	rel, ok = relative(w, p)
 	if !ok {
 		return "", "", false
@@ -379,7 +404,7 @@ func (f *Files) writeShareInfo(w http.ResponseWriter, s Share) {
 		writeError(w, http.StatusNotFound, "Nicht mehr vorhanden")
 		return
 	}
-	answer := map[string]any{"name": s.Name, "dir": s.Dir, "expires": s.Expires}
+	answer := map[string]any{"name": s.Name, "dir": s.Dir, "expires": s.Expires, "upload": s.Upload}
 	if !s.Dir {
 		answer["size"] = info.Size()
 	}
@@ -548,4 +573,64 @@ func (f *Files) addToZip(archive *zip.Writer, name, inZip string) error {
 	}
 	_, err = io.Copy(out, file)
 	return err
+}
+
+// uploadShare reads the upload link of a request to /api/s/{id}/uploads and
+// checks that it is unlocked and its folder still there. It answers the
+// request itself and returns false when not.
+func (f *Files) uploadShare(w http.ResponseWriter, r *http.Request) (Share, bool) {
+	s, ok := f.shared(w, r)
+	if !ok {
+		return Share{}, false
+	}
+	if !s.Upload {
+		writeError(w, http.StatusNotFound, "Nicht gefunden")
+		return Share{}, false
+	}
+	name := strings.TrimPrefix(s.Path, "/")
+	if info, err := f.root.Lstat(name); err != nil || !info.IsDir() || f.symlinkIn(name) {
+		writeError(w, http.StatusNotFound, "Nicht mehr vorhanden")
+		return Share{}, false
+	}
+	return s, true
+}
+
+func (f *Files) shareStartUpload(w http.ResponseWriter, r *http.Request) {
+	s, ok := f.uploadShare(w, r)
+	if !ok {
+		return
+	}
+	body, ok := readUploadStart(w, r)
+	if !ok {
+		return
+	}
+	// Only a file name: the folders inside stay unknown and untouched, and
+	// nothing is replaced.
+	file, ok := uploadName(body.Path)
+	if !ok || strings.Contains(file, "/") {
+		writeError(w, http.StatusBadRequest, "Ungültiger Dateiname")
+		return
+	}
+	name, ok := f.freeName(path.Join(strings.TrimPrefix(s.Path, "/"), file))
+	if !ok {
+		writeError(w, http.StatusConflict, "Datei existiert bereits")
+		return
+	}
+	f.beginUpload(w, r, &upload{path: name, size: body.Size, hash: sha256.New(), share: s.ID})
+}
+
+func (f *Files) sharePutChunk(w http.ResponseWriter, r *http.Request) {
+	s, ok := f.uploadShare(w, r)
+	if !ok {
+		return
+	}
+	f.receiveChunk(w, r, r.PathValue("upload"), s.ID)
+}
+
+func (f *Files) shareUploadState(w http.ResponseWriter, r *http.Request) {
+	s, ok := f.uploadShare(w, r)
+	if !ok {
+		return
+	}
+	f.writeUploadState(w, r.PathValue("upload"), s.ID)
 }

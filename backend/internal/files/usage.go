@@ -18,7 +18,8 @@ type usedCache struct {
 }
 
 // usage is how many bytes the space holds, recycle bin included. Thumbnails,
-// unfinished uploads and the spaces of other accounts do not count.
+// unfinished uploads, the share links and the spaces of other accounts do
+// not count.
 func (f *Files) usage() (int64, error) {
 	f.used.mu.Lock()
 	defer f.used.mu.Unlock()
@@ -34,7 +35,7 @@ func (f *Files) usage() (int64, error) {
 			}
 			return err
 		}
-		if d.IsDir() && (name == usersDir || name == thumbDir || name == uploadDir) {
+		if d.IsDir() && (name == usersDir || name == thumbDir || name == uploadDir || name == sharesDir) {
 			return fs.SkipDir
 		}
 		if d.Type().IsRegular() {

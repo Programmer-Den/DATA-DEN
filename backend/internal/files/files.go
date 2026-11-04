@@ -72,6 +72,8 @@ type Files struct {
 	// dav serves WebDAV, made on first use.
 	dav     *webdav.Handler
 	davOnce sync.Once
+	// damaged is told about the files a check found damaged; nil tells no one.
+	damaged func(account string, paths []string)
 }
 
 // Recorder notes in the audit log that account did action to target, in the

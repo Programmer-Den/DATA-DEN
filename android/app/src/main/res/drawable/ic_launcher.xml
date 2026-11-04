@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A cloud with an arrow up on a round background. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#1D76DB"
+        android:pathData="M24,0a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M35,22.1C34.3,17.5 30.4,14 25.6,14c-3.8,0 -7,2.2 -8.5,5.4C13.2,19.8 10,23.1 10,27.2c0,4.3 3.5,7.8 7.8,7.8H34c3.3,0 6,-2.7 6,-6C40,25.6 37.8,22.4 35,22.1zM27,27v5h-6v-5h-4l7,-7 7,7H27z" />
+</vector>

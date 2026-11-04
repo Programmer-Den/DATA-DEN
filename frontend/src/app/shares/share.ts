@@ -9,6 +9,8 @@ export interface Share {
   expires: string;
   /** True when the link asks for a password. */
   password: boolean;
+  /** True for an upload link: others drop files in, but see nothing. */
+  upload?: boolean;
   /** True when the file or folder is gone, for example in the recycle bin. */
   missing?: boolean;
 }

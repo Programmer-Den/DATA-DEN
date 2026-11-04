@@ -3,3 +3,4 @@
 **/node_modules
 frontend/.angular
 backend/internal/web/files/build
+android

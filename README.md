@@ -44,6 +44,10 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
 | `DATA_DEN_TRASH_DAYS` | How many days, 1 to 3650, a deleted item stays in the recycle bin before it is deleted for good; default 30 |
 | `DATA_DEN_DISK_WARN_PERCENT` | Warn when less than this share of the disk is free, in percent; default `10` |
+| `DATA_DEN_SMTP_HOST`, `DATA_DEN_SMTP_PORT` | The mail server for [notifications](#notifications) by email, such as `smtp.gmx.net` and `587`; without a host no email is sent |
+| `DATA_DEN_SMTP_USERNAME`, `DATA_DEN_SMTP_PASSWORD` | The login at the mail server, often an app password |
+| `DATA_DEN_SMTP_FROM` | The sender, such as `DATA-DEN <nas@example.org>` |
+| `DATA_DEN_PUSH_CONTACT` | The contact the push services see, `mailto:` or `https://`; default the sender above. Without either, no push messages |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
@@ -249,10 +253,21 @@ working; in the recycle bin, the link stops working until it is restored.
 Expired links answer like unknown ones and are removed. Each link is a file
 in `.data-den-shares/` in the data directory (hidden), with the password as
 a bcrypt hash. API: `GET /api/shares`,
-`POST /api/shares {"path", "days", "password"}`,
+`POST /api/shares {"path", "days", "password", "upload"}`,
 `POST /api/shares/delete {"id"}`; for the link `GET /api/s/{id}`,
 `POST /api/s/{id}/unlock {"password"}`, `GET /api/s/{id}/files?path=`,
 `GET /api/s/{id}/download?path=` and `GET /api/s/{id}/zip?path=`.
+
+An upload link ("Nur hochladen" when sharing a folder) works the other way:
+whoever has it can drop files into that folder, in chunks like an upload
+behind the login, but sees nothing of what is in it and cannot download.
+Only file names are taken, no subfolders; a name that is taken gets the next
+free one, such as `a (1).jpg`, so nothing is overwritten. The files count
+against the quota of the account that made the link, and each one is in the
+audit log as `share-upload`. Expiry and password work as for other links.
+API: `POST /api/s/{id}/uploads {"path": "/a.jpg", "size"}`, then
+`PUT /api/s/{id}/uploads/{upload}` and `GET /api/s/{id}/uploads/{upload}`
+as for `/api/uploads`.
 
 Every file gets a SHA-256 checksum, kept in `.data-den-sums/index.json` in
 the data directory (hidden like the other `.data-den-*` folders; deleting it
@@ -283,6 +298,12 @@ with "Datei existiert bereits". Unfinished chunks wait in
 `.data-den-uploads/` in the data directory, which the folder view hides; a
 restart of the server removes them.
 
+## Android app
+
+The PWA cannot upload in the background, so [android/](android/README.md)
+holds a small native app that uploads new photos and videos from the phone's
+camera on its own, with an app password instead of the account password.
+
 ## Status
 
 The **Status** tab shows the free space on the data disk, the state of the
@@ -295,6 +316,41 @@ the mirror is missing, every page shows a warning; below a quarter of that
 every 5 minutes while someone is logged in. Outside the VM there is no RAID,
 and the page says so. `/api/health` stays as it is, without login, for
 Docker's health check.
+
+## Notifications
+
+In the **Benachrichtigungen** tab each account chooses which events reach it
+by email and which by push message:
+
+| Event | Who | When |
+|---|---|---|
+| Disk or RAID failing | admins | A disk of the mirror fails or the RAID stops, and again when it is whole; a disk whose SMART values look bad, reported by the VM |
+| Backup failed | admins | The nightly backup reports a failure |
+| Low disk space | admins | The free space falls below `DATA_DEN_DISK_WARN_PERCENT`, and again below a quarter of it |
+| Damaged files | admins | A check finds files whose content changed on the disk |
+| Shared with me | everyone | Someone shares a file or folder with the account |
+
+Emails go out over the mail server from the `DATA_DEN_SMTP_` settings,
+always encrypted: port 465 speaks TLS from the start, any other port must
+offer STARTTLS. Push messages use Web Push: **Auf diesem Gerät einschalten**
+asks the browser for permission and registers `sw.js`, which shows them. It
+works in Chrome, Edge, Firefox and Safari; on an iPhone or iPad only when
+DATA-DEN was added to the home screen. The server signs push messages with
+a key it makes on its first start, `.data-den-notify/vapid.pem` in the data
+directory, next to the settings in `settings.json`; it only sends to the
+push services of Google, Mozilla, Apple and Microsoft. **Testnachricht
+senden** tries every way an account set up.
+
+The server checks the RAID and the free space every minute. The VM reports
+a failed backup or bad SMART values as a JSON file in `.data-den-events/` in
+the data directory, which the server sends and deletes:
+
+```json
+{"kind": "backup", "title": "Backup fehlgeschlagen", "body": "What went wrong"}
+```
+
+`kind` is `backup` or `disk`. The folder must belong to the image's user
+(65532), so the server can delete the files.
 
 ## Development
 
@@ -327,8 +383,8 @@ docker run --rm -p 8080:8080 data-den
 
 Every pull request runs the shared checks of
 [repo-base](https://github.com/Programmer-Den/repo-base) (secrets, links,
-PR template), the Go and Angular jobs, and builds the image for amd64 and
-arm64. They run on the light self-hosted runners once those are set up
+PR template), the Go and Angular jobs, tests and builds the Android app, and
+builds the image for amd64 and arm64. They run on the light self-hosted runners once those are set up
 ([runner/README.md](runner/README.md)), otherwise on GitHub's runners.
 
 Contributions follow [AGENTS.md](AGENTS.md); security issues go to

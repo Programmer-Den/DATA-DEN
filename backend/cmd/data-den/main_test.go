@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
 )
 
 func serveHealth(status int) http.Handler {
@@ -92,5 +95,20 @@ func TestSetTrashDays(t *testing.T) {
 	t.Setenv("DATA_DEN_TRASH_DAYS", "14")
 	if err := setTrashDays(data); err != nil || data.TrashDays() != 14 {
 		t.Errorf("14: %v, %d days", err, data.TrashDays())
+	}
+}
+
+func TestDamagedMessage(t *testing.T) {
+	m := damagedMessage("anna", []string{"/a.jpg"})
+	if m.Kind != notify.KindCorrupt || !strings.Contains(m.Body, "eine beschädigte Datei") || !strings.Contains(m.Body, "/a.jpg") {
+		t.Errorf("one file: %+v", m)
+	}
+	var paths []string
+	for i := range 25 {
+		paths = append(paths, fmt.Sprintf("/%d.jpg", i))
+	}
+	m = damagedMessage("anna", paths)
+	if !strings.Contains(m.Body, "25 beschädigte Dateien") || !strings.Contains(m.Body, "/19.jpg") || strings.Contains(m.Body, "/20.jpg") || !strings.Contains(m.Body, "5 weitere") {
+		t.Errorf("many files: %s", m.Body)
 	}
 }

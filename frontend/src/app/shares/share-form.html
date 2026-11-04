@@ -1,7 +1,11 @@
 <div class="share-form" role="group" [attr.aria-label]="'„' + name() + '“ freigeben'">
   <strong>„{{ name() }}“ freigeben</strong>
   @if (link(); as link) {
-    <p>Jeder mit diesem Link kann es öffnen und herunterladen:</p>
+    @if (upload()) {
+      <p>Jeder mit diesem Link kann Dateien in den Ordner legen, aber nichts darin sehen:</p>
+    } @else {
+      <p>Jeder mit diesem Link kann es öffnen und herunterladen:</p>
+    }
     <div class="link-row">
       <input
         readonly
@@ -32,6 +36,17 @@
           maxlength="72"
         />
       </label>
+      @if (dir()) {
+        <label class="check">
+          <input
+            name="upload"
+            type="checkbox"
+            [checked]="upload()"
+            (change)="upload.set($any($event.target).checked)"
+          />
+          Nur hochladen: andere legen Dateien hinein, sehen aber nichts
+        </label>
+      }
       <button type="submit" [disabled]="busy()">Link erstellen</button>
       <button type="button" (click)="closed.emit()">Abbrechen</button>
     </form>

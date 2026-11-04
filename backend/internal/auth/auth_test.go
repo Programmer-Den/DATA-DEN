@@ -248,3 +248,17 @@ func TestShareGuessesLockOut(t *testing.T) {
 		t.Errorf("login: status %d, want 429", rec.Code)
 	}
 }
+
+func TestAdmin(t *testing.T) {
+	a, err := New(Config{Username: "chriszly"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.accounts["anna"] = Account{Name: "anna"}
+	a.accounts["ben"] = Account{Name: "ben", Admin: true}
+	for name, want := range map[string]bool{"chriszly": true, "ben": true, "anna": false, "nobody": false, "": false} {
+		if got := a.Admin(name); got != want {
+			t.Errorf("Admin(%q) = %v", name, got)
+		}
+	}
+}
