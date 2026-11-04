@@ -228,6 +228,7 @@ func (a *Auth) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	// Other devices have to log in again with the new password.
 	a.dropSessions(name, keep)
 	slog.Info("password changed", "username", name)
+	a.note(r, name, "password", "")
 	writeJSON(w, http.StatusOK, map[string]string{})
 }
 
@@ -291,6 +292,7 @@ func (a *Auth) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("account created", "username", body.Name, "admin", body.Admin, "quota", body.Quota, "by", Username(r))
+	a.note(r, Username(r), "user-create", body.Name)
 	writeJSON(w, http.StatusCreated, UserInfo{Name: body.Name, Admin: body.Admin, Quota: body.Quota})
 }
 
@@ -371,6 +373,10 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("account changed", "username", name, "admin", account.Admin, "quota", account.Quota, "password", hash != "", "twoFactorOff", resetTF, "by", Username(r))
+	a.note(r, Username(r), "user-change", name)
+	if resetTF {
+		a.note(r, Username(r), "2fa-reset", name)
+	}
 	_, tf := a.twoFactor[name]
 	writeJSON(w, http.StatusOK, UserInfo{Name: name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf})
 }
@@ -415,6 +421,7 @@ func (a *Auth) deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	a.dropSessions(name, "")
 	slog.Info("account deleted", "username", name, "by", Username(r))
+	a.note(r, Username(r), "user-delete", name)
 	writeJSON(w, http.StatusOK, map[string]string{})
 }
 

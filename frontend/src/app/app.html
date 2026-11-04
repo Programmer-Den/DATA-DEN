@@ -64,6 +64,9 @@
       @case ('search') {
         <app-search [query]="query()" (openFolder)="showFolder($event)" />
       }
+      @case ('audit') {
+        <app-audit />
+      }
       @default {
         <app-media [kind]="$any(view())" />
       }

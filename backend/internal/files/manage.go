@@ -65,6 +65,7 @@ func (f *Files) createFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("folder created", "path", "/"+name)
+	f.note(r, "folder", "/"+name)
 	writeJSON(w, http.StatusCreated, map[string]string{"path": "/" + name})
 }
 
@@ -117,6 +118,7 @@ func (f *Files) move(w http.ResponseWriter, r *http.Request) {
 	}
 	f.moveShares(from, to)
 	slog.Info("moved", "from", "/"+from, "to", "/"+to)
+	f.note(r, "move", "/"+from+" → /"+to)
 	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + to})
 }
 
@@ -158,6 +160,7 @@ func (f *Files) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("moved to the recycle bin", "path", "/"+name)
+	f.note(r, "delete", "/"+name)
 	// The id lets the page undo it at once.
 	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + name, "id": id})
 }

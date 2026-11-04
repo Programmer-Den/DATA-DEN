@@ -258,3 +258,35 @@ func TestSharesPerSpace(t *testing.T) {
 		t.Errorf("unknown link: status %d, want 404", rec.Code)
 	}
 }
+
+func TestAuditOfFiles(t *testing.T) {
+	var got []string
+	data := t.TempDir()
+	s, err := OpenSpaces(data, SpacesConfig{
+		Owner: "chef",
+		User:  func(r *http.Request) string { return r.Header.Get("X-User") },
+		Audit: func(_ *http.Request, user, action, target string) {
+			got = append(got, user+" "+action+" "+target)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	mux := http.NewServeMux()
+	s.Register(mux, func(h http.HandlerFunc) http.HandlerFunc { return h })
+	do(mux, http.MethodPost, "/api/folders", "application/json", `{"path":"/Fotos"}`, as("anna"))
+	do(mux, http.MethodPost, "/api/uploads", "application/json", `{"path":"/Fotos/a.txt","size":0}`, as("anna"))
+	do(mux, http.MethodPost, "/api/move", "application/json", `{"from":"/Fotos","to":"/Bilder"}`, as("anna"))
+	do(mux, http.MethodPost, "/api/delete", "application/json", `{"path":"/Bilder"}`, as("chef"))
+	do(mux, http.MethodPost, "/api/delete", "application/json", `{"path":"/Bilder"}`, as("anna"))
+	want := []string{
+		"anna folder /Fotos",
+		"anna upload /Fotos/a.txt",
+		"anna move /Fotos → /Bilder",
+		"anna delete /Bilder",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("audit:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

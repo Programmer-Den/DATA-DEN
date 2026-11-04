@@ -1,0 +1,47 @@
+@if (auth.admin()) {
+  <form class="filter" (submit)="filter($event, user.value)">
+    <label>
+      Nur für Benutzer
+      <input #user name="user" autocomplete="off" placeholder="alle" />
+    </label>
+    <button type="submit">Anzeigen</button>
+  </form>
+} @else {
+  <p class="hint">Hier stehen deine Anmeldungen und was du an Dateien geändert hast.</p>
+}
+
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (entries(); as entries) {
+  @if (entries.length === 0) {
+    <p class="empty">Noch keine Einträge.</p>
+  } @else {
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Zeit</th>
+          <th scope="col">Benutzer</th>
+          <th scope="col">Aktion</th>
+          <th scope="col">Was</th>
+          <th scope="col">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (entry of entries; track $index) {
+          <tr [class.failed]="entry.action.endsWith('-failed')">
+            <td class="time">{{ time(entry) }}</td>
+            <td>{{ entry.user || '–' }}</td>
+            <td>{{ action(entry) }}</td>
+            <td>{{ entry.target }}</td>
+            <td>{{ entry.ip }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+    <p class="hint">Die neuesten {{ entries.length }} Einträge, das Neueste oben.</p>
+  }
+} @else if (!error()) {
+  <p>Lade …</p>
+}

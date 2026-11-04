@@ -254,3 +254,27 @@ func TestBrokenAccountsFile(t *testing.T) {
 		t.Error("a broken accounts file was accepted")
 	}
 }
+
+func TestAuditOfLoginsAndAccounts(t *testing.T) {
+	var got []string
+	mux := accountsSetupWith(t, Config{Audit: func(_ *http.Request, user, action, target string) {
+		got = append(got, user+" "+action+" "+target)
+	}})
+	login(mux, "192.0.2.1:1", "chriszly", "falsch", nil)
+	owner := loginAs(t, mux, "chriszly", "richtig")
+	call(mux, owner, http.MethodPost, "/api/users", `{"name":"anna","password":"anna-passwort"}`)
+	call(mux, owner, http.MethodPost, "/api/users/anna", `{"quota":5}`)
+	call(mux, owner, http.MethodPost, "/api/users/anna/delete", `{}`)
+	call(mux, owner, http.MethodPost, "/api/logout", "")
+	want := []string{
+		"chriszly login-failed ",
+		"chriszly login ",
+		"chriszly user-create anna",
+		"chriszly user-change anna",
+		"chriszly user-delete anna",
+		"chriszly logout ",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("audit:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

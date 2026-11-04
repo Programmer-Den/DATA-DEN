@@ -56,6 +56,21 @@ type Files struct {
 	used usedCache
 	// mux serves the API of this space alone, for Spaces.
 	mux *http.ServeMux
+	// account is whose space this is, for the audit log.
+	account string
+	// audit notes changes in the audit log; nil notes nothing.
+	audit Recorder
+}
+
+// Recorder notes in the audit log that account did action to target, in the
+// request r.
+type Recorder func(r *http.Request, account, action, target string)
+
+// note records action on target in the audit log.
+func (f *Files) note(r *http.Request, action, target string) {
+	if f.audit != nil {
+		f.audit(r, f.account, action, target)
+	}
 }
 
 // Open opens the data directory dir.

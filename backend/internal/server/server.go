@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/audit"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
@@ -29,6 +30,8 @@ type Config struct {
 	Data *files.Spaces
 	// Status adds the status page's API behind the login; nil leaves it out.
 	Status *status.Status
+	// Audit adds the audit log's API behind the login; nil leaves it out.
+	Audit *audit.Log
 }
 
 // New returns the handler for the website and the API.
@@ -41,6 +44,9 @@ func New(cfg Config) http.Handler {
 		cfg.Auth.Register(mux)
 		if cfg.Status != nil {
 			cfg.Status.Register(mux, cfg.Auth.Require)
+		}
+		if cfg.Audit != nil {
+			cfg.Audit.Register(mux, cfg.Auth.Require)
 		}
 		if cfg.Data != nil {
 			cfg.Data.Register(mux, cfg.Auth.Require)

@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AccountView } from './account/account';
+import { AuditView } from './audit/audit';
 import { AuthService, errorMessage, needsCode } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
@@ -14,7 +15,8 @@ import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
 import { UsersView } from './users/users';
 
-type View = 'files' | Kind | 'shares' | 'trash' | 'status' | 'account' | 'users' | 'search';
+type View =
+  'files' | Kind | 'shares' | 'trash' | 'status' | 'account' | 'users' | 'search' | 'audit';
 
 /** How often the warnings about space and the RAID are checked. */
 export const STATUS_INTERVAL = 5 * 60 * 1000;
@@ -36,6 +38,7 @@ interface Health {
     StatusView,
     AccountView,
     UsersView,
+    AuditView,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -61,6 +64,7 @@ export class App {
     { view: 'status', name: 'Status' },
     { view: 'account', name: 'Konto' },
     ...(this.auth.admin() ? [{ view: 'users' as const, name: 'Benutzer' }] : []),
+    { view: 'audit', name: 'Protokoll' },
   ]);
   protected readonly view = signal<View>('files');
   /** The id of a share link /s/<id> this page was opened with, or null. */
