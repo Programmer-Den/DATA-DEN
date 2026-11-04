@@ -39,4 +39,29 @@ if ./setup-firewall.sh --print 10.0.0.5 | grep -q '@PI_ADDRESS@'; then
 	failed=1
 fi
 
+expect 2 'Usage' ./setup-backup.sh
+expect 2 'Usage' ./setup-backup.sh start
+expect 2 'Usage' ./setup-backup.sh on
+expect 2 'Usage' ./setup-backup.sh on /mnt/a /mnt/b
+expect 2 'Usage' ./setup-backup.sh on --force /mnt/backup
+expect 2 'Usage' ./setup-backup.sh off now
+# shellcheck disable=SC2016 # the $(id) is meant literally
+for bad in relative/path 'ftp:host:x' '/mnt/backup x' '/mnt/$(id)' 'sftp:host:"x"' 's3:' '/'; do
+	expect 2 'is not a repository' ./setup-backup.sh on --print "$bad"
+done
+expect 2 'has . or ..' ./setup-backup.sh on --print /mnt/backup/../../srv/data-den
+for inside in /srv/data-den /srv/data-den/ /srv/data-den/backup; do
+	expect 2 'on the mirror itself' ./setup-backup.sh on --print "$inside"
+done
+expect 2 'needs a number' ./setup-backup.sh on --print --keep-daily 0 /mnt/backup
+expect 2 'needs a number' ./setup-backup.sh on --print --keep-weekly x /mnt/backup
+expect 2 'needs a number' ./setup-backup.sh on --print /mnt/backup --keep-monthly
+expect 0 'RESTIC_REPOSITORY=/mnt/backup/data-den' ./setup-backup.sh on --print /mnt/backup/data-den/
+expect 0 'RESTIC_REPOSITORY=sftp:den@backup.example:data-den' ./setup-backup.sh on --print sftp:den@backup.example:data-den
+expect 0 'BACKUP_KEEP_DAILY=14' ./setup-backup.sh on --print --keep-daily 14 /mnt/backup
+expect 0 'BACKUP_KEEP_MONTHLY=12' ./setup-backup.sh on --print /mnt/backup
+
+# The backup run refuses to start without its settings.
+expect 1 'RESTIC_REPOSITORY is not set' env -u RESTIC_REPOSITORY ./backup.sh
+
 exit "$failed"

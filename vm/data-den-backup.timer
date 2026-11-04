@@ -1,0 +1,13 @@
+# Starts the DATA-DEN backup every night. setup-backup.sh switches it on and
+# off. Guide: vm/README.md#backup-optional
+[Unit]
+Description=Nightly DATA-DEN backup
+
+[Timer]
+OnCalendar=*-*-* 03:00
+RandomizedDelaySec=30min
+# Catches up after the VM was off at that time.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

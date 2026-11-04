@@ -15,7 +15,8 @@ Two walls keep everything else out: the port ACLs of the VM's network
 adapter (`Set-DataDenNetwork.ps1`) and nftables in the VM
 (`setup-firewall.sh`). The Windows Firewall does not filter a VM on an
 external switch, so it plays no part. RAID 1 protects against one failing
-disk; it is not a backup.
+disk; it is not a backup. Against deleting, ransomware or a fire there is an
+optional backup: [Backup (optional)](#backup-optional).
 
 | File | Runs on | Does |
 |---|---|---|
@@ -23,6 +24,8 @@ disk; it is not a backup.
 | `Set-DataDenNetwork.ps1` | Windows, as administrator | Port ACLs: only the Pi gets in (HTTPS, SSH, ping), the VM may connect out |
 | `setup-raid.sh` | the VM, as root | RAID 1 over both disks with mdadm, mounted at `/srv/data-den` |
 | `setup-firewall.sh`, `nftables.conf` | the VM, as root | nftables: only the Pi gets in |
+| `setup-backup.sh` | the VM, as root | Switches the optional backup on or off, or shows its status |
+| `backup.sh`, `data-den-backup.service`, `data-den-backup.timer` | the VM, installed by `setup-backup.sh` | The nightly backup run with restic |
 | `test-vm-scripts.sh` | CI | Tests the checks of the shell scripts |
 
 ## Before you start
@@ -121,3 +124,92 @@ sudo mdadm --manage /dev/md/data-den --add /dev/disk/by-id/<new disk>
 ```
 
 Den-Watcher will report the RAID state as an alarm in a later step.
+
+## Backup (optional)
+
+The backup is off until you switch it on. With it on, restic takes a
+snapshot of `/srv/data-den` every night at about 3:00, onto an external disk
+or offsite. Each snapshot is complete, but only changes take new space, and
+everything is encrypted. Old snapshots are thinned out: by default 7 daily,
+4 weekly and 12 monthly are kept. A file that was deleted or overwritten,
+even one emptied from the recycle bin, can be brought back from any of them.
+Unfinished uploads and thumbnails are left out.
+
+One repository is used at a time. Best is a copy away from home, so a fire
+or a theft does not take it too, so prefer an offsite repository over a disk
+next to the PC.
+
+### Onto an external disk
+
+Pass the disk through to the VM like the data disks, so Windows does not
+see it. In PowerShell as administrator, with the number from `Get-Disk`:
+
+```powershell
+Set-Disk -Number <n> -IsOffline $true
+Add-VMHardDiskDrive -VMName DATA-DEN -ControllerType SCSI -DiskNumber <n>
+```
+
+In the VM, format it (this **erases** it) and mount it at boot:
+
+```bash
+ls -l /dev/disk/by-id/ | grep -v part         # the backup disk
+sudo mkfs.ext4 -L data-den-backup /dev/disk/by-id/<backup disk>
+sudo mkdir -p /mnt/backup
+echo 'LABEL=data-den-backup /mnt/backup ext4 defaults,noatime,nofail 0 2' | sudo tee -a /etc/fstab
+sudo systemctl daemon-reload && sudo mount /mnt/backup
+sudo mkdir /mnt/backup/data-den
+sudo vm/setup-backup.sh on /mnt/backup/data-den
+```
+
+If the disk is not mounted at backup time, the run fails instead of filling
+the VM's system disk.
+
+### Offsite
+
+Any repository restic knows works, such as a server you can reach with SSH
+(`sftp:`), restic's REST server (`rest:`), S3, Backblaze B2 or anything
+rclone reaches. The VM may connect out; nothing new gets in. For SFTP, give
+root a key and trust the server once:
+
+```bash
+sudo ssh-keygen -t ed25519                    # then add /root/.ssh/id_ed25519.pub on the server
+sudo ssh <user>@<server> exit                 # accepts the server's host key
+sudo vm/setup-backup.sh on sftp:<user>@<server>:data-den
+```
+
+Keys for S3 or B2 go into `/etc/data-den/backup-credentials.env` (such as
+`AWS_ACCESS_KEY_ID=...`, `chmod 600`), never into the repository.
+
+### Switching on, off and checking
+
+```bash
+sudo vm/setup-backup.sh on [--keep-daily 7] [--keep-weekly 4] [--keep-monthly 12] <repository>
+sudo systemctl start data-den-backup          # the first backup now, instead of tonight
+sudo vm/setup-backup.sh status                # on or off, the next run, the last result, the newest snapshots
+sudo vm/setup-backup.sh off                   # stops the nightly runs; settings and snapshots are kept
+sudo journalctl -u data-den-backup            # what the runs did
+```
+
+When `on` creates the repository, it prints its password once. **Keep it
+outside the VM**, such as in a password manager: when the VM is lost, the
+backup cannot be read without it. It is also in
+`/etc/data-den/backup-password`.
+
+### Restoring
+
+The settings are in `/etc/data-den/backup.env`; load them first:
+
+```bash
+sudo -i
+set -a; . /etc/data-den/backup.env; set +a
+restic snapshots                                       # which snapshots there are
+restic restore latest --target /srv/data-den/Wiederhergestellt --include /srv/data-den/Fotos/2026
+chown -R 65532:65532 /srv/data-den/Wiederhergestellt   # so DATA-DEN can manage the files
+```
+
+The restored files appear in DATA-DEN in the folder `Wiederhergestellt`,
+under their full path (`srv/data-den/Fotos/2026`).
+`restic mount /mnt/restore` shows all snapshots as folders to browse. After a
+lost VM: install Debian, RAID and restic again, put the password into
+`/etc/data-den/backup-password`, switch the backup on with the same
+repository and restore with `--target /`.
