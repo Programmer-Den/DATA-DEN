@@ -131,3 +131,38 @@ func TestStatusAPI(t *testing.T) {
 		t.Errorf("/api/status without login: status %d, want 401", rec.Code)
 	}
 }
+
+func TestSyncClientDownload(t *testing.T) {
+	hash, err := auth.HashPassword("richtig")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := auth.New(auth.Config{Username: "chriszly", PasswordHash: hash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clients := fstest.MapFS{"data-den-sync-windows-amd64.exe": {Data: []byte("MZ")}, "geheim.txt": {Data: []byte("x")}}
+	h := New(Config{Files: fstest.MapFS{}, Auth: a, Clients: clients})
+	if rec := get(t, h, "/api/sync/client/data-den-sync-windows-amd64.exe"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("without login: status %d, want 401", rec.Code)
+	}
+	login := httptest.NewRequest(http.MethodPost, "/api/login", strings.NewReader(`{"username":"chriszly","password":"richtig"}`))
+	login.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, login)
+	cookies := rec.Result().Cookies()
+	for name, want := range map[string]int{"data-den-sync-windows-amd64.exe": http.StatusOK, "data-den-sync-windows-arm64.exe": http.StatusNotFound, "geheim.txt": http.StatusNotFound} {
+		req := httptest.NewRequest(http.MethodGet, "/api/sync/client/"+name, nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Errorf("%s: status %d, want %d", name, rec.Code, want)
+		}
+		if want == http.StatusOK && (rec.Body.String() != "MZ" || !strings.Contains(rec.Header().Get("Content-Disposition"), "attachment")) {
+			t.Errorf("%s: body %q, headers %v", name, rec.Body.String(), rec.Header())
+		}
+	}
+}

@@ -24,10 +24,18 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath \
       -ldflags="-s -w -X github.com/Programmer-Den/DATA-DEN/backend/internal/version.Version=$VERSION" \
       -o /out/data-den ./cmd/data-den
+# The desktop sync client for Windows, which the server offers for download.
+RUN for arch in amd64 arm64; do \
+      CGO_ENABLED=0 GOOS=windows GOARCH=$arch \
+      go build -trimpath \
+        -ldflags="-s -w -X github.com/Programmer-Den/DATA-DEN/backend/internal/version.Version=$VERSION" \
+        -o /out/clients/data-den-sync-windows-$arch.exe ./cmd/data-den-sync; \
+    done
 
 # A minimal image without a shell or package manager, running as a non-root user.
 FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=backend /out/data-den /data-den
+COPY --from=backend /out/clients /clients
 EXPOSE 8080
 # No shell or curl in the image, so the program checks itself.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s CMD ["/data-den", "healthcheck"]

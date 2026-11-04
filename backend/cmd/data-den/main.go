@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -129,6 +130,19 @@ func tlsFiles() (certFile, keyFile string) {
 	return os.Getenv("DATA_DEN_TLS_CERT"), os.Getenv("DATA_DEN_TLS_KEY")
 }
 
+// clientsDir holds the sync client's programs: /clients in the image, or
+// DATA_DEN_CLIENTS_DIR. Nil when there is none.
+func clientsDir() fs.FS {
+	dir := os.Getenv("DATA_DEN_CLIENTS_DIR")
+	if dir == "" {
+		dir = "/clients"
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() { //nolint:gosec // the server's own setting
+		return nil
+	}
+	return os.DirFS(dir)
+}
+
 // setTrashDays applies DATA_DEN_TRASH_DAYS, if set, to data.
 func setTrashDays(data *files.Spaces) error {
 	value := os.Getenv("DATA_DEN_TRASH_DAYS")
@@ -217,7 +231,7 @@ func run() error {
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Clients: clientsDir()}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
