@@ -30,8 +30,11 @@ optional backup: [Backup (optional)](#backup-optional).
 | `setup-firewall.sh`, `nftables.conf` | the VM, as root | nftables: only the Pi gets in |
 | `setup-updates.sh` | the VM, as root | Switches automatic security updates on or off, or shows their status |
 | `setup-backup.sh` | the VM, as root | Switches the optional backup on or off, or shows its status |
+| `Watch-DataDenDisks.ps1` | Windows, as administrator | Checks the data disks' SMART health every 15 minutes and hands it to the VM |
+| `setup-disk-health.sh` | the VM, as root | Switches the disk health check on or off, or shows its status |
+| `disk-health.sh`, `data-den-disk-health.service`, `data-den-disk-health.timer` | the VM, installed by `setup-disk-health.sh` | Reads the disk health from Windows and notifies the admins when it changes |
 | `backup.sh`, `data-den-backup.service`, `data-den-backup.timer` | the VM, installed by `setup-backup.sh` | The nightly backup run with restic |
-| `backup-result.sh`, `event.sh` | the VM, installed by `setup-backup.sh` | Hand a failed backup run to DATA-DEN, which notifies the admins |
+| `backup-result.sh`, `event.sh` | the VM, installed by `setup-backup.sh` (`event.sh` also by `setup-disk-health.sh`) | Hand a failed backup run or a bad disk to DATA-DEN, which notifies the admins |
 | `test-vm-scripts.sh` | CI | Tests the checks of the shell scripts |
 
 ## Before you start
@@ -139,6 +142,39 @@ else. The failed disk only ever held encrypted data; it can go back to the
 seller as it is.
 
 Den-Watcher will report the RAID state as an alarm in a later step.
+
+## Disk health
+
+Hyper-V does not pass a disk's SMART values to the VM, so the VM only
+notices a disk once it drops out of the mirror. Windows still reads them:
+`Watch-DataDenDisks.ps1` runs every 15 minutes as a scheduled task, checks
+both passed-through disks (the health Windows derives from SMART,
+uncorrected read and write errors, a temperature of 55 °C or more, 90 %
+wear) and hands the result to the VM over Hyper-V's data exchange, without
+any network. In the VM, a timer reads it every 15 minutes, and DATA-DEN
+tells the admins who chose "Platte oder RAID fällt aus" in its
+**Benachrichtigungen** tab ([README](../README.md#notifications)): when a
+disk turns bad, when all disks are fine again, and when Windows has not
+checked for a day.
+
+On the PC, as administrator, from where the repository stays:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File vm\Watch-DataDenDisks.ps1 -Install    # the scheduled task
+powershell -ExecutionPolicy Bypass -File vm\Watch-DataDenDisks.ps1 -WhatIf     # shows what it finds, hands nothing over
+```
+
+In the VM:
+
+```bash
+sudo vm/setup-disk-health.sh on       # installs hyperv-daemons, the check and its timer
+sudo vm/setup-disk-health.sh status   # what was reported last
+```
+
+`-MaxTemperature 50` with `-Install` changes the temperature limit;
+`-Uninstall` removes the task. The VM's "Data Exchange" integration
+service must be on, as it is by default (`Get-VMIntegrationService -VMName
+DATA-DEN`).
 
 ## Encryption
 

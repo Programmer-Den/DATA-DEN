@@ -1,0 +1,13 @@
+# Reads the disk health Windows hands over and tells DATA-DEN about changes;
+# data-den-disk-health.timer starts it. Installed by setup-disk-health.sh.
+# Guide: vm/README.md#disk-health
+[Unit]
+Description=DATA-DEN disk health from Windows
+After=hv-kvp-daemon.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/data-den-disk-health
+StateDirectory=data-den
+PrivateTmp=true
+ProtectSystem=full
