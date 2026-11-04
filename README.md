@@ -20,7 +20,7 @@ flowchart LR
   Docker image running in the VM: [deploy/README.md](deploy/README.md).
 
 The server serves the website, `/api/health`, the login, the folder view,
-downloads and uploads.
+downloads, uploads and a status page.
 
 ## Login
 
@@ -42,6 +42,7 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
 | `DATA_DEN_TRASH_DAYS` | How many days, 1 to 3650, a deleted item stays in the recycle bin before it is deleted for good; default 30 |
+| `DATA_DEN_DISK_WARN_PERCENT` | Warn when less than this share of the disk is free, in percent; default `10` |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
@@ -111,6 +112,19 @@ are created, and an existing file is never overwritten: the upload stops
 with "Datei existiert bereits". Unfinished chunks wait in
 `.data-den-uploads/` in the data directory, which the folder view hides; a
 restart of the server removes them.
+
+## Status
+
+The **Status** tab shows the free space on the data disk, the state of the
+RAID and how long the server and the VM have been up. `GET /api/status`
+(behind the login) reads the space with `statfs` on the data directory and
+the RAID from `/proc/mdstat`, which a container shares with its VM. When less
+than `DATA_DEN_DISK_WARN_PERCENT` (10 %) of the disk is free, or a disk of
+the mirror is missing, every page shows a warning; below a quarter of that
+(2.5 %) the warning says the disk is almost full. The web interface checks
+every 5 minutes while someone is logged in. Outside the VM there is no RAID,
+and the page says so. `/api/health` stays as it is, without login, for
+Docker's health check.
 
 ## Development
 

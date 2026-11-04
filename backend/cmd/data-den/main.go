@@ -21,6 +21,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/version"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/web"
 )
@@ -133,6 +134,10 @@ func run() error {
 	if os.Getenv("DATA_DEN_PASSWORD_HASH") == "" {
 		slog.Warn("no DATA_DEN_PASSWORD_HASH set, so nobody can log in; create one with: data-den hash-password")
 	}
+	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
+	if err != nil {
+		return err
+	}
 	dataDir := os.Getenv("DATA_DEN_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "/data"
@@ -146,9 +151,17 @@ func run() error {
 			return err
 		}
 	}
+	stat := status.New(status.Config{
+		DataDir:     dataDir,
+		WarnPercent: warnPercent,
+		MDStat:      "/proc/mdstat",
+		Uptime:      "/proc/uptime",
+		Version:     version.Version,
+		Started:     time.Now(),
+	})
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
