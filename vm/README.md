@@ -27,6 +27,7 @@ optional backup: [Backup (optional)](#backup-optional).
 | `setup-updates.sh` | the VM, as root | Switches automatic security updates on or off, or shows their status |
 | `setup-backup.sh` | the VM, as root | Switches the optional backup on or off, or shows its status |
 | `backup.sh`, `data-den-backup.service`, `data-den-backup.timer` | the VM, installed by `setup-backup.sh` | The nightly backup run with restic |
+| `backup-result.sh`, `event.sh` | the VM, installed by `setup-backup.sh` | Hand a failed backup run to DATA-DEN, which notifies the admins |
 | `test-vm-scripts.sh` | CI | Tests the checks of the shell scripts |
 
 ## Before you start
@@ -211,6 +212,12 @@ sudo vm/setup-backup.sh status                # on or off, the next run, the las
 sudo vm/setup-backup.sh off                   # stops the nightly runs; settings and snapshots are kept
 sudo journalctl -u data-den-backup            # what the runs did
 ```
+
+When a run fails, DATA-DEN tells the admins who chose "Backup
+fehlgeschlagen" in its **Benachrichtigungen** tab, by email or push, with
+the end of the run's log ([README](../README.md#notifications)). A backup
+switched on before this existed gets it by running `on` again with the same
+repository.
 
 When `on` creates the repository, it prints its password once. **Keep it
 outside the VM**, such as in a password manager: when the VM is lost, the

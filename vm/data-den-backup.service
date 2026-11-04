@@ -14,6 +14,8 @@ EnvironmentFile=-/etc/data-den/backup-credentials.env
 Environment=RESTIC_CACHE_DIR=/var/cache/data-den-backup
 CacheDirectory=data-den-backup
 ExecStart=/usr/local/sbin/data-den-backup
+# Tells DATA-DEN when the run failed, so it notifies the admins.
+ExecStopPost=/usr/local/sbin/data-den-backup-result
 Nice=10
 IOSchedulingClass=idle
 PrivateTmp=true

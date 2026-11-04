@@ -307,7 +307,7 @@ by email and which by push message:
 
 | Event | Who | When |
 |---|---|---|
-| Disk or RAID failing | admins | A disk of the mirror fails or the RAID stops, and again when it is whole; a disk whose SMART values look bad, reported by the VM |
+| Disk or RAID failing | admins | A disk of the mirror fails or the RAID stops, and again when it is whole |
 | Backup failed | admins | The nightly backup reports a failure |
 | Low disk space | admins | The free space falls below `DATA_DEN_DISK_WARN_PERCENT`, and again below a quarter of it |
 | Damaged files | admins | A check finds files whose content changed on the disk |
@@ -325,7 +325,7 @@ push services of Google, Mozilla, Apple and Microsoft. **Testnachricht
 senden** tries every way an account set up.
 
 The server checks the RAID and the free space every minute. The VM reports
-a failed backup or bad SMART values as a JSON file in `.data-den-events/` in
+a failed backup (`vm/backup-result.sh`) as a JSON file in `.data-den-events/` in
 the data directory, which the server sends and deletes:
 
 ```json

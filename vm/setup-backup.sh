@@ -125,6 +125,8 @@ BACKUP_KEEP_MONTHLY=$monthly"
 	fi
 
 	install -m 755 "$here/backup.sh" /usr/local/sbin/data-den-backup
+	install -m 755 "$here/backup-result.sh" /usr/local/sbin/data-den-backup-result
+	install -m 755 "$here/event.sh" /usr/local/sbin/data-den-event
 	install -m 644 "$here/data-den-backup.service" "$here/data-den-backup.timer" /etc/systemd/system/
 	systemctl daemon-reload
 	systemctl enable --now data-den-backup.timer
