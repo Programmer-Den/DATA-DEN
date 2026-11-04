@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 )
 
 func serveHealth(status int) http.Handler {
@@ -67,5 +69,28 @@ func TestHealthcheckNothingListening(t *testing.T) {
 	t.Setenv("DATA_DEN_TLS_CERT", "")
 	if err := healthcheck(); err == nil {
 		t.Error("closed port: no error")
+	}
+}
+
+func TestSetTrashDays(t *testing.T) {
+	data, err := files.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = data.Close() }()
+
+	t.Setenv("DATA_DEN_TRASH_DAYS", "")
+	if err := setTrashDays(data); err != nil || data.TrashDays() != files.DefaultTrashDays {
+		t.Errorf("unset: %v, %d days", err, data.TrashDays())
+	}
+	for _, bad := range []string{"abc", "0", "7d", "99999"} {
+		t.Setenv("DATA_DEN_TRASH_DAYS", bad)
+		if setTrashDays(data) == nil {
+			t.Errorf("%q: no error", bad)
+		}
+	}
+	t.Setenv("DATA_DEN_TRASH_DAYS", "14")
+	if err := setTrashDays(data); err != nil || data.TrashDays() != 14 {
+		t.Errorf("14: %v, %d days", err, data.TrashDays())
 	}
 }

@@ -1,8 +1,10 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -13,7 +15,8 @@ import (
 )
 
 // The recycle bin: deleting moves a file or folder into trashDir, where it
-// waits trashDays before it is gone for good.
+// waits trashDays (DefaultTrashDays unless SetTrashDays) before it is gone
+// for good.
 //
 //	GET  /api/trash                       -> {"items": [...]}, newest first
 //	POST /api/trash/restore {"id": "..."} -> 200, back to where it was
@@ -24,8 +27,11 @@ import (
 // itself, renamed to "item".
 const (
 	trashDir = ".data-den-trash"
-	// TrashDays is how long a deleted item can be restored.
-	TrashDays = 30
+	// DefaultTrashDays is how long a deleted item can be restored, unless
+	// SetTrashDays says otherwise.
+	DefaultTrashDays = 30
+	// MaxTrashDays is the longest waiting time SetTrashDays accepts.
+	MaxTrashDays = 3650
 )
 
 var trashID = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -40,6 +46,37 @@ type TrashItem struct {
 	// Size is the file's size, or the sum of a folder's files.
 	Size    int64     `json:"size"`
 	Deleted time.Time `json:"deleted"`
+}
+
+// SetTrashDays sets how many days, 1 to MaxTrashDays, a deleted item can be
+// restored before it is deleted for good.
+func (f *Files) SetTrashDays(days int) error {
+	if days < 1 || days > MaxTrashDays {
+		return fmt.Errorf("the recycle bin's waiting time must be 1 to %d days, not %d", MaxTrashDays, days)
+	}
+	f.trashDays = days
+	return nil
+}
+
+// TrashDays is how many days a deleted item can be restored.
+func (f *Files) TrashDays() int {
+	return f.trashDays
+}
+
+// PurgeTrashEvery deletes for good what waited long enough in the recycle
+// bin, every interval until ctx is done, so the bin is emptied on time even
+// when nobody opens it.
+func (f *Files) PurgeTrashEvery(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			f.purgeTrash()
+		}
+	}
 }
 
 func (f *Files) registerTrash(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
@@ -120,9 +157,9 @@ func (f *Files) trashItems() []TrashItem {
 	return items
 }
 
-// purgeTrash deletes for good what was deleted more than TrashDays ago.
+// purgeTrash deletes for good what was deleted more than trashDays ago.
 func (f *Files) purgeTrash() {
-	limit := time.Now().AddDate(0, 0, -TrashDays)
+	limit := time.Now().AddDate(0, 0, -f.trashDays)
 	for _, item := range f.trashItems() {
 		if item.Deleted.Before(limit) {
 			if err := f.root.RemoveAll(path.Join(trashDir, item.ID)); err != nil {
@@ -136,7 +173,7 @@ func (f *Files) purgeTrash() {
 
 func (f *Files) listTrash(w http.ResponseWriter, _ *http.Request) {
 	f.purgeTrash()
-	writeJSON(w, http.StatusOK, map[string]any{"days": TrashDays, "items": f.trashItems()})
+	writeJSON(w, http.StatusOK, map[string]any{"days": f.trashDays, "items": f.trashItems()})
 }
 
 // trashItem reads the item a request names by its id. It answers the

@@ -45,6 +45,8 @@ type Files struct {
 	uploads uploads
 	// thumbSlots limits how many thumbnails are made at the same time.
 	thumbSlots chan struct{}
+	// trashDays is how long a deleted item can be restored.
+	trashDays int
 }
 
 // Open opens the data directory dir.
@@ -57,6 +59,7 @@ func Open(dir string) (*Files, error) {
 		root:       root,
 		uploads:    uploads{byID: map[string]*upload{}},
 		thumbSlots: make(chan struct{}, thumbWorkers),
+		trashDays:  DefaultTrashDays,
 	}, nil
 }
 
