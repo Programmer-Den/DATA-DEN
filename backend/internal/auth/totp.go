@@ -165,10 +165,10 @@ func (a *Auth) hasSecondFactor(name string) bool {
 }
 
 func (a *Auth) registerTwoFactor(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/account/2fa", a.Require(a.twoFactorState))
-	mux.HandleFunc("POST /api/account/2fa/setup", a.Require(a.setupTwoFactor))
-	mux.HandleFunc("POST /api/account/2fa/enable", a.Require(a.enableTwoFactor))
-	mux.HandleFunc("POST /api/account/2fa/disable", a.Require(a.disableTwoFactor))
+	mux.HandleFunc("GET /api/account/2fa", a.requireSession(a.twoFactorState))
+	mux.HandleFunc("POST /api/account/2fa/setup", a.requireSession(a.setupTwoFactor))
+	mux.HandleFunc("POST /api/account/2fa/enable", a.requireSession(a.enableTwoFactor))
+	mux.HandleFunc("POST /api/account/2fa/disable", a.requireSession(a.disableTwoFactor))
 }
 
 func (a *Auth) twoFactorState(w http.ResponseWriter, r *http.Request) {

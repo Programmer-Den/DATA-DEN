@@ -15,6 +15,8 @@ export interface User {
   used: number;
   /** Whether the login needs a code from an app. */
   twoFactor: boolean;
+  /** How many app passwords it has. */
+  tokens: number;
 }
 
 const GB = 1024 ** 3;
@@ -117,6 +119,19 @@ export class UsersView {
       this.act(
         this.http.post(`/api/users/${user.name}`, { twoFactor: false }),
         `Zwei-Faktor-Anmeldung von „${user.name}“ ausgeschaltet`,
+      );
+    }
+  }
+
+  protected revokeTokens(user: User): void {
+    if (
+      confirm(
+        `Alle ${user.tokens} App-Passwörter von „${user.name}“ widerrufen, etwa weil ein Gerät verloren ist?`,
+      )
+    ) {
+      this.act(
+        this.http.post(`/api/users/${user.name}`, { tokens: false }),
+        `App-Passwörter von „${user.name}“ widerrufen`,
       );
     }
   }
