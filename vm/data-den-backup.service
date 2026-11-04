@@ -1,0 +1,20 @@
+# The backup run of DATA-DEN; data-den-backup.timer starts it every night.
+# Installed by setup-backup.sh. Guide: vm/README.md#backup-optional
+[Unit]
+Description=DATA-DEN backup (restic)
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/srv/data-den
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/data-den/backup.env
+# Optional: keys for an offsite repository, such as AWS_ACCESS_KEY_ID.
+EnvironmentFile=-/etc/data-den/backup-credentials.env
+Environment=RESTIC_CACHE_DIR=/var/cache/data-den-backup
+CacheDirectory=data-den-backup
+ExecStart=/usr/local/sbin/data-den-backup
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+ProtectSystem=full
