@@ -198,6 +198,26 @@ func (s *Spaces) Register(mux *http.ServeMux, require func(http.HandlerFunc) htt
 	}
 }
 
+// RegisterDAV adds WebDAV under DavPrefix to mux, behind require (a login
+// check that takes app passwords), each account in its own space.
+func (s *Spaces) RegisterDAV(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
+	handler := require(func(w http.ResponseWriter, r *http.Request) {
+		name := s.cfg.User(r)
+		f, err := s.space(name)
+		if err != nil {
+			slog.Error("opening a space", "username", name, "err", err)
+			http.Error(w, "Speicherbereich nicht verfügbar", http.StatusInternalServerError)
+			return
+		}
+		if s.cfg.Quota != nil {
+			f.quota.Store(s.cfg.Quota(name))
+		}
+		f.ServeDAV(w, r)
+	})
+	mux.HandleFunc(DavPrefix, handler)
+	mux.HandleFunc(DavPrefix+"/", handler)
+}
+
 // RegisterShares adds ShareRoutes to mux behind require, each account's
 // links kept in its own space, and the links themselves for everyone.
 // guard limits the password guesses.

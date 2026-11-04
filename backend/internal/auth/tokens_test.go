@@ -214,3 +214,36 @@ func TestTokensSurviveRestartAndGoWithTheAccount(t *testing.T) {
 		t.Errorf("tokens in the file: %v, %v", parsed.Tokens, err)
 	}
 }
+
+func TestRequireTokenForWebDAV(t *testing.T) {
+	c := &clock{now: time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)}
+	hash, err := bcrypt.GenerateFromPassword([]byte("richtig"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := New(Config{Username: "chriszly", PasswordHash: string(hash), Now: c.Now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	a.Register(mux)
+	mux.HandleFunc("/dav/", a.RequireToken(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(Username(r)))
+	}))
+	owner := loginAs(t, mux, "chriszly", "richtig")
+	token, _ := createToken(t, mux, owner, `{"name":"Laufwerk","password":"richtig","readOnly":true}`)
+
+	req := httptest.NewRequest("PROPFIND", "/dav/", nil)
+	req.AddCookie(owner)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized || !strings.HasPrefix(rec.Header().Get("WWW-Authenticate"), "Basic ") {
+		t.Errorf("with a session only: status %d, WWW-Authenticate %q", rec.Code, rec.Header().Get("WWW-Authenticate"))
+	}
+	if code, body := withToken(mux, "PROPFIND", "/dav/", "", basic("chriszly", token)); code != http.StatusOK || body != "chriszly" {
+		t.Errorf("PROPFIND with a read-only token: status %d, %q", code, body)
+	}
+	if code, _ := withToken(mux, http.MethodPut, "/dav/a.txt", "x", basic("chriszly", token)); code != http.StatusForbidden {
+		t.Errorf("PUT with a read-only token: status %d, want 403", code)
+	}
+}

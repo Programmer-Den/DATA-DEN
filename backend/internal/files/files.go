@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/net/webdav"
 )
 
 // Entry is one file or folder in a listing.
@@ -67,6 +69,9 @@ type Files struct {
 	// versionMu keeps two changes of the versions, or of a file and its
 	// versions, from running at the same time.
 	versionMu sync.Mutex
+	// dav serves WebDAV, made on first use.
+	dav     *webdav.Handler
+	davOnce sync.Once
 }
 
 // Recorder notes in the audit log that account did action to target, in the

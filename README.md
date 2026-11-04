@@ -115,10 +115,27 @@ curl -H "Authorization: Bearer $DATA_DEN_TOKEN" https://<host>/api/files
 
 It works for everything a login can do with files, but not for the
 account's settings (password, 2FA, app passwords) or for managing accounts.
-A read-only one only reads (GET and HEAD). Each can be revoked in the
+A read-only one only reads (GET, HEAD, OPTIONS and PROPFIND). Each can be revoked in the
 **Konto** tab; an admin can revoke all of an account's in the **Benutzer**
 tab, and deleting an account revokes its own. Wrong tokens count as failed
 logins.
+
+### Network drive (WebDAV)
+
+Each account's space is also served over WebDAV at `https://<host>/dav/`,
+so Windows, macOS, Linux file managers or rclone can mount it as a drive.
+It only takes app passwords (username and app password), never the
+account's own password. The same rules hold as in the web interface: the
+server's own folders stay hidden, deleting moves into the recycle bin,
+overwriting keeps the old file as a version, and the quota counts.
+
+On Windows, in Explorer: **Dieser PC → Netzlaufwerk verbinden**, folder
+`https://<host>/dav/`, check **Verbindung mit anderen Anmeldeinformationen
+herstellen**, then enter the username and the app password. Windows limits
+WebDAV downloads to 50 MB by default; for larger videos raise
+`FileSizeLimitInBytes` under
+`HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters` (for
+example to `0xFFFFFFFF`, 4 GB) and restart the WebClient service.
 
 ### Audit log
 

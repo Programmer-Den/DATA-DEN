@@ -44,6 +44,7 @@ describe('TokensView', () => {
     expect(row).toContain('Backup-Skript');
     expect(row).toContain('nur lesen');
     expect(row).toContain('nie');
+    expect(page(fixture).querySelector('.dav')?.textContent).toBe(`${location.origin}/dav/`);
   });
 
   it('creates one and shows it once', async () => {
