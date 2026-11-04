@@ -11,6 +11,7 @@ import (
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 )
 
 // Config is what the server needs to run.
@@ -24,6 +25,8 @@ type Config struct {
 	// Data is the data directory, served behind the login. Nil with Auth set
 	// means the directory is missing: its API answers 503.
 	Data *files.Files
+	// Status adds the status page's API behind the login; nil leaves it out.
+	Status *status.Status
 }
 
 // New returns the handler for the website and the API.
@@ -34,6 +37,9 @@ func New(cfg Config) http.Handler {
 	})
 	if cfg.Auth != nil {
 		cfg.Auth.Register(mux)
+		if cfg.Status != nil {
+			cfg.Status.Register(mux, cfg.Auth.Require)
+		}
 		if cfg.Data != nil {
 			cfg.Data.Register(mux, cfg.Auth.Require)
 		} else {

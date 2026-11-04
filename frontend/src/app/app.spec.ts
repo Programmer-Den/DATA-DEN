@@ -2,6 +2,14 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { App } from './app';
+import { StatusReport } from './status/status.service';
+
+const fine: StatusReport = {
+  version: '1.2.3',
+  started: '2026-11-04T10:00:00Z',
+  disk: { total: 4e12, free: 3e12, used: 1e12, freePercent: 75, level: 'ok', warnPercent: 10 },
+  raid: [{ name: 'md127', level: 'raid1', active: true, disks: 2, working: 2, healthy: true }],
+};
 
 describe('App', () => {
   let http: HttpTestingController;
@@ -16,7 +24,10 @@ describe('App', () => {
   afterEach(() => http.verify());
 
   /** Starts the app; session null means nobody is logged in. */
-  async function start(session: string | null): Promise<ComponentFixture<App>> {
+  async function start(
+    session: string | null,
+    status: StatusReport = fine,
+  ): Promise<ComponentFixture<App>> {
     const fixture = TestBed.createComponent(App);
     http.expectOne('/api/health').flush({ status: 'ok', version: '1.2.3' });
     const req = http.expectOne('/api/session');
@@ -24,6 +35,7 @@ describe('App', () => {
       req.flush({ username: session });
       await fixture.whenStable();
       http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
+      http.expectOne('/api/status').flush(status);
     } else {
       req.flush({ error: 'Nicht angemeldet' }, { status: 401, statusText: 'Unauthorized' });
     }
@@ -73,6 +85,7 @@ describe('App', () => {
     req.flush({ username: 'chriszly' });
     await fixture.whenStable();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
+    http.expectOne('/api/status').flush(fine);
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Angemeldet als chriszly');
     expect(page(fixture).textContent).toContain('DATA-DEN 1.2.3');
@@ -123,5 +136,28 @@ describe('App', () => {
     tab('Dateien').click();
     await fixture.whenStable();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
+  });
+
+  it('warns about low space and a broken mirror, and links to the status page', async () => {
+    const fixture = await start('chriszly', {
+      ...fine,
+      disk: { ...fine.disk!, free: 2e11, freePercent: 5, level: 'low' },
+      raid: [{ ...fine.raid![0], working: 1, failed: ['sdc'], healthy: false }],
+    });
+    const banner = page(fixture).querySelector('.warnings')!;
+    expect(banner.textContent).toContain('Wenig Speicherplatz');
+    expect(banner.textContent).toContain('md127 läuft nur mit 1 von 2 Platten');
+
+    banner.querySelector('button')!.click();
+    await fixture.whenStable();
+    http.expectOne('/api/status').flush(fine);
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.warnings')).toBeNull();
+    expect(page(fixture).textContent).toContain('Alles in Ordnung');
+  });
+
+  it('shows no warning when all is well', async () => {
+    const fixture = await start('chriszly');
+    expect(page(fixture).querySelector('.warnings')).toBeNull();
   });
 });

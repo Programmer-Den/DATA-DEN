@@ -9,6 +9,7 @@ import (
 	"testing/fstest"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 )
 
 func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder {
@@ -108,5 +109,16 @@ func TestFilesWithoutDataDirectory(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("/api/files without data directory: status %d, want 503", rec.Code)
+	}
+}
+
+func TestStatusAPI(t *testing.T) {
+	a, err := auth.New(auth.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(Config{Files: fstest.MapFS{}, Auth: a, Status: status.New(status.Config{DataDir: t.TempDir()})})
+	if rec := get(t, h, "/api/status"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("/api/status without login: status %d, want 401", rec.Code)
 	}
 }

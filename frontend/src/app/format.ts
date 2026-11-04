@@ -11,3 +11,17 @@ export function formatSize(bytes: number): string {
   }
   return `${number.format(value)} ${sizeUnits[unit]}`;
 }
+
+/** "3 Tage, 4 Std." for a duration in milliseconds; minutes only under an hour. */
+export function formatDuration(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  if (days > 0) {
+    return `${days} ${days === 1 ? 'Tag' : 'Tage'}, ${hours} Std.`;
+  }
+  if (hours > 0) {
+    return `${hours} Std., ${minutes % 60} Min.`;
+  }
+  return `${minutes} Min.`;
+}

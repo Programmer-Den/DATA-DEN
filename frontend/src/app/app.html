@@ -9,6 +9,14 @@
       Angemeldet als <strong>{{ user }}</strong>
       <button type="button" (click)="logout()">Abmelden</button>
     </p>
+    @if (status.warnings().length > 0 && view() !== 'status') {
+      <div class="warnings" role="alert">
+        @for (warning of status.warnings(); track warning) {
+          <p>⚠ {{ warning }}</p>
+        }
+        <button type="button" (click)="view.set('status')">Details</button>
+      </div>
+    }
     <nav class="tabs" aria-label="Ansichten">
       @for (tab of tabs; track tab.view) {
         <button
@@ -27,6 +35,9 @@
       }
       @case ('trash') {
         <app-trash />
+      }
+      @case ('status') {
+        <app-status />
       }
       @default {
         <app-media [kind]="$any(view())" />

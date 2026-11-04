@@ -1,0 +1,76 @@
+@if (status.error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (status.report(); as report) {
+  @if (status.warnings().length === 0) {
+    <p class="ok" role="status">Alles in Ordnung.</p>
+  } @else {
+    <ul class="warn" role="alert">
+      @for (warning of status.warnings(); track warning) {
+        <li>{{ warning }}</li>
+      }
+    </ul>
+  }
+
+  <section>
+    <h2>Speicherplatz</h2>
+    @if (report.disk; as disk) {
+      <meter
+        min="0"
+        max="100"
+        [value]="100 - disk.freePercent"
+        [attr.low]="100 - disk.warnPercent"
+        [attr.high]="100 - disk.warnPercent / 4"
+        optimum="0"
+        aria-label="Belegt"
+      ></meter>
+      <p [class.warn]="disk.level !== 'ok'">
+        {{ formatSize(disk.free) }} frei von {{ formatSize(disk.total) }} ({{
+          percent(disk.freePercent)
+        }}
+        % frei, {{ formatSize(disk.used) }} belegt)
+      </p>
+      <p class="hint">Warnung unter {{ percent(disk.warnPercent) }} % freiem Platz.</p>
+    } @else {
+      <p class="warn">{{ report.diskError || 'Speicherplatz unbekannt' }}</p>
+    }
+  </section>
+
+  <section>
+    <h2>RAID</h2>
+    @if (report.raid?.length) {
+      <ul>
+        @for (array of report.raid; track array.name) {
+          <li [class.warn]="!array.healthy">
+            <strong>{{ array.name }}</strong> ({{ array.level || 'unbekannt' }}):
+            {{ raidState(array) }}
+            @if (array.failed?.length) {
+              <br />Ausgefallen: {{ array.failed!.join(', ') }}
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="hint">Kein RAID gefunden. Läuft DATA-DEN außerhalb der Speicher-VM?</p>
+    }
+  </section>
+
+  <section>
+    <h2>System</h2>
+    <dl>
+      <dt>Version</dt>
+      <dd>{{ report.version }}</dd>
+      <dt>Server läuft</dt>
+      <dd>{{ since(report.started) }}</dd>
+      @if (report.booted) {
+        <dt>VM läuft</dt>
+        <dd>{{ since(report.booted) }}</dd>
+      }
+    </dl>
+  </section>
+} @else if (!status.error()) {
+  <p>Lade …</p>
+}
+
+<button type="button" (click)="status.refresh()">Aktualisieren</button>

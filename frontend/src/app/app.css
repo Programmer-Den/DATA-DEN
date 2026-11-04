@@ -52,3 +52,15 @@ main {
   border-bottom-color: LinkText;
   font-weight: 600;
 }
+
+.warnings {
+  margin-bottom: 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #c62828;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, #c62828 10%, transparent);
+}
+
+.warnings p {
+  margin: 0.25rem 0;
+}
