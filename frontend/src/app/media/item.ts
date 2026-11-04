@@ -12,6 +12,17 @@ export interface Item {
   preview?: boolean;
   /** True when the server makes a small thumbnail of the photo (/api/thumb). */
   thumb?: boolean;
+  /** When a photo was taken, in the camera's local time without a zone. */
+  taken?: string;
+  /** Where a photo was taken. */
+  lat?: number;
+  lon?: number;
+}
+
+/** When a photo was taken, or else when the file was last changed. */
+export function takenAt(item: Item): Date {
+  // Without a zone, Date reads it as local time, as the camera wrote it.
+  return new Date(item.taken ?? item.modified);
 }
 
 /** The file for the browser to show. */

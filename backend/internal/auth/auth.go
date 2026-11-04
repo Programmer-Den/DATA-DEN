@@ -1,6 +1,7 @@
 // Package auth handles the login: the owner's account from the settings and
 // further accounts the admins create, passwords stored as bcrypt hashes,
-// sessions in a cookie, and a limit on failed logins per client.
+// sessions in a cookie, app passwords for scripts and WebDAV, and a limit on
+// failed logins per client.
 package auth
 
 import (
@@ -71,8 +72,10 @@ type Auth struct {
 	twoFactor map[string]TwoFactor
 	// pendingSecrets are secrets being set up, until the first code fits.
 	pendingSecrets map[string]pendingSecret
-	sessions       map[string]session
-	failures       map[string][]time.Time
+	// tokens are the app passwords, by the hash of the token.
+	tokens   map[string]Token
+	sessions map[string]session
+	failures map[string][]time.Time
 }
 
 type session struct {
@@ -123,6 +126,7 @@ func New(cfg Config) (*Auth, error) {
 		accounts:       stored.accounts,
 		twoFactor:      stored.twoFactor,
 		pendingSecrets: map[string]pendingSecret{},
+		tokens:         stored.tokens,
 		sessions:       map[string]session{},
 		failures:       map[string][]time.Time{},
 	}, nil
@@ -136,6 +140,7 @@ func (a *Auth) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/session", a.Require(a.showSession))
 	a.registerAccounts(mux)
 	a.registerTwoFactor(mux)
+	a.registerTokens(mux)
 }
 
 type userKey struct{}
@@ -168,9 +173,40 @@ func (a *Auth) Admin(name string) bool {
 	return ok && account.Admin
 }
 
-// Require only lets requests with a valid session through.
+// Require only lets requests with a valid session or app password through.
+// A read-only app password only gets GET and HEAD.
 func (a *Auth) Require(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if wait := a.lockedFor(a.clientIP(r)); wait > 0 && r.Header.Get("Authorization") != "" {
+			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+			writeError(w, http.StatusTooManyRequests, "Zu viele Fehlversuche, bitte später erneut versuchen")
+			return
+		}
+		account, readOnly, found := a.tokenUser(r)
+		if found {
+			if account.Name == "" {
+				a.tokenFailed(w, r)
+				return
+			}
+			if readOnly && r.Method != http.MethodGet && r.Method != http.MethodHead {
+				writeError(w, http.StatusForbidden, "Dieses App-Passwort darf nur lesen")
+				return
+			}
+			next(w, r.WithContext(context.WithValue(r.Context(), userKey{}, account)))
+			return
+		}
+		a.requireSession(next)(w, r)
+	}
+}
+
+// requireSession only lets requests with a valid session through, not app
+// passwords: for the account's settings and the accounts of others.
+func (a *Auth) requireSession(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			writeError(w, http.StatusForbidden, "Nur nach der Anmeldung im Browser, nicht mit einem App-Passwort")
+			return
+		}
 		account, ok := a.sessionUser(r)
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "Nicht angemeldet")
@@ -180,9 +216,9 @@ func (a *Auth) Require(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// RequireAdmin only lets admins through.
+// RequireAdmin only lets admins with a session through.
 func (a *Auth) RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return a.Require(func(w http.ResponseWriter, r *http.Request) {
+	return a.requireSession(func(w http.ResponseWriter, r *http.Request) {
 		if !user(r).Admin {
 			writeError(w, http.StatusForbidden, "Nur für Admins")
 			return

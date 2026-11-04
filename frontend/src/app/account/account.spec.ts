@@ -25,6 +25,7 @@ describe('AccountView', () => {
     const fixture = TestBed.createComponent(AccountView);
     http.expectOne('/api/usage').flush({ used: 512 * 1024 ** 2, quota });
     http.expectOne('/api/account/2fa').flush({ enabled, recoveryLeft: enabled ? 9 : 0 });
+    http.expectOne('/api/account/tokens').flush({ tokens: [] });
     await fixture.whenStable();
     return fixture;
   }
@@ -55,7 +56,7 @@ describe('AccountView', () => {
   it('shows the storage used without a quota', async () => {
     const fixture = await start(true, 0);
     expect(page(fixture).textContent).toContain('512 MB belegt, ohne Grenze');
-    expect(page(fixture).querySelector('form')).toBeNull();
+    expect(page(fixture).querySelector('input[name=current]')).toBeNull();
     expect(page(fixture).textContent).toContain('DATA_DEN_PASSWORD_HASH');
     expect(page(fixture).textContent).toContain('Zwei-Faktor-Anmeldung');
   });

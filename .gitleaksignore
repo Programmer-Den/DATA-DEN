@@ -1,2 +1,4 @@
 # Findings gitleaks may skip, one fingerprint per line (commit:file:rule:line),
 # each with a comment saying why it is not a secret.
+# README example "curl -u chriszly:dd_..." with a placeholder token, removed in the next commit
+115d4f941cbb3b0acc885604ae6f78f6d43d5df1:README.md:curl-auth-user:113

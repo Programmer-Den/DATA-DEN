@@ -5,8 +5,24 @@ import { AuthService } from '../auth.service';
 import { User, UsersView, parseQuota, quotaField } from './users';
 
 const users: User[] = [
-  { name: 'chriszly', admin: true, owner: true, quota: 0, used: 2 * 1024 ** 3, twoFactor: false },
-  { name: 'anna', admin: false, owner: false, quota: 50 * 1024 ** 3, used: 1024, twoFactor: true },
+  {
+    name: 'chriszly',
+    admin: true,
+    owner: true,
+    quota: 0,
+    used: 2 * 1024 ** 3,
+    twoFactor: false,
+    tokens: 1,
+  },
+  {
+    name: 'anna',
+    admin: false,
+    owner: false,
+    quota: 50 * 1024 ** 3,
+    used: 1024,
+    twoFactor: true,
+    tokens: 2,
+  },
 ];
 
 describe('quota fields', () => {
@@ -133,5 +149,12 @@ describe('UsersView', () => {
     expect(row(0).textContent).toContain('aus');
     button(row(1), '2FA ausschalten').click();
     expect(http.expectOne('/api/users/anna').request.body).toEqual({ twoFactor: false });
+  });
+
+  it('revokes all app passwords of an account', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    expect(button(row(0), 'App-Passwörter widerrufen')).toBeUndefined();
+    button(row(1), 'App-Passwörter widerrufen').click();
+    expect(http.expectOne('/api/users/anna').request.body).toEqual({ tokens: false });
   });
 });

@@ -84,6 +84,12 @@ func lowerExt(name string) string {
 type Item struct {
 	Path string `json:"path"`
 	Entry
+	// Taken is when a photo was taken by its EXIF data, in the camera's
+	// local time without a zone ("2026-07-14T15:32:10"); empty when unknown.
+	Taken string `json:"taken,omitempty"`
+	// Lat and Lon are where a photo was taken, by its EXIF data.
+	Lat *float64 `json:"lat,omitempty"`
+	Lon *float64 `json:"lon,omitempty"`
 }
 
 // Media is every file of one kind in the data directory.
@@ -144,7 +150,8 @@ func (f *Files) view(w http.ResponseWriter, r *http.Request) {
 }
 
 // media lists every photo, video, audio file or document in the data
-// directory, newest first.
+// directory, newest first. Photos come with when and where they were taken
+// and are sorted by that, so the gallery is a timeline.
 func (f *Files) media(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
 	if !slices.Contains([]string{"photo", "video", "audio", "document"}, kind) {
@@ -152,6 +159,7 @@ func (f *Files) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	items := []Item{}
+	seen := map[string]bool{}
 	err := fs.WalkDir(f.root.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// An unreadable folder is skipped, the rest is still listed.
@@ -173,10 +181,13 @@ func (f *Files) media(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil
 		}
-		items = append(items, Item{
-			Path:  "/" + name,
-			Entry: entryOf(info),
-		})
+		item := Item{Path: "/" + name, Entry: entryOf(info)}
+		if kind == "photo" {
+			meta := f.photoMeta(name, info)
+			item.Taken, item.Lat, item.Lon = meta.Taken, meta.Lat, meta.Lon
+			seen[name] = true
+		}
+		items = append(items, item)
 		return nil
 	})
 	if err != nil {
@@ -184,13 +195,25 @@ func (f *Files) media(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Ordner nicht lesbar")
 		return
 	}
+	if kind == "photo" {
+		f.prunePhotos(seen)
+	}
 	slices.SortStableFunc(items, func(a, b Item) int {
-		if c := b.Modified.Compare(a.Modified); c != 0 {
+		if c := strings.Compare(b.when(), a.when()); c != 0 {
 			return c
 		}
 		return strings.Compare(a.Path, b.Path)
 	})
 	writeJSON(w, http.StatusOK, Media{Kind: kind, Items: items})
+}
+
+// when is when a photo was taken, or else when the file was last changed,
+// in takenLayout, so the two sort together.
+func (i Item) when() string {
+	if i.Taken != "" {
+		return i.Taken
+	}
+	return i.Modified.Format(takenLayout + ".000000000")
 }
 
 func entryOf(info fs.FileInfo) Entry {

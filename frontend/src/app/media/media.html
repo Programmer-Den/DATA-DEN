@@ -32,12 +32,23 @@
 } @else {
   @switch (kind()) {
     @case ('photo') {
+      @if (years().length > 1) {
+        <nav class="years" aria-label="Jahre">
+          @for (year of years(); track year.year) {
+            <button type="button" (click)="jump(year)">{{ year.year }}</button>
+          }
+        </nav>
+      }
       @for (month of months(); track month.name) {
-        <h2>{{ month.name }}</h2>
+        <h2 [id]="month.year ? 'year-' + month.year : null">{{ month.name }}</h2>
         <ul class="photos">
           @for (entry of month.items; track entry.item.path) {
             <li>
-              <button type="button" [title]="entry.item.path" (click)="open.set(entry.index)">
+              <button
+                type="button"
+                [title]="entry.item.path + ' · ' + date(entry.item)"
+                (click)="open.set(entry.index)"
+              >
                 <img
                   [src]="tileUrl(entry.item)"
                   [alt]="entry.item.name"

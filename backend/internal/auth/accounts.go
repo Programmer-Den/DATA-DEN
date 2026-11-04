@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ import (
 //
 //	GET  /api/users                 -> {"users": [...]}, admins only
 //	POST /api/users {"name", "password", "admin", "quota"} -> 201, admins only
-//	POST /api/users/{name} {"password"?, "admin"?, "quota"?, "twoFactor": false?} -> 200, admins only
+//	POST /api/users/{name} {"password"?, "admin"?, "quota"?, "twoFactor": false?, "tokens": false?} -> 200, admins only
 //	POST /api/users/{name}/delete {} -> 200, admins only; the files are moved aside
 //	POST /api/account/password {"current", "password"} -> 200, one's own password
 //
@@ -53,22 +54,26 @@ type UserInfo struct {
 	Used int64 `json:"used"`
 	// TwoFactor is true when the login needs a code from an app.
 	TwoFactor bool `json:"twoFactor"`
+	// Tokens is how many app passwords it has.
+	Tokens int `json:"tokens"`
 }
 
 type accountsFile struct {
 	Accounts  []Account            `json:"accounts"`
 	TwoFactor map[string]TwoFactor `json:"twoFactor,omitempty"`
+	Tokens    []Token              `json:"tokens,omitempty"`
 }
 
 type storedAccounts struct {
 	accounts  map[string]Account
 	twoFactor map[string]TwoFactor
+	tokens    map[string]Token
 }
 
 // loadAccounts reads file, if there is one. An account named like the owner
 // is left out: the settings decide about the owner.
 func loadAccounts(file, owner string) (storedAccounts, error) {
-	stored := storedAccounts{accounts: map[string]Account{}, twoFactor: map[string]TwoFactor{}}
+	stored := storedAccounts{accounts: map[string]Account{}, twoFactor: map[string]TwoFactor{}, tokens: map[string]Token{}}
 	if file == "" {
 		return stored, nil
 	}
@@ -93,6 +98,11 @@ func loadAccounts(file, owner string) (storedAccounts, error) {
 	for name, tf := range parsed.TwoFactor {
 		if _, ok := stored.accounts[name]; ok || name == owner {
 			stored.twoFactor[name] = tf
+		}
+	}
+	for _, t := range parsed.Tokens {
+		if _, ok := stored.accounts[t.User]; ok || t.User == owner {
+			stored.tokens[t.Hash] = t
 		}
 	}
 	return stored, nil
@@ -142,11 +152,15 @@ func (a *Auth) save() error {
 		stored.Accounts = append(stored.Accounts, account)
 	}
 	slices.SortFunc(stored.Accounts, func(x, y Account) int { return strings.Compare(x.Name, y.Name) })
+	for _, t := range a.tokens {
+		stored.Tokens = append(stored.Tokens, t)
+	}
+	slices.SortFunc(stored.Tokens, func(x, y Token) int { return strings.Compare(x.ID, y.ID) })
 	return writeAccounts(a.cfg.AccountsFile, stored)
 }
 
 func (a *Auth) registerAccounts(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/account/password", a.Require(a.changeOwnPassword))
+	mux.HandleFunc("POST /api/account/password", a.requireSession(a.changeOwnPassword))
 	mux.HandleFunc("GET /api/users", a.RequireAdmin(a.listUsers))
 	mux.HandleFunc("POST /api/users", a.RequireAdmin(a.createUser))
 	mux.HandleFunc("POST /api/users/{name}", a.RequireAdmin(a.updateUser))
@@ -235,10 +249,10 @@ func (a *Auth) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 func (a *Auth) listUsers(w http.ResponseWriter, _ *http.Request) {
 	a.mu.Lock()
 	_, ownerTF := a.twoFactor[a.cfg.Username]
-	users := []UserInfo{{Name: a.cfg.Username, Admin: true, Owner: true, TwoFactor: ownerTF}}
+	users := []UserInfo{{Name: a.cfg.Username, Admin: true, Owner: true, TwoFactor: ownerTF, Tokens: a.tokenCount(a.cfg.Username)}}
 	for _, account := range a.accounts {
 		_, tf := a.twoFactor[account.Name]
-		users = append(users, UserInfo{Name: account.Name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf})
+		users = append(users, UserInfo{Name: account.Name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf, Tokens: a.tokenCount(account.Name)})
 	}
 	a.mu.Unlock()
 	for i := range users {
@@ -318,12 +332,18 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 		Quota    *int64  `json:"quota"`
 		// TwoFactor false turns the second factor off, for a lost phone.
 		TwoFactor *bool `json:"twoFactor"`
+		// Tokens false revokes all app passwords of the account.
+		Tokens *bool `json:"tokens"`
 	}
 	if !readJSON(w, r, &body) {
 		return
 	}
 	if body.TwoFactor != nil && *body.TwoFactor {
 		writeError(w, http.StatusBadRequest, "Die Zwei-Faktor-Anmeldung richtet jeder selbst ein")
+		return
+	}
+	if body.Tokens != nil && *body.Tokens {
+		writeError(w, http.StatusBadRequest, "App-Passwörter legt jeder selbst an")
 		return
 	}
 	if body.Quota != nil && *body.Quota < 0 {
@@ -372,13 +392,26 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 	if resetTF && !a.removeTwoFactor(w, name) {
 		return
 	}
-	slog.Info("account changed", "username", name, "admin", account.Admin, "quota", account.Quota, "password", hash != "", "twoFactorOff", resetTF, "by", Username(r))
+	revoked := 0
+	if body.Tokens != nil {
+		dropped := a.dropTokens(name)
+		if err := a.save(); err != nil {
+			maps.Copy(a.tokens, dropped)
+			a.saveError(w, err)
+			return
+		}
+		revoked = len(dropped)
+	}
+	slog.Info("account changed", "username", name, "admin", account.Admin, "quota", account.Quota, "password", hash != "", "twoFactorOff", resetTF, "tokensRevoked", revoked, "by", Username(r))
 	a.note(r, Username(r), "user-change", name)
 	if resetTF {
 		a.note(r, Username(r), "2fa-reset", name)
 	}
+	if body.Tokens != nil {
+		a.note(r, Username(r), "tokens-revoke", name)
+	}
 	_, tf := a.twoFactor[name]
-	writeJSON(w, http.StatusOK, UserInfo{Name: name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf})
+	writeJSON(w, http.StatusOK, UserInfo{Name: name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf, Tokens: a.tokenCount(name)})
 }
 
 func (a *Auth) deleteUser(w http.ResponseWriter, r *http.Request) {
@@ -411,11 +444,13 @@ func (a *Auth) deleteUser(w http.ResponseWriter, r *http.Request) {
 	tf, hadTF := a.twoFactor[name]
 	delete(a.accounts, name)
 	delete(a.twoFactor, name)
+	tokens := a.dropTokens(name)
 	if err := a.save(); err != nil {
 		a.accounts[name] = account
 		if hadTF {
 			a.twoFactor[name] = tf
 		}
+		maps.Copy(a.tokens, tokens)
 		a.saveError(w, err)
 		return
 	}
