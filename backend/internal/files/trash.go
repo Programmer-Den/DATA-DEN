@@ -65,7 +65,7 @@ func (f *Files) TrashDays() int {
 
 // PurgeTrashEvery deletes for good what waited long enough in the recycle
 // bin, every interval until ctx is done, so the bin is emptied on time even
-// when nobody opens it.
+// when nobody opens it. Older file versions past their time go too.
 func (f *Files) PurgeTrashEvery(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -75,6 +75,7 @@ func (f *Files) PurgeTrashEvery(ctx context.Context, interval time.Duration) {
 			return
 		case <-ticker.C:
 			f.purgeTrash()
+			f.purgeVersions()
 		}
 	}
 }

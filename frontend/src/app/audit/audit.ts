@@ -23,6 +23,7 @@ export const ACTIONS: Record<string, string> = {
   'user-change': 'Konto geändert',
   'user-delete': 'Konto gelöscht',
   upload: 'Hochgeladen',
+  replace: 'Ersetzt (alte Version aufbewahrt)',
   folder: 'Ordner angelegt',
   move: 'Verschoben oder umbenannt',
   delete: 'In den Papierkorb',
@@ -34,6 +35,8 @@ export const ACTIONS: Record<string, string> = {
   'share-download': 'Über einen Link geladen',
   'share-password-failed': 'Falsches Link-Passwort',
   'integrity-accept': 'Beschädigte Datei als richtig übernommen',
+  'version-restore': 'Ältere Version wiederhergestellt',
+  'version-delete': 'Ältere Version gelöscht',
 };
 
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'medium' });
