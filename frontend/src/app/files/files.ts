@@ -1,7 +1,8 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
+import { parseTags } from '../marks/tags';
 import { Item, Kind, downloadUrl } from '../media/item';
 import { Viewer } from '../media/viewer';
 import { Grant } from '../shares/grant';
@@ -22,6 +23,8 @@ export interface Entry {
   kind?: Kind;
   preview?: boolean;
   text?: boolean;
+  tags?: string[];
+  favourite?: boolean;
 }
 
 interface Listing {
@@ -55,6 +58,9 @@ export class Files implements OnInit {
   readonly grant = input<Grant | null>(null);
   /** True when the folders may be changed: always in my own space. */
   protected readonly canWrite = computed(() => this.grant()?.write ?? true);
+
+  /** Asks to show the files of a tag. */
+  readonly showTag = output<string>();
 
   /** The folder shown, "/" for the top. */
   protected readonly path = signal('/');
@@ -92,6 +98,8 @@ export class Files implements OnInit {
   private changed = false;
   /** The entry being renamed, by name, or null. */
   protected readonly renaming = signal<string | null>(null);
+  /** The entry whose tags are being edited, by name, or null. */
+  protected readonly tagging = signal<string | null>(null);
   /** The file or folder being moved: its path stays while other folders open. */
   protected readonly moving = signal<{ path: string; name: string } | null>(null);
   protected readonly busy = signal(false);
@@ -123,6 +131,7 @@ export class Files implements OnInit {
     this.error.set(null);
     this.viewing.set(null);
     this.renaming.set(null);
+    this.tagging.set(null);
     const grant = this.grant();
     const params: Record<string, string> = grant ? { path, grant: grant.id } : { path };
     this.http.get<Listing>('/api/files', { params }).subscribe({
@@ -214,6 +223,17 @@ export class Files implements OnInit {
     }
     this.change('/api/move', { from: this.child(entry), to: this.childPath(name) }, () =>
       this.renaming.set(null),
+    );
+  }
+
+  protected toggleFavourite(entry: Entry): void {
+    this.change('/api/favourites', { path: this.child(entry), favourite: !entry.favourite });
+  }
+
+  protected saveTags(event: Event, entry: Entry, text: string): void {
+    event.preventDefault();
+    this.change('/api/tags', { path: this.child(entry), tags: parseTags(text) }, () =>
+      this.tagging.set(null),
     );
   }
 

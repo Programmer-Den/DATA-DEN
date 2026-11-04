@@ -23,6 +23,10 @@ export interface Item {
   grant?: string;
   /** True when the editor can open the file (/api/text). */
   text?: boolean;
+  /** The account's own tags of the file. */
+  tags?: string[];
+  /** True when the account marked it as a favourite. */
+  favourite?: boolean;
 }
 
 /** When a photo was taken, or else when the file was last changed. */

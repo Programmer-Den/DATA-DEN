@@ -198,6 +198,7 @@ func (d davFS) Rename(ctx context.Context, oldName, newName string) error {
 	d.f.moveShares(from, to)
 	d.f.sumMoved(from, to)
 	d.f.versionsMoved(from, to)
+	d.f.marksMoved(from, to)
 	slog.Info("moved", "from", "/"+from, "to", "/"+to, "via", "webdav")
 	d.note(ctx, "move", "/"+from+" → /"+to)
 	return nil

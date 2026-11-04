@@ -44,7 +44,10 @@
     </nav>
     @switch (view()) {
       @case ('files') {
-        <app-files />
+        <app-files (showTag)="showTag($event)" />
+      }
+      @case ('marks') {
+        <app-marks [tag]="tag()" (openFolder)="showFolder($event)" />
       }
       @case ('shares') {
         <app-shares />

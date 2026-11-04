@@ -207,6 +207,44 @@ describe('Files management', () => {
     await reload('/');
   });
 
+  it('marks a file as a favourite', async () => {
+    button('notizen 1.txt als Favorit merken').click();
+    const req = http.expectOne('/api/favourites');
+    expect(req.request.body).toEqual({ path: '/notizen 1.txt', favourite: true });
+    req.flush({});
+    await fixture.whenStable();
+    http.expectOne('/api/files?path=/').flush({
+      path: '/',
+      entries: [photos, { ...notes, favourite: true, tags: ['Arbeit'] }],
+    });
+    await fixture.whenStable();
+    expect(button('notizen 1.txt kein Favorit mehr').getAttribute('aria-pressed')).toBe('true');
+    expect(page().querySelector('.tag')?.textContent?.trim()).toBe('Arbeit');
+  });
+
+  it('sets the tags of a file and shows the files of a tag', async () => {
+    let shown = '';
+    fixture.componentInstance.showTag.subscribe((tag) => (shown = tag));
+    button('Tags für notizen 1.txt').click();
+    await fixture.whenStable();
+    await submit(
+      page().querySelector('input[aria-label="Tags für notizen 1.txt"]')!,
+      'Arbeit, , 2026, arbeit',
+    );
+    const req = http.expectOne('/api/tags');
+    expect(req.request.body).toEqual({ path: '/notizen 1.txt', tags: ['Arbeit', '2026'] });
+    req.flush({});
+    await fixture.whenStable();
+    http.expectOne('/api/files?path=/').flush({
+      path: '/',
+      entries: [photos, { ...notes, tags: ['Arbeit', '2026'] }],
+    });
+    await fixture.whenStable();
+    expect(page().querySelector('input[aria-label="Tags für notizen 1.txt"]')).toBeNull();
+    page().querySelectorAll<HTMLButtonElement>('.tag')[1].click();
+    expect(shown).toBe('2026');
+  });
+
   it('shows why a rename failed and keeps the form', async () => {
     button('notizen 1.txt umbenennen').click();
     await fixture.whenStable();
@@ -288,6 +326,34 @@ describe('Files upload', () => {
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [photos, notes] });
     await fixture.whenStable();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('fertig');
+    http.verify();
+  });
+});
+
+describe('Files in a folder shared with me', () => {
+  it('offers no favourites or tags, which are the owner’s own', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(Files);
+    fixture.componentRef.setInput('grant', {
+      id: 'g1',
+      owner: 'chef',
+      path: '/Projekt',
+      name: 'Projekt',
+      to: 'anna',
+      write: true,
+      created: '2026-11-01T10:00:00Z',
+    });
+    await fixture.whenStable();
+    http
+      .expectOne((r) => r.url === '/api/files' && r.params.get('grant') === 'g1')
+      .flush({ path: '/', entries: [notes] });
+    await fixture.whenStable();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('button.star')).toBeNull();
+    expect(page.querySelector('button[aria-label="Tags für notizen 1.txt"]')).toBeNull();
     http.verify();
   });
 });

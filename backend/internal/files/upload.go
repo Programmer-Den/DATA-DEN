@@ -157,7 +157,7 @@ func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 
 	answer := map[string]any{"id": id, "offset": u.offset}
 	if u.size == 0 {
-		_, mod, ok := f.finish(w, id, u)
+		_, mod, ok := f.finish(w, r, id, u)
 		if !ok {
 			return
 		}
@@ -232,7 +232,7 @@ func (f *Files) receiveChunk(w http.ResponseWriter, r *http.Request, id, share s
 			f.diskError(w, "closing an upload", err)
 			return
 		}
-		duplicates, mod, ok := f.finish(w, id, u)
+		duplicates, mod, ok := f.finish(w, r, id, u)
 		if !ok {
 			return
 		}
@@ -266,7 +266,7 @@ func (f *Files) writeUploadState(w http.ResponseWriter, id, share string) {
 // finish moves a complete upload to its path and returns the other files
 // with the same content. It answers the request itself and returns false
 // when that fails.
-func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, int64, bool) {
+func (f *Files) finish(w http.ResponseWriter, r *http.Request, id string, u *upload) ([]string, int64, bool) {
 	f.uploads.mu.Lock()
 	delete(f.uploads.byID, id)
 	f.uploads.mu.Unlock()
@@ -311,6 +311,7 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, i
 		return nil, 0, false
 	}
 	f.addUsage(u.size)
+	f.noteUse(r, u.path)
 	slog.Info("uploaded", "path", "/"+u.path, "size", u.size)
 	info, err := f.root.Stat(u.path)
 	if err != nil {
