@@ -6,6 +6,7 @@ import { AuthService, errorMessage, needsCode } from './auth.service';
 import { Files } from './files/files';
 import { Kind } from './media/item';
 import { MediaView } from './media/media';
+import { ChecksView } from './checks/checks';
 import { StartFolder } from './files/start-folder';
 import { PublicShare } from './public/public-share';
 import { SearchView } from './search/search';
@@ -16,7 +17,16 @@ import { TrashView } from './trash/trash';
 import { UsersView } from './users/users';
 
 type View =
-  'files' | Kind | 'shares' | 'trash' | 'status' | 'account' | 'users' | 'search' | 'audit';
+  | 'files'
+  | Kind
+  | 'shares'
+  | 'trash'
+  | 'status'
+  | 'checks'
+  | 'account'
+  | 'users'
+  | 'search'
+  | 'audit';
 
 /** How often the warnings about space and the RAID are checked. */
 export const STATUS_INTERVAL = 5 * 60 * 1000;
@@ -36,6 +46,7 @@ interface Health {
     SharesView,
     TrashView,
     StatusView,
+    ChecksView,
     AccountView,
     UsersView,
     AuditView,
@@ -62,6 +73,7 @@ export class App {
     { view: 'shares', name: 'Freigaben' },
     { view: 'trash', name: 'Papierkorb' },
     { view: 'status', name: 'Status' },
+    { view: 'checks', name: 'Prüfung' },
     { view: 'account', name: 'Konto' },
     ...(this.auth.admin() ? [{ view: 'users' as const, name: 'Benutzer' }] : []),
     { view: 'audit', name: 'Protokoll' },

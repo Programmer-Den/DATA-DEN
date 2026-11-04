@@ -1,0 +1,77 @@
+.hint,
+.empty {
+  opacity: 0.7;
+}
+
+.done,
+.ok {
+  color: #2e7d32;
+}
+
+.error,
+.warning {
+  color: #c62828;
+}
+
+section {
+  margin-bottom: 2rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+.running progress {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+table {
+  width: 100%;
+  margin-bottom: 1rem;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.size {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.actions {
+  text-align: right;
+}
+
+.group {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 0.4rem;
+}
+
+.group-size {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+.group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.15rem 0;
+  overflow-wrap: anywhere;
+}

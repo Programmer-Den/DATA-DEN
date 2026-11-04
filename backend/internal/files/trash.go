@@ -111,10 +111,11 @@ func (f *Files) toTrash(name string, info fs.FileInfo) (string, error) {
 		return "", err
 	}
 	// A rename within the data directory: quick even for a large folder.
-	if err := f.root.Rename(name, path.Join(dir, "item")); err != nil {
+	if err := f.root.Rename(name, trashedName(id)); err != nil {
 		_ = f.root.RemoveAll(dir)
 		return "", err
 	}
+	f.sumMoved(name, trashedName(id))
 	return id, nil
 }
 
@@ -167,6 +168,7 @@ func (f *Files) purgeTrash() {
 				continue
 			}
 			f.forgetUsage()
+			f.sumsDropped(path.Join(trashDir, item.ID))
 			slog.Info("deleted for good after the waiting time", "path", item.Path)
 		}
 	}
@@ -220,7 +222,7 @@ func (f *Files) restore(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := f.rename(path.Join(trashDir, item.ID, "item"), name, item.Dir); err != nil {
+	if err := f.rename(trashedName(item.ID), name, item.Dir); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			writeError(w, http.StatusConflict, "Am alten Ort gibt es schon „"+item.Name+"“. Bitte erst umbenennen.")
 			return
@@ -228,6 +230,7 @@ func (f *Files) restore(w http.ResponseWriter, r *http.Request) {
 		f.diskError(w, "restoring", err)
 		return
 	}
+	f.sumMoved(trashedName(item.ID), name)
 	_ = f.root.RemoveAll(path.Join(trashDir, item.ID))
 	slog.Info("restored", "path", item.Path)
 	f.note(r, "restore", item.Path)
@@ -244,6 +247,7 @@ func (f *Files) deleteForGood(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.forgetUsage()
+	f.sumsDropped(path.Join(trashDir, item.ID))
 	slog.Info("deleted for good", "path", item.Path)
 	f.note(r, "purge", item.Path)
 	writeJSON(w, http.StatusOK, map[string]string{"path": item.Path})
@@ -261,6 +265,7 @@ func (f *Files) emptyTrash(w http.ResponseWriter, r *http.Request) {
 			f.diskError(w, "emptying the recycle bin", err)
 			return
 		}
+		f.sumsDropped(path.Join(trashDir, item.ID))
 	}
 	slog.Info("recycle bin emptied")
 	f.note(r, "trash-empty", "")

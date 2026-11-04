@@ -55,7 +55,8 @@ type Files struct {
 	// used caches what usage found.
 	used usedCache
 	// mux serves the API of this space alone, for Spaces.
-	mux *http.ServeMux
+	mux  *http.ServeMux
+	sums sums
 	// account is whose space this is, for the audit log.
 	account string
 	// audit notes changes in the audit log; nil notes nothing.
@@ -83,13 +84,15 @@ func Open(dir string) (*Files, error) {
 }
 
 func newFiles(root *os.Root) *Files {
-	return &Files{
+	f := &Files{
 		root:       root,
 		uploads:    uploads{byID: map[string]*upload{}},
 		shares:     shares{unlocked: map[string]unlock{}},
 		thumbSlots: make(chan struct{}, thumbWorkers),
 		trashDays:  DefaultTrashDays,
 	}
+	f.loadSums()
+	return f
 }
 
 // serve sets up mux with the API of this space; the login was checked
@@ -101,15 +104,18 @@ func (f *Files) serve() {
 	f.RegisterShares(f.mux, pass, f.shares.guard)
 }
 
-// Close releases the data directory.
+// Close saves the checksums and releases the data directory.
 func (f *Files) Close() error {
+	f.sums.checker.Wait()
+	f.saveSums()
 	return f.root.Close()
 }
 
 // Register adds /api/files, /api/download, /api/view, /api/media,
 // /api/thumb, /api/usage, /api/uploads, /api/folders, /api/move,
-// /api/delete, /api/trash and /api/search (all of Routes) to mux, behind
-// require (the login check). The share links are added by RegisterShares.
+// /api/delete, /api/trash, /api/search, /api/duplicates and /api/integrity
+// (all of Routes) to mux, behind require (the login check). The share links
+// are added by RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
@@ -119,6 +125,7 @@ func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http
 	f.registerTrash(mux, require)
 	f.registerSearch(mux, require)
 	f.registerUploads(mux, require)
+	f.registerSums(mux, require)
 }
 
 func (f *Files) list(w http.ResponseWriter, r *http.Request) {

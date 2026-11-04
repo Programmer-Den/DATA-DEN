@@ -48,11 +48,16 @@ describe('Uploader', () => {
     const second = http.expectOne('/api/uploads/u1');
     expect(second.request.headers.get('Upload-Offset')).toBe(String(CHUNK_SIZE));
     expect((second.request.body as Blob).size).toBe(10);
-    second.flush({ offset: size });
+    second.flush({ offset: size, duplicates: ['/Alt/video.mp4'] });
 
     await done;
     expect(uploader.items()[0]).toEqual(
-      expect.objectContaining({ status: 'fertig', loaded: size, path: '/video.mp4' }),
+      expect.objectContaining({
+        status: 'fertig',
+        loaded: size,
+        path: '/video.mp4',
+        duplicates: ['/Alt/video.mp4'],
+      }),
     );
   });
 
@@ -72,10 +77,11 @@ describe('Uploader', () => {
     const rest = http.expectOne('/api/uploads/u2');
     expect(rest.request.headers.get('Upload-Offset')).toBe('4');
     expect((rest.request.body as Blob).size).toBe(2);
-    rest.flush({ offset: 6 });
+    rest.flush({ offset: 6, duplicates: [] });
 
     await done;
     expect(uploader.items()[0].status).toBe('fertig');
+    expect(uploader.items()[0].duplicates).toBeUndefined();
   });
 
   it("marks a file the server refuses with the server's message", async () => {

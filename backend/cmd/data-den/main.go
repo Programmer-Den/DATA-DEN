@@ -224,6 +224,7 @@ func run() error {
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// Runs before data.Close, which waits for the checks to stop.
 	defer stop()
 	go func() {
 		<-ctx.Done()

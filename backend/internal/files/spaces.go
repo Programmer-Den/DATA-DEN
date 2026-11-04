@@ -43,6 +43,10 @@ var Routes = []string{
 	"POST /api/trash/delete",
 	"POST /api/trash/empty",
 	"GET /api/search",
+	"GET /api/duplicates",
+	"GET /api/integrity",
+	"POST /api/integrity/check",
+	"POST /api/integrity/accept",
 }
 
 // ShareRoutes are the API paths behind the login for share links.
@@ -124,8 +128,8 @@ func (s *Spaces) TrashDays() int {
 	return s.trashDays
 }
 
-// Run starts the background work of every space, the search index and
-// emptying the recycle bin, until ctx is done; a space opened later starts
+// Run starts the background work of every space, the search index,
+// emptying the recycle bin and the checks, until ctx is done; a space opened later starts
 // its own then.
 func (s *Spaces) Run(ctx context.Context) {
 	s.mu.Lock()
@@ -148,11 +152,12 @@ func (s *Spaces) startLocked(name string, f *Files) {
 	f.background(ctx)
 }
 
-// background keeps the search index fresh and empties the recycle bin on
-// time, until ctx is done.
+// background keeps the search index fresh, empties the recycle bin on time
+// and runs the checks, until ctx is done.
 func (f *Files) background(ctx context.Context) {
 	go f.Index(ctx.Done())
 	go f.PurgeTrashEvery(ctx, time.Hour)
+	f.StartChecks(ctx)
 }
 
 // Close releases the data directory and every space.

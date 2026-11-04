@@ -67,6 +67,9 @@
       @case ('audit') {
         <app-audit />
       }
+      @case ('checks') {
+        <app-checks />
+      }
       @default {
         <app-media [kind]="$any(view())" />
       }

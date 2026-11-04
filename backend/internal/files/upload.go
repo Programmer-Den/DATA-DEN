@@ -2,9 +2,11 @@ package files
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"hash"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -23,7 +25,8 @@ import (
 //	GET  /api/uploads/{id}  -> {"offset": n}, to resume after an error
 //
 // The chunks go into a file in uploadDir. With the last chunk it is moved to
-// its path, never over an existing file.
+// its path, never over an existing file, and the answer adds
+// "duplicates": the other files with the same content.
 const (
 	uploadDir = ".data-den-uploads"
 	// MaxChunk is the most one PUT may carry.
@@ -35,6 +38,8 @@ type upload struct {
 	path   string // within the root, such as "Fotos/a.jpg"
 	size   int64
 	offset int64
+	// hash is the checksum of what arrived so far.
+	hash hash.Hash
 }
 
 type uploads struct {
@@ -100,13 +105,13 @@ func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = chunks.Close()
 
-	u := &upload{path: name, size: body.Size}
+	u := &upload{path: name, size: body.Size, hash: sha256.New()}
 	f.uploads.mu.Lock()
 	f.uploads.byID[id] = u
 	f.uploads.mu.Unlock()
 
 	if body.Size == 0 {
-		if !f.finish(w, id, u) {
+		if _, ok := f.finish(w, id, u); !ok {
 			return
 		}
 		f.note(r, "upload", "/"+u.path)
@@ -148,7 +153,7 @@ func (f *Files) putChunk(w http.ResponseWriter, r *http.Request) {
 	// Never more than the announced size, and never more than one chunk;
 	// anything beyond is dropped, and the answer's offset says what counts.
 	limit := min(u.size-u.offset, MaxChunk)
-	written, err := io.Copy(chunks, io.LimitReader(r.Body, limit))
+	written, err := io.Copy(hashingWriter{chunks, u.hash}, io.LimitReader(r.Body, limit))
 	u.offset += written
 	if err != nil {
 		// What arrived stays; the client resumes from the new offset.
@@ -160,10 +165,13 @@ func (f *Files) putChunk(w http.ResponseWriter, r *http.Request) {
 			f.diskError(w, "closing an upload", err)
 			return
 		}
-		if !f.finish(w, id, u) {
+		duplicates, ok := f.finish(w, id, u)
+		if !ok {
 			return
 		}
 		f.note(r, "upload", "/"+u.path)
+		writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset, "duplicates": duplicates})
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset})
 }
@@ -179,9 +187,10 @@ func (f *Files) uploadState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset, "size": u.size})
 }
 
-// finish moves a complete upload to its path. It answers the request itself
-// and returns false when that fails.
-func (f *Files) finish(w http.ResponseWriter, id string, u *upload) bool {
+// finish moves a complete upload to its path and returns the other files
+// with the same content. It answers the request itself and returns false
+// when that fails.
+func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, bool) {
 	f.uploads.mu.Lock()
 	delete(f.uploads.byID, id)
 	f.uploads.mu.Unlock()
@@ -191,7 +200,7 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) bool {
 	if dir := path.Dir(u.path); dir != "." {
 		if err := f.root.MkdirAll(dir, 0o750); err != nil {
 			f.diskError(w, "creating a folder", err)
-			return false
+			return nil, false
 		}
 	}
 	// A hard link fails if the name is taken, so nothing is overwritten,
@@ -199,14 +208,19 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) bool {
 	if err := f.root.Link(chunks, u.path); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			writeError(w, http.StatusConflict, "Datei existiert bereits")
-			return false
+			return nil, false
 		}
 		f.diskError(w, "finishing an upload", err)
-		return false
+		return nil, false
 	}
 	f.addUsage(u.size)
 	slog.Info("uploaded", "path", "/"+u.path, "size", u.size)
-	return true
+	info, err := f.root.Stat(u.path)
+	if err != nil {
+		// Uploaded; the next check makes its checksum.
+		return []string{}, true
+	}
+	return f.uploaded(u.path, info, hex.EncodeToString(u.hash.Sum(nil))), true
 }
 
 func (f *Files) upload(id string) *upload {
