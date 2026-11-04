@@ -48,6 +48,15 @@
     <app-share-form [path]="target.path" [name]="target.name" (closed)="sharing.set(null)" />
   }
 
+  @if (versions(); as file) {
+    <app-versions
+      [path]="file.path"
+      [name]="file.name"
+      (closed)="versions.set(null)"
+      (restored)="open(path())"
+    />
+  }
+
   @if (deleted(); as gone) {
     <div class="moving" role="status">
       <span>„{{ gone.name }}“ liegt im Papierkorb.</span>
@@ -130,6 +139,17 @@
                 >
                   🔗
                 </button>
+                @if (!entry.dir) {
+                  <button
+                    type="button"
+                    class="icon"
+                    title="Ältere Versionen"
+                    [attr.aria-label]="'Ältere Versionen von ' + entry.name"
+                    (click)="showVersions(entry)"
+                  >
+                    🕘
+                  </button>
+                }
                 <button
                   type="button"
                   class="icon"
@@ -186,9 +206,25 @@
           @if (item.duplicates; as duplicates) {
             <span class="duplicate">Gleicher Inhalt schon da: {{ duplicates.join(', ') }}</span>
           }
+          @if (item.replaced) {
+            <span class="duplicate">Ersetzt; der alte Inhalt ist unter „Ältere Versionen“.</span>
+          }
+          @if (item.status === 'existiert schon') {
+            <span class="ask">
+              <button type="button" (click)="replace([item.id])">Ersetzen</button>
+              <button type="button" (click)="uploader.skip(item.id)">Überspringen</button>
+            </span>
+          }
         </li>
       }
     </ul>
+    @if (asking()) {
+      <p class="hint">
+        Beim Ersetzen bleibt der alte Inhalt als ältere Version erhalten und lässt sich
+        wiederherstellen.
+      </p>
+      <button type="button" (click)="replace()">Alle ersetzen</button>
+    }
     <button type="button" (click)="uploader.clearDone()">Fertige ausblenden</button>
   }
 </section>

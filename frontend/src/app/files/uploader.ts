@@ -1,4 +1,4 @@
-import { HttpClient, HttpEventType, HttpResponse } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { filter, firstValueFrom, lastValueFrom, tap } from 'rxjs';
 import { errorMessage } from '../auth.service';
@@ -9,7 +9,7 @@ export interface Job {
   path: string;
 }
 
-export type UploadStatus = 'wartet' | 'lädt hoch' | 'fertig' | 'Fehler';
+export type UploadStatus = 'wartet' | 'lädt hoch' | 'fertig' | 'Fehler' | 'existiert schon';
 
 /** One upload as the page shows it. */
 export interface UploadItem {
@@ -21,6 +21,8 @@ export interface UploadItem {
   error?: string;
   /** Files that already had the same content, such as "/Fotos/a.jpg". */
   duplicates?: string[];
+  /** True when the upload replaced a file, whose old content is a version now. */
+  replaced?: boolean;
 }
 
 /** Uploads at the same time. */
@@ -38,6 +40,8 @@ const ATTEMPTS = 3;
 export class Uploader {
   private readonly http = inject(HttpClient);
   private nextId = 1;
+  /** The files that exist already, by item id, until replaced or skipped. */
+  private readonly existing = new Map<number, Job>();
 
   readonly items = signal<UploadItem[]>([]);
 
@@ -57,6 +61,33 @@ export class Uploader {
     this.items.update((items) => items.filter((item) => item.status !== 'fertig'));
   }
 
+  /**
+   * Uploads the files that existed already again, replacing them; the server
+   * keeps their old content as a version. Without ids, all of them.
+   */
+  async replace(ids = [...this.existing.keys()]): Promise<void> {
+    const queue = ids.flatMap((id) => {
+      const job = this.existing.get(id);
+      this.existing.delete(id);
+      if (job) {
+        this.set(id, { status: 'wartet', error: undefined, loaded: 0 });
+      }
+      return job ? [{ job, id }] : [];
+    });
+    const worker = async () => {
+      for (let next = queue.shift(); next; next = queue.shift()) {
+        await this.uploadOne(next.id, next.job, true);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, worker));
+  }
+
+  /** Leaves a file that existed already as it is and drops it from the list. */
+  skip(id: number): void {
+    this.existing.delete(id);
+    this.items.update((items) => items.filter((item) => item.id !== id));
+  }
+
   private add(job: Job): number {
     const id = this.nextId++;
     this.items.update((items) => [
@@ -72,15 +103,18 @@ export class Uploader {
     );
   }
 
-  private async uploadOne(id: number, job: Job): Promise<void> {
+  private async uploadOne(id: number, job: Job, replace = false): Promise<void> {
     this.set(id, { status: 'lädt hoch' });
+    let starting = true;
     try {
       const started = await firstValueFrom(
         this.http.post<{ id: string; offset: number }>('/api/uploads', {
           path: job.path,
           size: job.file.size,
+          ...(replace ? { replace } : {}),
         }),
       );
+      starting = false;
       let offset = started.offset;
       let failures = 0;
       let duplicates: string[] | undefined;
@@ -105,8 +139,15 @@ export class Uploader {
         loaded: job.file.size,
         status: 'fertig',
         ...(duplicates?.length ? { duplicates } : {}),
+        ...(replace ? { replaced: true } : {}),
       });
     } catch (err) {
+      if (starting && !replace && err instanceof HttpErrorResponse && err.status === 409) {
+        // The file exists already: the page asks whether to replace it.
+        this.existing.set(id, job);
+        this.set(id, { status: 'existiert schon' });
+        return;
+      }
       this.set(id, { status: 'Fehler', error: errorMessage(err) });
     }
   }

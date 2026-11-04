@@ -89,11 +89,47 @@ describe('Uploader', () => {
     await settle();
     http
       .expectOne('/api/uploads')
-      .flush({ error: 'Datei existiert bereits' }, { status: 409, statusText: 'Conflict' });
+      .flush({ error: 'Kein Zugriff' }, { status: 403, statusText: 'Forbidden' });
     await done;
     expect(uploader.items()[0]).toEqual(
-      expect.objectContaining({ status: 'Fehler', error: 'Datei existiert bereits' }),
+      expect.objectContaining({ status: 'Fehler', error: 'Kein Zugriff' }),
     );
+  });
+
+  it('asks before replacing an existing file, then replaces it', async () => {
+    const done = uploader.upload([{ file: file('a.txt', 2), path: '/a.txt' }]);
+    await settle();
+    http
+      .expectOne('/api/uploads')
+      .flush({ error: 'Datei existiert bereits' }, { status: 409, statusText: 'Conflict' });
+    await done;
+    const item = uploader.items()[0];
+    expect(item.status).toBe('existiert schon');
+
+    const replaced = uploader.replace([item.id]);
+    await settle();
+    const start = http.expectOne('/api/uploads');
+    expect(start.request.body).toEqual({ path: '/a.txt', size: 2, replace: true });
+    start.flush({ id: 'u9', offset: 0 });
+    await settle();
+    http.expectOne('/api/uploads/u9').flush({ offset: 2, duplicates: [] });
+    await replaced;
+    expect(uploader.items()[0]).toEqual(
+      expect.objectContaining({ status: 'fertig', replaced: true }),
+    );
+  });
+
+  it('skips an existing file', async () => {
+    const done = uploader.upload([{ file: file('a.txt', 1), path: '/a.txt' }]);
+    await settle();
+    http
+      .expectOne('/api/uploads')
+      .flush({ error: 'Datei existiert bereits' }, { status: 409, statusText: 'Conflict' });
+    await done;
+    uploader.skip(uploader.items()[0].id);
+    expect(uploader.items()).toEqual([]);
+    // Nothing is left to replace.
+    await uploader.replace();
   });
 
   it('uploads at most three files at once', async () => {

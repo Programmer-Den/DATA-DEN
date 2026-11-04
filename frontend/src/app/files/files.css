@@ -152,3 +152,43 @@ td {
   opacity: 0.7;
   overflow-wrap: anywhere;
 }
+
+.uploads .ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  grid-column: 1 / -1;
+}
+
+.versions {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 0.5rem;
+}
+
+.versions ul {
+  padding: 0;
+  list-style: none;
+}
+
+.versions li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.versions .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.versions a.button {
+  color: inherit;
+  text-decoration: none;
+}

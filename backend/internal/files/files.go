@@ -14,6 +14,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -61,6 +62,9 @@ type Files struct {
 	account string
 	// audit notes changes in the audit log; nil notes nothing.
 	audit Recorder
+	// versionMu keeps two changes of the versions, or of a file and its
+	// versions, from running at the same time.
+	versionMu sync.Mutex
 }
 
 // Recorder notes in the audit log that account did action to target, in the
@@ -113,8 +117,8 @@ func (f *Files) Close() error {
 
 // Register adds /api/files, /api/download, /api/view, /api/media,
 // /api/thumb, /api/usage, /api/uploads, /api/folders, /api/move,
-// /api/delete, /api/trash, /api/search, /api/duplicates and /api/integrity
-// (all of Routes) to mux, behind require (the login check). The share links
+// /api/delete, /api/trash, /api/search, /api/duplicates, /api/integrity
+// and /api/versions (all of Routes) to mux, behind require (the login check). The share links
 // are added by RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
@@ -126,6 +130,7 @@ func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http
 	f.registerSearch(mux, require)
 	f.registerUploads(mux, require)
 	f.registerSums(mux, require)
+	f.registerVersions(mux, require)
 }
 
 func (f *Files) list(w http.ResponseWriter, r *http.Request) {

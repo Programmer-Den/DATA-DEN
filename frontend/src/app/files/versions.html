@@ -1,0 +1,39 @@
+<div class="versions" role="group" [attr.aria-label]="'Ältere Versionen von „' + name() + '“'">
+  <strong>Ältere Versionen von „{{ name() }}“</strong>
+  @if (list(); as list) {
+    @if (list.versions.length === 0) {
+      <p class="hint">
+        Keine. Wird die Datei beim Hochladen ersetzt, bleibt der alte Inhalt hier {{ list.days }}
+        Tage lang erhalten.
+      </p>
+    } @else {
+      <p class="hint">
+        Der alte Inhalt bleibt {{ list.days }} Tage nach dem Ersetzen erhalten. Beim
+        Wiederherstellen wird der jetzige Inhalt selbst zu einer Version.
+      </p>
+      <ul>
+        @for (version of list.versions; track version.id) {
+          <li>
+            <span>
+              Stand {{ format(version.modified) }}, {{ formatSize(version.size) }}
+              <span class="hint">(ersetzt {{ format(version.saved) }})</span>
+            </span>
+            <span class="buttons">
+              <a class="button" [href]="downloadUrl(version)" download>Herunterladen</a>
+              <button type="button" [disabled]="busy()" (click)="restore(version)">
+                Wiederherstellen
+              </button>
+              <button type="button" [disabled]="busy()" (click)="remove(version)">Löschen</button>
+            </span>
+          </li>
+        }
+      </ul>
+    }
+  } @else if (!error()) {
+    <p>Lade …</p>
+  }
+  @if (error(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+  <button type="button" (click)="closed.emit()">Schließen</button>
+</div>

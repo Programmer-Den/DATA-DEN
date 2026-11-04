@@ -7,6 +7,7 @@ import { Viewer } from '../media/viewer';
 import { ShareForm } from '../shares/share-form';
 import { StartFolder } from './start-folder';
 import { UploadItem, Uploader, droppedJobs, pickedJobs, Job } from './uploader';
+import { Versions } from './versions';
 
 export interface Entry {
   name: string;
@@ -33,7 +34,7 @@ const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 
 /** The folders of the data directory: open, download and upload files. */
 @Component({
   selector: 'app-files',
-  imports: [Viewer, ShareForm],
+  imports: [Viewer, ShareForm, Versions],
   templateUrl: './files.html',
   styleUrl: './files.css',
 })
@@ -72,6 +73,12 @@ export class Files {
   protected readonly busy = signal(false);
   /** The file or folder a link is being made for, or null. */
   protected readonly sharing = signal<{ path: string; name: string } | null>(null);
+  /** The file whose older versions are shown, or null. */
+  protected readonly versions = signal<{ path: string; name: string } | null>(null);
+  /** True while uploads wait for the answer whether to replace existing files. */
+  protected readonly asking = computed(() =>
+    this.uploader.items().some((item) => item.status === 'existiert schon'),
+  );
   /** What was just moved to the recycle bin, for undo. */
   protected readonly deleted = signal<{ id: string; name: string } | null>(null);
 
@@ -127,6 +134,10 @@ export class Files {
 
   protected share(entry: Entry): void {
     this.sharing.set({ path: this.child(entry), name: entry.name });
+  }
+
+  protected showVersions(entry: Entry): void {
+    this.versions.set({ path: this.child(entry), name: entry.name });
   }
 
   protected startMove(entry: Entry): void {
@@ -212,9 +223,18 @@ export class Files {
     }
   }
 
-  private async start(jobs: Job[]): Promise<void> {
+  /** Replaces existing files with the uploads that met them, or all of them. */
+  protected replace(ids?: number[]): Promise<void> {
+    return this.refreshAfter(this.uploader.replace(ids));
+  }
+
+  private start(jobs: Job[]): Promise<void> {
+    return this.refreshAfter(this.uploader.upload(jobs));
+  }
+
+  private async refreshAfter(uploads: Promise<void>): Promise<void> {
     const folder = this.path();
-    await this.uploader.upload(jobs);
+    await uploads;
     // Shows the new files if the folder is still open.
     if (this.path() === folder) {
       this.open(folder);

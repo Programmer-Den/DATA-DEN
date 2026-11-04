@@ -161,9 +161,23 @@ if needed, an item already there is never overwritten) or deleted for good,
 and the whole bin emptied. After 30 days (`DATA_DEN_TRASH_DAYS`) an item is
 deleted for good, checked at start, every hour and whenever the bin is opened. API: `GET /api/trash`,
 `POST /api/trash/restore {"id"}`, `POST /api/trash/delete {"id"}`,
-`POST /api/trash/empty {}`. Nothing is ever overwritten
+`POST /api/trash/empty {}`. Nothing is ever overwritten by accident
 ("Existiert bereits"), a folder cannot move into itself, and the data
 directory itself and the `.data-den-*` folders cannot be changed.
+
+File versions: an upload onto an existing file stops with **existiert
+schon** and asks: **Ersetzen**, **Überspringen**, or **Alle ersetzen**.
+Replacing keeps the old content as a version in `.data-den-versions/`
+(hidden; a hard link, then a rename, so the file is never half written).
+**Ältere Versionen** (🕘 on a file's row) lists them with the time of the
+content and of the replacement; each can be downloaded, restored (the
+content it replaces becomes a version itself, so nothing is lost) or
+deleted. A file keeps its 10 newest versions, each for 30 days, checked at
+start and every hour; versions follow the file when it is moved or renamed
+and count towards the account's quota. API: `POST /api/uploads` with
+`"replace": true`, `GET /api/versions?path=`,
+`GET /api/versions/download?path=&id=`, `POST /api/versions/restore {"path", "id"}`,
+`POST /api/versions/delete {"path", "id"}`.
 
 The search field above the tabs looks through everything at once and lists
 the hits with their folder, the searched words marked; a click opens a file
