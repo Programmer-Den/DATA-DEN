@@ -26,8 +26,10 @@ import (
 //
 // The chunks go into a file in uploadDir. With the last chunk it is moved to
 // its path, and the answer adds "duplicates": the other files with the same
-// content. An existing file is only replaced when the start says
-// "replace": true, and its old content is then kept as a version.
+// content, and "mod", the file's time in nanoseconds. An existing file is
+// only replaced when the start says "replace": true, and its old content is
+// then kept as a version. With "expect" {"size", "mod"} (see sync.go) a
+// replace only happens while the file is still so.
 const (
 	uploadDir = ".data-den-uploads"
 	// MaxChunk is the most one PUT may carry.
@@ -44,6 +46,9 @@ type upload struct {
 	offset int64
 	// replace allows overwriting a file, which is kept as a version.
 	replace bool
+	// expect is what the file at path must still be to be replaced; nil
+	// for no condition.
+	expect *fileState
 	// hash is the checksum of what arrived so far.
 	hash hash.Hash
 }
@@ -73,11 +78,18 @@ func (f *Files) startUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Ungültiger Dateiname")
 		return
 	}
+	if body.Expect != nil {
+		body.Replace = true
+		if err := f.still(name, *body.Expect); err != nil {
+			f.stateError(w, err)
+			return
+		}
+	}
 	if info, err := f.root.Lstat(name); err == nil && (!body.Replace || !info.Mode().IsRegular()) {
 		writeError(w, http.StatusConflict, "Datei existiert bereits")
 		return
 	}
-	f.beginUpload(w, r, &upload{path: name, size: body.Size, replace: body.Replace, hash: sha256.New()})
+	f.beginUpload(w, r, &upload{path: name, size: body.Size, replace: body.Replace, expect: body.Expect, hash: sha256.New()})
 }
 
 // uploadStart is the body of a request that starts an upload.
@@ -87,6 +99,8 @@ type uploadStart struct {
 	Size int64  `json:"size"`
 	// Replace allows overwriting a file, which is kept as a version.
 	Replace bool `json:"replace"`
+	// Expect is what the file must still be to be replaced.
+	Expect *fileState `json:"expect"`
 }
 
 // readUploadStart reads the body of a request that starts an upload. It
@@ -141,13 +155,18 @@ func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 	f.uploads.byID[id] = u
 	f.uploads.mu.Unlock()
 
+	answer := map[string]any{"id": id, "offset": u.offset}
 	if u.size == 0 {
-		if _, ok := f.finish(w, id, u); !ok {
+		_, mod, ok := f.finish(w, id, u)
+		if !ok {
 			return
 		}
 		f.noteUpload(r, u)
+		if u.share == "" {
+			answer["mod"] = mod
+		}
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "offset": u.offset})
+	writeJSON(w, http.StatusCreated, answer)
 }
 
 // noteUpload records a finished upload in the audit log.
@@ -213,7 +232,7 @@ func (f *Files) receiveChunk(w http.ResponseWriter, r *http.Request, id, share s
 			f.diskError(w, "closing an upload", err)
 			return
 		}
-		duplicates, ok := f.finish(w, id, u)
+		duplicates, mod, ok := f.finish(w, id, u)
 		if !ok {
 			return
 		}
@@ -223,7 +242,7 @@ func (f *Files) receiveChunk(w http.ResponseWriter, r *http.Request, id, share s
 			writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset, "name": path.Base(u.path)})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset, "duplicates": duplicates})
+		writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset, "mod": mod, "duplicates": duplicates})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"offset": u.offset})
@@ -247,7 +266,7 @@ func (f *Files) writeUploadState(w http.ResponseWriter, id, share string) {
 // finish moves a complete upload to its path and returns the other files
 // with the same content. It answers the request itself and returns false
 // when that fails.
-func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, bool) {
+func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, int64, bool) {
 	f.uploads.mu.Lock()
 	delete(f.uploads.byID, id)
 	f.uploads.mu.Unlock()
@@ -257,7 +276,7 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, b
 	if dir := path.Dir(u.path); dir != "." {
 		if err := f.root.MkdirAll(dir, 0o750); err != nil {
 			f.diskError(w, "creating a folder", err)
-			return nil, false
+			return nil, 0, false
 		}
 	}
 	// A hard link fails if the name is taken, so nothing is overwritten,
@@ -265,6 +284,9 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, b
 	link := f.root.Link
 	if u.replace {
 		link = f.replaceFile
+	}
+	if u.expect != nil {
+		link = f.replaceIf(*u.expect)
 	}
 	err := link(chunks, u.path)
 	// An upload link never refuses a file: it takes the next free name.
@@ -277,21 +299,25 @@ func (f *Files) finish(w http.ResponseWriter, id string, u *upload) ([]string, b
 		err = f.root.Link(chunks, u.path)
 	}
 	if err != nil {
+		if errors.Is(err, errChangedMeanwhile) {
+			f.stateError(w, err)
+			return nil, 0, false
+		}
 		if errors.Is(err, fs.ErrExist) {
 			writeError(w, http.StatusConflict, "Datei existiert bereits")
-			return nil, false
+			return nil, 0, false
 		}
 		f.diskError(w, "finishing an upload", err)
-		return nil, false
+		return nil, 0, false
 	}
 	f.addUsage(u.size)
 	slog.Info("uploaded", "path", "/"+u.path, "size", u.size)
 	info, err := f.root.Stat(u.path)
 	if err != nil {
 		// Uploaded; the next check makes its checksum.
-		return []string{}, true
+		return []string{}, 0, true
 	}
-	return f.uploaded(u.path, info, hex.EncodeToString(u.hash.Sum(nil))), true
+	return f.uploaded(u.path, info, hex.EncodeToString(u.hash.Sum(nil))), info.ModTime().UnixNano(), true
 }
 
 // upload is the unfinished upload id, if it belongs to the upload link share

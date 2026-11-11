@@ -16,6 +16,9 @@ import (
 //	POST /api/move    {"from": "/a.jpg", "to": "/Fotos/b.jpg"} -> 200, rename or move
 //	POST /api/delete  {"path": "/Fotos/a.jpg"}                -> {"id": "..."}, into the recycle bin
 //
+// A delete with "size" and "mod" only deletes a file that is still so (see
+// sync.go).
+//
 // Nothing is ever overwritten, and the data directory itself and the
 // server's own folders cannot be changed.
 func (f *Files) registerManage(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
@@ -146,6 +149,8 @@ func (f *Files) rename(from, to string, dir bool) error {
 func (f *Files) remove(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Path string `json:"path"`
+		Size *int64 `json:"size"`
+		Mod  *int64 `json:"mod"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -154,6 +159,16 @@ func (f *Files) remove(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeError(w, http.StatusBadRequest, "Ungültiger Name")
 		return
+	}
+	if (body.Size == nil) != (body.Mod == nil) {
+		writeError(w, http.StatusBadRequest, "Ungültige Anfrage")
+		return
+	}
+	if body.Mod != nil {
+		if err := f.still(name, fileState{Size: *body.Size, Mod: *body.Mod}); err != nil {
+			f.stateError(w, err)
+			return
+		}
 	}
 	info, err := f.root.Lstat(name)
 	if err != nil {

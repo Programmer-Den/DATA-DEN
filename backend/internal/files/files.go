@@ -150,8 +150,9 @@ func (f *Files) Close() error {
 // Register adds /api/files, /api/download, /api/view, /api/media,
 // /api/thumb, /api/usage, /api/uploads, /api/folders, /api/move,
 // /api/delete, /api/trash, /api/search, /api/duplicates, /api/integrity,
-// /api/versions, /api/albums and /api/text (all of Routes) to mux, behind
-// require (the login check). The share links are added by RegisterShares.
+// /api/versions, /api/albums, /api/text and /api/sync/tree (all of Routes)
+// to mux, behind require (the login check). The share links are added by
+// RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
@@ -165,6 +166,7 @@ func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http
 	f.registerVersions(mux, require)
 	f.registerAlbums(mux, require)
 	f.registerEdit(mux, require)
+	f.registerSync(mux, require)
 }
 
 func (f *Files) list(w http.ResponseWriter, r *http.Request) {
