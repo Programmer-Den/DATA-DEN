@@ -145,7 +145,7 @@ func clients(files fs.FS) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
 		w.Header().Set("Content-Type", "application/octet-stream")
-		http.ServeFileFS(w, r, files, name) //nolint:gosec // name matched clientName
+		http.ServeFileFS(w, r, files, name)
 	}
 }
 
