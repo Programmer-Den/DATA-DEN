@@ -155,6 +155,9 @@ func (f *Files) view(w http.ResponseWriter, r *http.Request) {
 		// An SVG opened on its own could run scripts; in a sandbox it cannot.
 		h.Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'")
 	}
+	if firstPiece(r) {
+		f.noteUse(r, name)
+	}
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
 

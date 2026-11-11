@@ -117,6 +117,7 @@ func (f *Files) toTrash(name string, info fs.FileInfo) (string, error) {
 		return "", err
 	}
 	f.sumMoved(name, trashedName(id))
+	f.marksMoved(name, trashedName(id))
 	return id, nil
 }
 
@@ -170,6 +171,7 @@ func (f *Files) purgeTrash() {
 			}
 			f.forgetUsage()
 			f.sumsDropped(path.Join(trashDir, item.ID))
+			f.marksDropped(path.Join(trashDir, item.ID))
 			slog.Info("deleted for good after the waiting time", "path", item.Path)
 		}
 	}
@@ -232,6 +234,7 @@ func (f *Files) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.sumMoved(trashedName(item.ID), name)
+	f.marksMoved(trashedName(item.ID), name)
 	_ = f.root.RemoveAll(path.Join(trashDir, item.ID))
 	slog.Info("restored", "path", item.Path)
 	f.note(r, "restore", item.Path)
@@ -249,6 +252,7 @@ func (f *Files) deleteForGood(w http.ResponseWriter, r *http.Request) {
 	}
 	f.forgetUsage()
 	f.sumsDropped(path.Join(trashDir, item.ID))
+	f.marksDropped(path.Join(trashDir, item.ID))
 	slog.Info("deleted for good", "path", item.Path)
 	f.note(r, "purge", item.Path)
 	writeJSON(w, http.StatusOK, map[string]string{"path": item.Path})
@@ -267,6 +271,7 @@ func (f *Files) emptyTrash(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.sumsDropped(path.Join(trashDir, item.ID))
+		f.marksDropped(path.Join(trashDir, item.ID))
 	}
 	slog.Info("recycle bin emptied")
 	f.note(r, "trash-empty", "")

@@ -36,6 +36,10 @@ type Entry struct {
 	Thumb bool `json:"thumb,omitempty"`
 	// Text is true when /api/text can open the file in the editor.
 	Text bool `json:"text,omitempty"`
+	// Tags and Favourite are the account's own marks, never shown through a
+	// share link.
+	Tags      []string `json:"tags,omitempty"`
+	Favourite bool     `json:"favourite,omitempty"`
 }
 
 // Listing is the content of one folder.
@@ -67,6 +71,8 @@ type Files struct {
 	albums albums
 	// places names the towns of the photos; nil leaves them unnamed.
 	places Namer
+	// marks are the tags, favourites and recently used files.
+	marks marks
 	// account is whose space this is, for the audit log.
 	account string
 	// audit notes changes in the audit log; nil notes nothing.
@@ -128,6 +134,7 @@ func newFiles(root *os.Root) *Files {
 		trashDays:  DefaultTrashDays,
 	}
 	f.loadSums()
+	f.loadMarks()
 	return f
 }
 
@@ -150,9 +157,9 @@ func (f *Files) Close() error {
 // Register adds /api/files, /api/download, /api/view, /api/media,
 // /api/thumb, /api/usage, /api/uploads, /api/folders, /api/move,
 // /api/delete, /api/trash, /api/search, /api/duplicates, /api/integrity,
-// /api/versions, /api/albums, /api/text and /api/sync/tree (all of Routes)
-// to mux, behind require (the login check). The share links are added by
-// RegisterShares.
+// /api/versions, /api/albums, /api/text, /api/sync/tree, /api/marks,
+// /api/tagged, /api/tags and /api/favourites (all of Routes) to mux, behind
+// require (the login check). The share links are added by RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
 	mux.HandleFunc("GET /api/download", require(f.download))
@@ -167,6 +174,7 @@ func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http
 	f.registerAlbums(mux, require)
 	f.registerEdit(mux, require)
 	f.registerSync(mux, require)
+	f.registerMarks(mux, require)
 }
 
 func (f *Files) list(w http.ResponseWriter, r *http.Request) {
@@ -178,11 +186,12 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 	if name != "." {
 		listed += name
 	}
-	f.writeListing(w, name, listed)
+	f.writeListing(w, name, listed, !byGrant(r))
 }
 
-// writeListing answers with the folder name, shown as listed.
-func (f *Files) writeListing(w http.ResponseWriter, name, listed string) {
+// writeListing answers with the folder name, shown as listed; withMarks adds
+// the tags and favourites.
+func (f *Files) writeListing(w http.ResponseWriter, name, listed string, withMarks bool) {
 	dir, err := f.root.Open(name)
 	if err != nil {
 		openError(w, err)
@@ -210,7 +219,11 @@ func (f *Files) writeListing(w http.ResponseWriter, name, listed string) {
 		if name == "." && hidden(info.Name()) {
 			continue
 		}
-		entries = append(entries, entryOf(info))
+		entry := entryOf(info)
+		if withMarks {
+			f.mark(path.Join(name, info.Name()), &entry)
+		}
+		entries = append(entries, entry)
 	}
 	// Folders first, then by name.
 	slices.SortFunc(entries, func(a, b Entry) int {
@@ -234,26 +247,30 @@ func (f *Files) download(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Nicht gefunden")
 		return
 	}
-	f.serveDownload(w, r, name)
+	if f.serveDownload(w, r, name) && firstPiece(r) {
+		f.noteUse(r, name)
+	}
 }
 
-// serveDownload answers with the file name to save.
-func (f *Files) serveDownload(w http.ResponseWriter, r *http.Request, name string) {
+// serveDownload answers with the file name to save; false when it is not a
+// file that can be read.
+func (f *Files) serveDownload(w http.ResponseWriter, r *http.Request, name string) bool {
 	file, err := f.root.Open(name)
 	if err != nil {
 		openError(w, err)
-		return
+		return false
 	}
 	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		writeError(w, http.StatusBadRequest, "Keine Datei")
-		return
+		return false
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": info.Name()}))
 	// ServeContent answers Range requests, so a broken download of a large
 	// video can continue where it stopped.
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+	return true
 }
 
 // hidden is true for the server's own folders at the top of the data

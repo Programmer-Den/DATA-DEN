@@ -121,6 +121,18 @@
                     <button type="submit" [disabled]="busy()">Speichern</button>
                     <button type="button" (click)="renaming.set(null)">Abbrechen</button>
                   </form>
+                } @else if (tagging() === entry.name) {
+                  <form class="inline" (submit)="saveTags($event, entry, tagsInput.value)">
+                    <input
+                      #tagsInput
+                      [value]="(entry.tags ?? []).join(', ')"
+                      placeholder="Tags, mit Komma getrennt"
+                      [attr.aria-label]="'Tags für ' + entry.name"
+                      (keydown.escape)="tagging.set(null)"
+                    />
+                    <button type="submit" [disabled]="busy()">Speichern</button>
+                    <button type="button" (click)="tagging.set(null)">Abbrechen</button>
+                  </form>
                 } @else if (entry.dir) {
                   <button type="button" class="link" (click)="open(child(entry))">
                     📁 {{ entry.name }}
@@ -131,6 +143,15 @@
                   </button>
                 } @else {
                   <a [href]="downloadUrl(entry)" download>{{ entry.name }}</a>
+                }
+                @if (entry.tags?.length && tagging() !== entry.name) {
+                  <div class="tags">
+                    @for (tag of entry.tags; track tag) {
+                      <button type="button" class="tag" (click)="showTag.emit(tag)">
+                        {{ tag }}
+                      </button>
+                    }
+                  </div>
                 }
               </td>
               <td class="size">{{ entry.dir ? '' : formatSize(entry.size) }}</td>
@@ -145,6 +166,22 @@
                     (click)="editOffice(entry)"
                   >
                     📝
+                  </button>
+                }
+                @if (!grant()) {
+                  <button
+                    type="button"
+                    class="icon star"
+                    [class.on]="entry.favourite"
+                    [title]="entry.favourite ? 'Kein Favorit mehr' : 'Als Favorit merken'"
+                    [attr.aria-label]="
+                      entry.name + (entry.favourite ? ' kein Favorit mehr' : ' als Favorit merken')
+                    "
+                    [attr.aria-pressed]="!!entry.favourite"
+                    [disabled]="busy()"
+                    (click)="toggleFavourite(entry)"
+                  >
+                    {{ entry.favourite ? '★' : '☆' }}
                   </button>
                 }
                 @if (!entry.dir) {
@@ -169,6 +206,15 @@
                   </button>
                 }
                 @if (!grant()) {
+                  <button
+                    type="button"
+                    class="icon"
+                    title="Tags"
+                    [attr.aria-label]="'Tags für ' + entry.name"
+                    (click)="tagging.set(entry.name)"
+                  >
+                    🏷
+                  </button>
                   <button
                     type="button"
                     class="icon"

@@ -1,0 +1,107 @@
+h2 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.hint {
+  opacity: 0.7;
+}
+
+.error {
+  color: #c62828;
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.items li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.icon {
+  font-size: 1.3rem;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: LinkText;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+.name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.tag {
+  padding: 0.1rem 0.6rem;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 1rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.tag.active {
+  border-color: LinkText;
+  font-weight: 600;
+}
+
+.count {
+  opacity: 0.6;
+}
+
+.tagged {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid LinkText;
+  border-radius: 0.4rem;
+}
+
+.heading {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.star {
+  border: none;
+  background: none;
+  color: #f9a825;
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
