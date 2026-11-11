@@ -132,6 +132,37 @@ func tlsFiles() (certFile, keyFile string) {
 	return os.Getenv("DATA_DEN_TLS_CERT"), os.Getenv("DATA_DEN_TLS_KEY")
 }
 
+// defaultWOPIAddr is where the WOPI listener for Collabora listens, unless
+// DATA_DEN_WOPI_ADDR says otherwise: only on the VM itself.
+const defaultWOPIAddr = "127.0.0.1:9981"
+
+// officeConfig reads DATA_DEN_OFFICE_URL, where Collabora runs, and
+// DATA_DEN_WOPI_ADDR. Without DATA_DEN_OFFICE_URL office editing is off and
+// addr is "".
+func officeConfig() (cfg files.OfficeConfig, addr string, err error) {
+	value := os.Getenv("DATA_DEN_OFFICE_URL")
+	if value == "" {
+		return cfg, "", nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return cfg, "", fmt.Errorf("DATA_DEN_OFFICE_URL must be Collabora's address, such as http://127.0.0.1:9980, not %q", value)
+	}
+	addr = os.Getenv("DATA_DEN_WOPI_ADDR")
+	if addr == "" {
+		addr = defaultWOPIAddr
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil || host == "" || net.ParseIP(host).IsUnspecified() {
+		return cfg, "", fmt.Errorf("DATA_DEN_WOPI_ADDR must be an address Collabora can reach, such as %s, not %q", defaultWOPIAddr, addr)
+	}
+	return files.OfficeConfig{
+		URL:    u,
+		WOPI:   "http://" + addr,
+		Client: &http.Client{Timeout: 10 * time.Second},
+	}, addr, nil
+}
+
 // setTrashDays applies DATA_DEN_TRASH_DAYS, if set, to data.
 func setTrashDays(data *files.Spaces) error {
 	value := os.Getenv("DATA_DEN_TRASH_DAYS")
@@ -312,9 +343,23 @@ func run() error {
 	if os.Getenv("DATA_DEN_PASSWORD_HASH") == "" {
 		slog.Warn("no DATA_DEN_PASSWORD_HASH set, so nobody can log in; create one with: data-den hash-password")
 	}
+	officeCfg, wopiAddr, err := officeConfig()
+	if err != nil {
+		return err
+	}
+	var office *files.Office
+	var wopi *http.Server
+	if wopiAddr != "" && data != nil {
+		office = data.Office(officeCfg)
+		wopi = &http.Server{
+			Addr:              wopiAddr,
+			Handler:           office.WOPI(),
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
@@ -328,6 +373,9 @@ func run() error {
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
+		if wopi != nil {
+			_ = wopi.Shutdown(shutdown)
+		}
 	}()
 	if geocoder != nil && data != nil {
 		go geocoder.Run(ctx)
@@ -338,6 +386,20 @@ func run() error {
 		// The search indexes, built in the background so the server answers
 		// at once, and the recycle bins emptied on time.
 		data.Run(ctx)
+	}
+
+	if wopi != nil {
+		// Only Collabora talks to it, to load and save documents.
+		listener, err := net.Listen("tcp", wopiAddr)
+		if err != nil {
+			return fmt.Errorf("the WOPI listener for Collabora (DATA_DEN_WOPI_ADDR): %w", err)
+		}
+		go func() {
+			if err := wopi.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("the WOPI listener stopped", "err", err)
+			}
+		}()
+		slog.Info("office editing with Collabora", "collabora", officeCfg.URL.String(), "wopi", wopiAddr)
 	}
 
 	slog.Info("DATA-DEN listening", "addr", addr, "https", certFile != "", "version", version.Version)

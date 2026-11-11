@@ -1,0 +1,22 @@
+<div class="backdrop" role="dialog" aria-modal="true" [attr.aria-label]="name() + ' bearbeiten'">
+  <header>
+    <span class="name">{{ name() }}</span>
+    <span class="hint">Speichert automatisch</span>
+    <button type="button" class="button" (click)="closed.emit()">Schließen</button>
+  </header>
+  @if (error(); as error) {
+    <p class="message" role="alert">{{ error }}</p>
+  } @else if (opened(); as opened) {
+    <form #form method="post" target="office-frame" [action]="opened.url">
+      <input type="hidden" name="access_token" [value]="opened.token" />
+      <input type="hidden" name="access_token_ttl" [value]="opened.ttl" />
+    </form>
+    <iframe
+      name="office-frame"
+      [title]="name()"
+      allow="clipboard-read; clipboard-write; fullscreen"
+    ></iframe>
+  } @else {
+    <p class="message">Öffne …</p>
+  }
+</div>

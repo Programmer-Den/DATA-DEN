@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { OfficeFormats } from '../office/formats';
 import { Entry, Files, textName } from './files';
 
 const photos: Entry = { name: 'Fotos', dir: true, size: 0, modified: '2026-10-25T10:00:00Z' };
@@ -179,6 +180,16 @@ describe('Files management', () => {
       .flush({ path: '/Einkauf.md', content: '', version: 'v1' });
     await fixture.whenStable();
     expect(page().querySelector('app-editor textarea')).not.toBeNull();
+  });
+
+  it('opens an office document in Collabora', async () => {
+    TestBed.inject(OfficeFormats).load();
+    http.expectOne('/api/office').flush({ extensions: ['.txt'] });
+    await fixture.whenStable();
+    button('notizen 1.txt in Office bearbeiten').click();
+    await fixture.whenStable();
+    expect(page().querySelector('app-office-frame')).not.toBeNull();
+    http.expectOne('/api/office').flush({ error: 'x' }, { status: 502, statusText: 'Bad Gateway' });
   });
 
   it('renames a file', async () => {
