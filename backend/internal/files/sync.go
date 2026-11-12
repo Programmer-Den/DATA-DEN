@@ -152,12 +152,12 @@ func (f *Files) stateError(w http.ResponseWriter, err error) {
 }
 
 // replaceIf replaces a file with a finished upload like replaceFile, if it
-// is still as want describes it.
-func (f *Files) replaceIf(want fileState) func(chunks, name string) error {
+// is still as want describes it. sum is the upload's SHA-256 (hex).
+func (f *Files) replaceIf(want fileState, sum string) func(chunks, name string) error {
 	return func(chunks, name string) error {
 		if err := f.still(name, want); err != nil {
 			return err
 		}
-		return f.replaceFile(chunks, name)
+		return f.replaceFile(sum)(chunks, name)
 	}
 }

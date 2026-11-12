@@ -108,6 +108,22 @@ func TestEditBackup(t *testing.T) {
 	}
 }
 
+func TestEditBackupSkipsUnchanged(t *testing.T) {
+	h, _, f := setupEditFiles(t)
+	_, version := readText(t, h, "/notizen.md")
+	if rec := putText(h, map[string]any{"path": "/notizen.md", "content": "# Neu\n", "version": version, "backup": true}); rec.Code != http.StatusOK {
+		t.Fatalf("first save: status %d, body %s", rec.Code, rec.Body)
+	}
+	// Saved again without a change: the first save keeps its one version.
+	_, version = readText(t, h, "/notizen.md")
+	if rec := putText(h, map[string]any{"path": "/notizen.md", "content": "# Neu\n", "version": version, "backup": true}); rec.Code != http.StatusOK {
+		t.Fatalf("second save: status %d, body %s", rec.Code, rec.Body)
+	}
+	if versions := f.versionsOf("notizen.md"); len(versions) != 1 {
+		t.Errorf("versions %+v, want the one from the first save", versions)
+	}
+}
+
 func TestEditCreate(t *testing.T) {
 	h, data := setupEdit(t)
 	if rec := putText(h, map[string]any{"path": "/neu.txt", "content": "Hallo"}); rec.Code != http.StatusOK {

@@ -265,3 +265,28 @@ func versionContent(h http.Handler, p, id string) *httptest.ResponseRecorder {
 	h.ServeHTTP(rec, req)
 	return rec
 }
+
+func TestReplaceWithSameContentKeepsNoVersion(t *testing.T) {
+	h, data := uploadSetup(t)
+	replace(t, h, "/a.txt", "eins")
+	replace(t, h, "/a.txt", "eins")
+	if v := versionsOf(t, h, "/a.txt"); len(v) != 0 {
+		t.Fatalf("versions after the same content: %+v", v)
+	}
+	replace(t, h, "/a.txt", "zwei")
+	if v := versionsOf(t, h, "/a.txt"); len(v) != 1 {
+		t.Fatalf("versions after other content: %+v", v)
+	}
+	if got := read(t, filepath.Join(data, "a.txt")); got != "zwei" {
+		t.Errorf("file %q, want zwei", got)
+	}
+
+	// Without a checksum of the file as it is, the old content is kept.
+	if err := os.WriteFile(filepath.Join(data, "a.txt"), []byte("drei"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	replace(t, h, "/a.txt", "drei")
+	if v := versionsOf(t, h, "/a.txt"); len(v) != 2 {
+		t.Errorf("versions after a change outside the app: %+v", v)
+	}
+}

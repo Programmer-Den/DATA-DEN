@@ -282,11 +282,12 @@ func (f *Files) finish(w http.ResponseWriter, r *http.Request, id string, u *upl
 	// A hard link fails if the name is taken, so nothing is overwritten,
 	// not even a file that appeared during the upload, unless asked to.
 	link := f.root.Link
+	sum := hex.EncodeToString(u.hash.Sum(nil))
 	if u.replace {
-		link = f.replaceFile
+		link = f.replaceFile(sum)
 	}
 	if u.expect != nil {
-		link = f.replaceIf(*u.expect)
+		link = f.replaceIf(*u.expect, sum)
 	}
 	err := link(chunks, u.path)
 	// An upload link never refuses a file: it takes the next free name.
@@ -318,7 +319,7 @@ func (f *Files) finish(w http.ResponseWriter, r *http.Request, id string, u *upl
 		// Uploaded; the next check makes its checksum.
 		return []string{}, 0, true
 	}
-	return f.uploaded(u.path, info, hex.EncodeToString(u.hash.Sum(nil))), info.ModTime().UnixNano(), true
+	return f.uploaded(u.path, info, sum), info.ModTime().UnixNano(), true
 }
 
 // upload is the unfinished upload id, if it belongs to the upload link share

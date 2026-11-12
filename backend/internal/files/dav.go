@@ -285,8 +285,9 @@ func (u *davUpload) finish() error {
 		return errors.Join(errors.New("upload not finished"), closeErr)
 	}
 	link := f.root.Link
+	sum := hex.EncodeToString(u.hash.Sum(nil))
 	if u.replace {
-		link = f.replaceFile
+		link = f.replaceFile(sum)
 	}
 	if err := link(u.tmp, u.name); err != nil {
 		return err
@@ -299,7 +300,7 @@ func (u *davUpload) finish() error {
 	slog.Info("uploaded", "path", "/"+u.name, "size", u.size, "via", "webdav")
 	u.d.note(u.ctx, action, "/"+u.name)
 	if info, err := f.root.Stat(u.name); err == nil {
-		f.uploaded(u.name, info, hex.EncodeToString(u.hash.Sum(nil)))
+		f.uploaded(u.name, info, sum)
 	}
 	return nil
 }
