@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { labelAlbums, peopleAlbums, placeAlbums, spotAlbum, tripAlbums } from './albums';
-=======
-import { placeAlbums, spotAlbum, tripAlbums } from './albums';
->>>>>>> origin/claude/project-thread-dlouur
 import { Item } from './item';
 
 function photo(name: string, taken: string, place?: string): Item {
@@ -63,7 +59,6 @@ describe('albums', () => {
     expect(two.items.map((i) => i.name)).toEqual(['b.jpg', 'a.jpg']);
   });
 
-<<<<<<< HEAD
   it('makes an album per person and per thing', () => {
     const a = { ...photo('a.jpg', '2026-01-01T10:00:00'), people: ['p1', 'p2'], labels: ['Hunde'] };
     const b = {
@@ -90,8 +85,6 @@ describe('albums', () => {
     ]);
   });
 
-=======
->>>>>>> origin/claude/project-thread-dlouur
   it('finds nothing without positions', () => {
     const none = [photo('a.jpg', '2026-01-01T10:00:00')];
     expect(placeAlbums(none)).toEqual([]);

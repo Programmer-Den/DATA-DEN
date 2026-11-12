@@ -153,7 +153,6 @@ func TestNewTiles(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestNewVision(t *testing.T) {
 	t.Setenv("DATA_DEN_VISION", "")
 	if got, err := newVision(); got != nil || err != nil {
@@ -171,8 +170,6 @@ func TestNewVision(t *testing.T) {
 	}
 }
 
-=======
->>>>>>> origin/claude/project-thread-dlouur
 func TestOfficeConfig(t *testing.T) {
 	t.Setenv("DATA_DEN_OFFICE_URL", "")
 	t.Setenv("DATA_DEN_WOPI_ADDR", "")
