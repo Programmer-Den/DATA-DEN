@@ -110,4 +110,15 @@ describe('SearchView', () => {
     expect(page().textContent).toContain('Nichts gefunden für „urlaub“');
     expect(page().textContent).toContain('Suchindex wird noch aufgebaut');
   });
+
+  it('says how many files still wait for the text recognition', async () => {
+    expect(page().textContent).not.toContain('Texterkennung');
+    fixture.componentRef.setInput('query', 'quittung');
+    await fixture.whenStable();
+    http
+      .expectOne((r) => r.params.get('q') === 'quittung')
+      .flush({ items: [], total: 0, ready: true, recognizing: 12 });
+    await fixture.whenStable();
+    expect(page().textContent).toContain('Texterkennung liest noch 12 Dateien');
+  });
 });

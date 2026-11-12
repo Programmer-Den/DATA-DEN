@@ -310,6 +310,21 @@ again only files whose size or modification time changed. Of each document
 up to 50 MB, the first 256 KB of text are indexed. The recycle bin and the
 other `.data-den-*` folders are left out.
 
+With text recognition the search also finds the text of scans and photos of
+documents (JPEG, PNG, TIFF, BMP, GIF and PDFs with almost no text of their
+own, in German and English) and of more office formats (DOC, RTF, XLS,
+XLSX, ODS, PPT, PPTX, ODP). It runs with Apache Tika and Tesseract in a
+second container in the VM, without a cloud:
+[deploy/README.md](deploy/README.md#text-recognition-optional), switched on
+with `DATA_DEN_OCR_URL` (where DATA-DEN reaches Tika, such as
+`http://127.0.0.1:9998`). Recognizing takes a few seconds per file, so it
+runs in the background after each refresh of the index, one file at a time
+for all accounts; until then such files are found by name only, and the
+search says how many still wait (`"recognizing"` in the answer). The text is
+kept in `.data-den-ocr/`, named after the file's path, size and modification
+time, so each file is read once, also across restarts, and a changed file
+again. When Tika is not reachable, the files wait for the next refresh.
+
 Every account keeps its own tags, favourites and recently used files, in
 `.data-den-marks/marks.json`. On a row of **Dateien**, ☆ marks a file or
 folder as a favourite and 🏷 sets its tags (comma-separated, up to 20 of up to

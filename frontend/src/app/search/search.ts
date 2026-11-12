@@ -16,6 +16,8 @@ interface Results {
   total: number;
   /** False while the server still builds its index after a start. */
   ready: boolean;
+  /** How many scans and images still wait for the text recognition. */
+  recognizing?: number;
 }
 
 /** A piece of text, marked when it is one of the words searched for. */

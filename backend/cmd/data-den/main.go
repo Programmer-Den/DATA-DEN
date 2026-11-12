@@ -165,6 +165,22 @@ func officeConfig() (cfg files.OfficeConfig, addr string, err error) {
 	}, addr, nil
 }
 
+// ocrConfig reads DATA_DEN_OCR_URL, where Apache Tika runs for reading the
+// text of scans. Without it, the search reads only what it can itself and
+// the Recognizer is nil.
+func ocrConfig() (files.Recognizer, error) {
+	value := os.Getenv("DATA_DEN_OCR_URL")
+	if value == "" {
+		return nil, nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("DATA_DEN_OCR_URL must be Apache Tika's address, such as http://127.0.0.1:9998, not %q", value)
+	}
+	slog.Info("reading the text of scans for the search with Apache Tika", "tika", u.String())
+	return files.NewTika(u), nil
+}
+
 // clientsDir holds the sync client's programs: /clients in the image, or
 // DATA_DEN_CLIENTS_DIR. Nil when there is none.
 func clientsDir() fs.FS {
@@ -298,6 +314,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	ocr, err := ocrConfig()
+	if err != nil {
+		return err
+	}
 	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
 		Owner: os.Getenv("DATA_DEN_USERNAME"),
 		User:  auth.Username,
@@ -307,6 +327,7 @@ func run() error {
 			notifier.NotifySystem(damagedMessage(account, paths))
 		},
 		Places:   namer,
+		OCR:      ocr,
 		Accounts: func() []string { return login.Names() },
 		Shared: func(g files.Grant) {
 			notifier.Notify(g.To, sharedMessage(g))

@@ -178,3 +178,20 @@ func TestOfficeConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestOCRConfig(t *testing.T) {
+	t.Setenv("DATA_DEN_OCR_URL", "")
+	if r, err := ocrConfig(); err != nil || r != nil {
+		t.Errorf("unset: %v, %v", r, err)
+	}
+	t.Setenv("DATA_DEN_OCR_URL", "http://127.0.0.1:9998")
+	if r, err := ocrConfig(); err != nil || r == nil {
+		t.Errorf("set: %v, %v", r, err)
+	}
+	for _, bad := range []string{"127.0.0.1:9998", "ftp://x", "http://"} {
+		t.Setenv("DATA_DEN_OCR_URL", bad)
+		if _, err := ocrConfig(); err == nil {
+			t.Errorf("%q: no error", bad)
+		}
+	}
+}

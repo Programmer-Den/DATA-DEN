@@ -41,7 +41,7 @@ updates:
     labels: [dependencies, install]
     schedule:
       interval: weekly
-  # Collabora in deploy/compose.office.yaml.
+  # Collabora in deploy/compose.office.yaml, Tika in deploy/compose.ocr.yaml.
   - package-ecosystem: docker-compose
     directory: /deploy
     labels: [dependencies, install]

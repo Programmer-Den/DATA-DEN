@@ -71,6 +71,8 @@ type Files struct {
 	albums albums
 	// places names the towns of the photos; nil leaves them unnamed.
 	places Namer
+	// ocr reads the text of scans for the search; nil for none.
+	ocr Recognizer
 	// marks are the tags, favourites and recently used files.
 	marks marks
 	// account is whose space this is, for the audit log.
@@ -132,6 +134,7 @@ func newFiles(root *os.Root) *Files {
 		shares:     shares{unlocked: map[string]unlock{}},
 		thumbSlots: make(chan struct{}, thumbWorkers),
 		trashDays:  DefaultTrashDays,
+		index:      index{wake: make(chan struct{}, 1)},
 	}
 	f.loadSums()
 	f.loadMarks()
