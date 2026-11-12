@@ -220,14 +220,21 @@ func (f *Files) save(w http.ResponseWriter, name, expected string, backup bool, 
 
 	if expected != "" && backup {
 		info, err := f.root.Lstat(name)
-		if err == nil {
+		switch {
+		case err == nil && f.sameContent(name, info, hex.EncodeToString(sum.Sum(nil))):
+			// Saved without a change: a version would only take the space
+			// twice.
+			backup, added = false, size-oldSize
+		case err == nil:
 			_, err = f.keepVersion(name, info)
 		}
 		if err != nil {
 			f.diskError(w, "keeping the old version", err)
 			return nil, false
 		}
-		slog.Info("old content kept as a version", "path", "/"+name)
+		if backup {
+			slog.Info("old content kept as a version", "path", "/"+name)
+		}
 	}
 	if expected != "" {
 		// Replaces the old file in one step: a reader sees either it or

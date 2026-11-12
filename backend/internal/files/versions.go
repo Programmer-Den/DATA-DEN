@@ -224,30 +224,55 @@ func (f *Files) moveVersion(dir string, v Version, name string) error {
 	return nil
 }
 
-// replaceFile puts the finished upload chunks at name, keeping the file
-// there as a version. A file that is gone meanwhile is simply created.
-func (f *Files) replaceFile(chunks, name string) error {
-	f.versionMu.Lock()
-	defer f.versionMu.Unlock()
-	info, err := f.root.Lstat(name)
-	if errors.Is(err, fs.ErrNotExist) {
-		return f.root.Link(chunks, name)
+// replaceFile returns a link function that puts the finished upload chunks,
+// whose SHA-256 is sum (hex), at name, keeping the file there as a version.
+// A file that is gone meanwhile is simply created, and a file with the same
+// content keeps no version: it would only take the space twice.
+func (f *Files) replaceFile(sum string) func(chunks, name string) error {
+	return func(chunks, name string) error {
+		f.versionMu.Lock()
+		defer f.versionMu.Unlock()
+		info, err := f.root.Lstat(name)
+		if errors.Is(err, fs.ErrNotExist) {
+			return f.root.Link(chunks, name)
+		}
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fs.ErrExist
+		}
+		same := f.sameContent(name, info, sum)
+		if !same {
+			if _, err := f.keepVersion(name, info); err != nil {
+				return err
+			}
+		}
+		// A rename replaces the file in one step, so nobody sees half of it.
+		if err := f.root.Rename(chunks, name); err != nil {
+			return err
+		}
+		if same {
+			// The caller counted the upload on top of the old file.
+			f.forgetUsage()
+			slog.Info("same content uploaded again, no version kept", "path", "/"+name)
+			return nil
+		}
+		f.pruneVersions(name)
+		return nil
 	}
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return fs.ErrExist
-	}
-	if _, err := f.keepVersion(name, info); err != nil {
-		return err
-	}
-	// A rename replaces the file in one step, so nobody sees half of it.
-	if err := f.root.Rename(chunks, name); err != nil {
-		return err
-	}
-	f.pruneVersions(name)
-	return nil
+}
+
+// sameContent reports whether the file name, as info describes it, has the
+// checksum sum. Only a checksum taken of this very file counts (same size
+// and time, not found damaged); without one it is not the same, so a
+// version is kept rather than lost.
+func (f *Files) sameContent(name string, info fs.FileInfo, sum string) bool {
+	f.sums.mu.Lock()
+	defer f.sums.mu.Unlock()
+	s := f.sums.byPath[name]
+	return s != nil && sum != "" && s.SHA256 == sum && s.Bad == "" &&
+		s.Size == info.Size() && s.Mod == info.ModTime().UnixNano()
 }
 
 func (f *Files) listVersions(w http.ResponseWriter, r *http.Request) {

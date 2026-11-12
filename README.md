@@ -309,6 +309,9 @@ File versions: an upload onto an existing file stops with **existiert
 schon** and asks: **Ersetzen**, **Überspringen**, or **Alle ersetzen**.
 Replacing keeps the old content as a version in `.data-den-versions/`
 (hidden; a hard link, then a rename, so the file is never half written).
+Each version is a full copy. When the new content has the same checksum
+as the file (an upload of the same file, or a save in the editor without
+a change), no version is kept, since it would only take the space twice.
 **Ältere Versionen** (🕘 on a file's row) lists them with the time of the
 content and of the replacement; each can be downloaded, restored (the
 content it replaces becomes a version itself, so nothing is lost) or
