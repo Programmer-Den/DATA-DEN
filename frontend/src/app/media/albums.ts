@@ -111,3 +111,17 @@ export function tripAlbums(items: Item[]): Album[] {
     .map((trip) => album('trip:' + trip[0].path, byCount(trip).slice(0, 3).join(', '), trip))
     .sort((a, b) => b.to!.getTime() - a.to!.getTime());
 }
+
+/**
+ * The photos of one spot on the map, named after their towns, such as
+ * "Florenz, Siena", or "3 Fotos" when no town is known.
+ */
+export function spotAlbum(items: Item[]): Album {
+  const places = byCount(items).slice(0, 2);
+  const name = places.length
+    ? places.join(', ')
+    : items.length === 1
+      ? '1 Foto'
+      : `${items.length} Fotos`;
+  return album('map:' + items.map((item) => item.path).join('|'), name, items);
+}

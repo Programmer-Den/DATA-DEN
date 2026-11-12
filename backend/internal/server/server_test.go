@@ -12,6 +12,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 )
 
 func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder {
@@ -131,6 +132,21 @@ func TestStatusAPI(t *testing.T) {
 	h := New(Config{Files: fstest.MapFS{}, Auth: a, Status: status.New(status.Config{DataDir: t.TempDir()})})
 	if rec := get(t, h, "/api/status"); rec.Code != http.StatusUnauthorized {
 		t.Errorf("/api/status without login: status %d, want 401", rec.Code)
+	}
+}
+
+func TestTilesNeedLogin(t *testing.T) {
+	a, err := auth.New(auth.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapTiles, err := tiles.New(tiles.Config{URL: "http://127.0.0.1:1", Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(Config{Files: fstest.MapFS{}, Auth: a, Tiles: mapTiles})
+	if rec := get(t, h, "/api/tiles/0/0/0"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("/api/tiles without login: status %d, want 401", rec.Code)
 	}
 }
 

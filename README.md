@@ -49,6 +49,7 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_SMTP_FROM` | The sender, such as `DATA-DEN <nas@example.org>` |
 | `DATA_DEN_PUSH_CONTACT` | The contact the push services see, `mailto:` or `https://`; default the sender above. Without either, no push messages |
 | `DATA_DEN_GEOCODER` | The Nominatim server that names the towns of the photos, default `https://nominatim.openstreetmap.org`; `off` sends no positions anywhere |
+| `DATA_DEN_TILES` | The tile server that draws the photo map (**Karte**), default `https://tile.openstreetmap.org`; `off` fetches no tiles |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
@@ -191,8 +192,8 @@ by `taken`, or by the file's time when a photo has no date. Only JPEGs carry
 EXIF that is read; it is read once per photo and kept in memory until the
 photo changes, ahead of time by the search index's walk.
 
-Above the gallery, **Zeitleiste**, **Orte** and **Reisen** switch between
-the timeline and albums. Each photo with a GPS position gets `place`, the
+Above the gallery, **Zeitleiste**, **Karte**, **Orte** and **Reisen** switch
+between the timeline, the map and albums. Each photo with a GPS position gets `place`, the
 town it was taken in, from OpenStreetMap's reverse geocoding (Nominatim,
 `DATA_DEN_GEOCODER`). The position is rounded to 0.01° (about a kilometre)
 before it is sent, each rounded position is asked for only once, at most one
@@ -204,6 +205,20 @@ most photos first. **Reisen** finds trips: photos taken away from home (the
 town with the most photos), ended by a photo at home or three days without
 one; at least three photos make a trip. These albums are made in the browser
 from `/api/media`, nothing is stored.
+
+**Karte** shows the photos with a GPS position on a map of OpenStreetMap:
+photos close together are one pin with the newest photo and their number, and
+a click on a pin shows its photos. Dragging, the mouse wheel, a pinch, the
+arrow keys and + and − move and zoom the map; ⤢ shows all photos again. The
+browser only talks to DATA-DEN: the server fetches each tile
+(`GET /api/tiles/{z}/{x}/{y}`, behind the login) from `DATA_DEN_TILES` at
+most two at a time, with a name for the program as OpenStreetMap's tile usage
+policy asks, and keeps it for 30 days in `.data-den-tiles/`, so the tile
+server never sees the users' addresses and the website keeps its strict
+Content-Security-Policy. The tile server does learn which parts of the map
+are looked at. When it cannot be reached the old tile is shown, and with
+`off` the pins stand on an empty map. Deleting `.data-den-tiles/` is safe and
+only costs fetching the tiles again.
 
 **Eigene Alben** are put together by hand: **Neues Album** creates one, and
 **Auswählen** in the timeline or any album chooses photos to add to it,

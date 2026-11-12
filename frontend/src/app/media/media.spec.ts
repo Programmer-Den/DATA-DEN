@@ -112,7 +112,7 @@ describe('MediaView', () => {
       photo(4, '2026-10-20T10:00:00Z'),
     ]);
     const modes = page(fixture).querySelectorAll<HTMLButtonElement>('.modes button');
-    modes[1].click();
+    modes[2].click();
     await fixture.whenStable();
     const albums = page(fixture).querySelectorAll<HTMLButtonElement>('.albums button');
     expect([...albums].map((a) => a.querySelector('.title')?.textContent)).toEqual([
@@ -139,9 +139,49 @@ describe('MediaView', () => {
     expect(page(fixture).querySelectorAll('.albums button').length).toBe(2);
   });
 
+  it('shows photos on a map and opens the photos of a pin', async () => {
+    const fixture = await start('photo', [
+      { ...photo(1, '2026-10-20T10:00:00Z'), lat: 41.9, lon: 12.5, place: 'Rom' },
+      { ...photo(2, '2026-10-19T10:00:00Z'), lat: 41.9001, lon: 12.5001, place: 'Rom' },
+      { ...photo(3, '2026-10-18T10:00:00Z'), lat: 52.52, lon: 13.4, place: 'Berlin' },
+      photo(4, '2026-10-17T10:00:00Z'),
+    ]);
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[1].click();
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('3 Fotos mit Ort');
+    expect(page(fixture).querySelector('.map .credit')?.textContent).toContain('OpenStreetMap');
+    const tiles = page(fixture).querySelectorAll<HTMLImageElement>('.map .tile');
+    expect(tiles.length).toBeGreaterThan(0);
+    expect(tiles[0].getAttribute('src')).toMatch(/^\/api\/tiles\/\d+\/\d+\/\d+$/);
+    const pins = [...page(fixture).querySelectorAll<HTMLButtonElement>('.map .pin')];
+    expect(pins.map((p) => p.getAttribute('aria-label')).sort()).toEqual([
+      '2 Fotos bei Rom',
+      'Berlin: p3.jpg',
+    ]);
+
+    pins.find((p) => p.getAttribute('aria-label') === '2 Fotos bei Rom')!.click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.album-head h2')?.textContent).toBe('Rom');
+    expect(page(fixture).querySelectorAll('.photos li').length).toBe(2);
+
+    const back = page(fixture).querySelector<HTMLButtonElement>('.album-head button')!;
+    expect(back.textContent).toContain('Zur Karte');
+    back.click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelectorAll('.map .pin').length).toBe(2);
+  });
+
+  it('says when no photo has a position', async () => {
+    const fixture = await start('photo', [photo(1, '2026-10-20T10:00:00Z')]);
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[1].click();
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('Keine Fotos mit Ort gefunden');
+    expect(page(fixture).querySelector('.map')).toBeNull();
+  });
+
   it('says when there are no trips', async () => {
     const fixture = await start('photo', [photo(1, '2026-10-20T10:00:00Z')]);
-    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[2].click();
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[3].click();
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Keine Reisen gefunden');
   });
@@ -152,7 +192,7 @@ describe('MediaView', () => {
       photo(2, '2026-10-19T10:00:00Z'),
     ]);
     const modes = page(fixture).querySelectorAll<HTMLButtonElement>('.modes button');
-    modes[3].click();
+    modes[4].click();
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Noch keine eigenen Alben');
 
@@ -213,7 +253,7 @@ describe('MediaView', () => {
       ],
       [album],
     );
-    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[3].click();
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[4].click();
     await fixture.whenStable();
     page(fixture).querySelector<HTMLButtonElement>('.albums button')!.click();
     await fixture.whenStable();

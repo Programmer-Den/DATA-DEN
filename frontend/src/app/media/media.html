@@ -14,7 +14,9 @@
 }
 @if (album(); as album) {
   <div class="album-head">
-    <button type="button" (click)="openAlbum(null)">‹ Alle Alben</button>
+    <button type="button" (click)="openAlbum(null)">
+      {{ mode() === 'map' ? '‹ Zur Karte' : '‹ Alle Alben' }}
+    </button>
     @if (renaming()) {
       <form class="inline" (submit)="renameAlbum($event, renameInput.value)">
         <input #renameInput aria-label="Name des Albums" maxlength="100" [value]="album.name" />
@@ -42,6 +44,8 @@
   />
   @if (showAlbums()) {
     <span class="count">{{ albums().length }} Alben</span>
+  } @else if (showMap()) {
+    <span class="count">{{ placed().length }} Fotos mit Ort</span>
   } @else if (items()) {
     <span class="count">{{ found().length }} von {{ all().length }}</span>
     @if (kind() === 'photo') {
@@ -85,6 +89,14 @@
   <p class="error" role="alert">{{ error }}</p>
 } @else if (items() === null) {
   <p>Lade …</p>
+} @else if (showMap()) {
+  @if (placed().length === 0) {
+    <p class="empty">
+      Keine Fotos mit Ort gefunden. Den Ort schreiben Kameras und Handys mit GPS in die Fotos.
+    </p>
+  } @else {
+    <app-photo-map [items]="placed()" [(view)]="mapView" (picked)="openSpot($event)" />
+  }
 } @else if (showAlbums()) {
   @if (mode() === 'own') {
     <form class="inline new-album" (submit)="createAlbum($event, nameInput.value)">

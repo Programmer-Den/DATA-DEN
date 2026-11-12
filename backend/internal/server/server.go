@@ -17,6 +17,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 )
 
 // Config is what the server needs to run.
@@ -44,6 +45,8 @@ type Config struct {
 	// Clients holds the desktop sync client's programs, served behind the
 	// login at /api/sync/client/<name>; nil leaves it out.
 	Clients fs.FS
+	// Tiles adds the map tiles behind the login; nil leaves them out.
+	Tiles *tiles.Tiles
 }
 
 // clientName is what /api/sync/client serves, such as
@@ -69,6 +72,9 @@ func New(cfg Config) http.Handler {
 		}
 		if cfg.Office != nil {
 			cfg.Office.Register(mux, cfg.Auth.Require)
+		}
+		if cfg.Tiles != nil {
+			cfg.Tiles.Register(mux, cfg.Auth.Require)
 		}
 		if cfg.Clients != nil {
 			mux.HandleFunc("GET /api/sync/client/{name}", cfg.Auth.Require(clients(cfg.Clients)))

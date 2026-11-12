@@ -1,0 +1,81 @@
+<div
+  #box
+  class="map"
+  tabindex="0"
+  role="application"
+  aria-roledescription="Karte"
+  aria-label="Karte der Fotos: Pfeiltasten verschieben, Plus und Minus zoomen"
+  (pointerdown)="down($event)"
+  (pointermove)="move($event)"
+  (pointerup)="up($event)"
+  (pointercancel)="up($event)"
+  (wheel)="wheel($event)"
+  (keydown)="key($event)"
+>
+  @for (tile of tiles(); track tile.url + tile.left) {
+    <img
+      class="tile"
+      [src]="tile.url"
+      alt=""
+      draggable="false"
+      [style.left.px]="tile.left"
+      [style.top.px]="tile.top"
+      (error)="noTiles.set(true)"
+    />
+  }
+  @for (pin of pins(); track pin.items[0].path) {
+    <button
+      type="button"
+      class="pin"
+      [style.left.px]="pin.left"
+      [style.top.px]="pin.top"
+      [attr.aria-label]="pin.label"
+      [title]="pin.label"
+      (click)="pick(pin)"
+    >
+      <img
+        [src]="thumb(pin.items[0])"
+        alt=""
+        draggable="false"
+        loading="lazy"
+        (error)="noThumb(pin.items[0])"
+      />
+      @if (pin.items.length > 1) {
+        <span class="count">{{ pin.items.length }}</span>
+      }
+    </button>
+  }
+  <div class="zoom">
+    <button
+      type="button"
+      aria-label="Näher"
+      [disabled]="shown().zoom >= maxZoom"
+      (click)="zoomBy(1)"
+    >
+      +
+    </button>
+    <button
+      type="button"
+      aria-label="Weiter weg"
+      [disabled]="shown().zoom <= 0"
+      (click)="zoomBy(-1)"
+    >
+      −
+    </button>
+    <button
+      type="button"
+      aria-label="Alle Fotos zeigen"
+      title="Alle Fotos zeigen"
+      (click)="reset()"
+    >
+      ⤢
+    </button>
+  </div>
+  <p class="credit">© OpenStreetMap-Mitwirkende</p>
+</div>
+@if (noTiles()) {
+  <p class="hint" role="status">
+    Die Karte selbst lädt nicht: der Server erreicht den Kartendienst nicht, oder er ist mit
+    DATA_DEN_TILES=off ausgeschaltet. Die Fotos stehen trotzdem an ihrem Ort.
+  </p>
+}
