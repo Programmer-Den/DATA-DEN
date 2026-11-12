@@ -24,7 +24,7 @@ import (
 )
 
 // People and things in the photos. In the background each space's photos
-// are sent, one at a time and made smaller, to a Recognizer, which runs on
+// are sent, one at a time and made smaller, to a PhotoRecognizer, which runs on
 // the NAS. The faces found are put together into people: a face goes to the
 // person whose faces it is most like, or else becomes a new person. What was
 // found is kept in peopleFile, with the photo's size and time, so each photo
@@ -46,7 +46,7 @@ const (
 	// minPersonPhotos is how many photos an unnamed person needs to be
 	// listed.
 	minPersonPhotos = 3
-	// recognizeSize is the longer side of what the Recognizer gets.
+	// recognizeSize is the longer side of what the PhotoRecognizer gets.
 	recognizeSize = 1440
 	// faceSize is the side of a face's picture.
 	faceSize = 160
@@ -56,8 +56,8 @@ const (
 	recognizeInterval = 10 * time.Minute
 )
 
-// Recognizer finds faces and things in a photo, such as *vision.Client.
-type Recognizer interface {
+// PhotoRecognizer finds faces and things in a photo, such as *vision.Client.
+type PhotoRecognizer interface {
 	Recognize(ctx context.Context, jpeg []byte) (vision.Result, error)
 	// Version changes when the models or labels change; photos are then
 	// recognised again.
@@ -107,7 +107,7 @@ type people struct {
 	mu sync.Mutex
 	// data is nil until it was read from peopleFile.
 	data       *peopleData
-	recognizer Recognizer
+	recognizer PhotoRecognizer
 	// waiting is how many photos the round running has still to recognise.
 	waiting int
 }
@@ -183,7 +183,7 @@ func (f *Files) RecognizeEvery(ctx context.Context, interval time.Duration) {
 }
 
 // recognizeAll recognises each photo that is new or changed, and forgets
-// those that are gone. It stops at the first failure of the Recognizer,
+// those that are gone. It stops at the first failure of the PhotoRecognizer,
 // such as when its service is not running.
 func (f *Files) recognizeAll(ctx context.Context) error {
 	rec := f.people.recognizer
@@ -363,7 +363,7 @@ func (f *Files) recognition(name string, info fs.FileInfo) (people, labels []str
 	return people, r.Labels
 }
 
-// recognizable is the photo name as a JPEG for the Recognizer: turned the
+// recognizable is the photo name as a JPEG for the PhotoRecognizer: turned the
 // way it is shown and at most recognizeSize pixels.
 func (f *Files) recognizable(name string) ([]byte, error) {
 	img, err := f.decodeShown(name, recognizeSize)

@@ -41,8 +41,8 @@ updates:
     labels: [dependencies, install]
     schedule:
       interval: weekly
-  # Collabora in deploy/compose.office.yaml and the machine learning service
-  # in deploy/compose.vision.yaml.
+  # Collabora in deploy/compose.office.yaml, Tika in deploy/compose.ocr.yaml and
+  # the machine learning service in deploy/compose.vision.yaml.
   - package-ecosystem: docker-compose
     directory: /deploy
     labels: [dependencies, install]

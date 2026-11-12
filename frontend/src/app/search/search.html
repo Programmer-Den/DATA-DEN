@@ -12,6 +12,11 @@
   </p>
   @if (!results.ready) {
     <p class="hint">Der Suchindex wird noch aufgebaut, es fehlen vielleicht Treffer.</p>
+  } @else if (results.recognizing) {
+    <p class="hint">
+      Die Texterkennung liest noch {{ results.recognizing }}
+      {{ results.recognizing === 1 ? 'Datei' : 'Dateien' }}, es fehlen vielleicht Treffer.
+    </p>
   }
   <ul class="hits">
     @for (hit of results.items; track hit.path) {

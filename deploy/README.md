@@ -138,6 +138,36 @@ Use the same `-f` files for `pull`, `up`, `ps` and `logs` from then on.
 Without `compose.office.yaml`, office documents are only downloaded, as
 before.
 
+## Text recognition (optional)
+
+With Apache Tika and Tesseract the search also finds the text of scans,
+photos of documents and more office formats
+([README](../README.md#files)). `compose.ocr.yaml` adds it as a second
+container, with its settings in `tika-config.json`:
+
+```bash
+cd ~/data-den
+scp <you>@<your PC>:<repo>/deploy/compose.ocr.yaml .
+scp <you>@<your PC>:<repo>/deploy/tika-config.json .
+sudo docker compose -f compose.yaml -f compose.ocr.yaml up -d
+sudo docker compose -f compose.yaml -f compose.ocr.yaml logs -f tika   # "Started Apache Tika server"
+```
+
+- Tika listens only on `127.0.0.1:9998` in the VM and never sees the data
+  directory: DATA-DEN sends it one file at a time and keeps the text in
+  `.data-den-ocr/`. Nothing leaves the VM.
+- It recognizes German and English (`"language": "deu+eng"` in
+  `tika-config.json`; the image also knows `fra`, `ita`, `spa` and `jpn`).
+- The first run reads every photo and scan once, a few seconds each, so with
+  many photos it keeps the VM busy for hours in the background; DATA-DEN's
+  log says `text recognition done` after each round.
+- It needs up to 2 GB of RAM more while it reads a large scan; give the VM
+  6 GB or more (`-MemoryGB 6` in `vm/New-DataDenVM.ps1`) if it gets tight.
+
+Use the same `-f` files for `pull`, `up`, `ps` and `logs` from then on, also
+together with `compose.office.yaml`. Without `compose.ocr.yaml` the search
+reads only the text of TXT, PDF, DOCX and ODT files, as before.
+
 ## Faces and things (optional)
 
 The server can recognise faces and things in the photos, on the NAS itself:
@@ -176,8 +206,8 @@ sudo docker compose pull && sudo docker compose up -d
 sudo docker image prune -f
 ```
 
-With office documents or faces and things: `sudo docker compose -f compose.yaml -f compose.office.yaml pull`
-(or `-f compose.vision.yaml`) and `... up -d` the same way.
+With office documents, text recognition or faces and things: `sudo docker compose -f compose.yaml -f compose.office.yaml -f compose.ocr.yaml -f compose.vision.yaml pull`
+(only the files you use) and `... up -d` the same way.
 
 `sudo docker compose logs -f` shows what the server does, including the
 failed logins.

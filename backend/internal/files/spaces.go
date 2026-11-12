@@ -106,8 +106,11 @@ type SpacesConfig struct {
 	// Places names the towns where photos were taken; nil leaves them
 	// unnamed.
 	Places Namer
+	// OCR reads the text of scans and photos for the search; nil reads
+	// only what the search can read itself.
+	OCR Recognizer
 	// Vision finds faces and things in the photos; nil finds none.
-	Vision Recognizer
+	Vision PhotoRecognizer
 	// Accounts are the names of all accounts, the ones a folder can be
 	// shared with; nil shares with no one.
 	Accounts func() []string
@@ -140,7 +143,7 @@ func OpenSpaces(dir string, cfg SpacesConfig) (*Spaces, error) {
 		return nil, err
 	}
 	owner.account, owner.audit, owner.damaged = cfg.Owner, cfg.Audit, cfg.Damaged
-	owner.places = cfg.Places
+	owner.places, owner.ocr = cfg.Places, cfg.OCR
 	owner.people.recognizer = cfg.Vision
 	owner.serve()
 	s := &Spaces{
@@ -197,11 +200,12 @@ func (s *Spaces) startLocked(name string, f *Files) {
 	f.background(ctx)
 }
 
-// background keeps the search index fresh, empties the recycle bin on time,
-// runs the checks and recognises faces and things in the photos, until ctx
-// is done.
+// background keeps the search index fresh, reads the text of scans,
+// empties the recycle bin on time, runs the checks and recognises faces and
+// things in the photos, until ctx is done.
 func (f *Files) background(ctx context.Context) {
 	go f.Index(ctx.Done())
+	go f.Recognize(ctx)
 	go f.PurgeTrashEvery(ctx, time.Hour)
 	f.StartChecks(ctx)
 	if f.people.recognizer != nil {
@@ -416,7 +420,7 @@ func (s *Spaces) space(name string) (*Files, error) {
 	f.trashDays = s.trashDays
 	f.shares.guard = s.guard
 	f.account, f.audit, f.damaged = name, s.cfg.Audit, s.cfg.Damaged
-	f.places = s.cfg.Places
+	f.places, f.ocr = s.cfg.Places, s.cfg.OCR
 	f.people.recognizer = s.cfg.Vision
 	f.moved = func(from, to string) { s.grantsMoved(name, from, to) }
 	f.serve()
