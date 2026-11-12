@@ -1,4 +1,4 @@
-import { placeAlbums, tripAlbums } from './albums';
+import { placeAlbums, spotAlbum, tripAlbums } from './albums';
 import { Item } from './item';
 
 function photo(name: string, taken: string, place?: string): Item {
@@ -46,6 +46,17 @@ describe('albums', () => {
     expect(trips.map((t) => t.name)).toEqual(['Florenz, Rom', 'München']);
     expect(trips[0].items.map((i) => i.name)).toEqual(['f2.jpg', 'f1.jpg', 'r2.jpg', 'r1.jpg']);
     expect(trips[1].items.length).toBe(3);
+  });
+
+  it('names the photos of a spot on the map after their towns', () => {
+    expect(spotAlbum(items.slice(4, 9)).name).toBe('Florenz, Rom');
+    expect(spotAlbum([photo('a.jpg', '2026-01-01T10:00:00')]).name).toBe('1 Foto');
+    const two = spotAlbum([
+      photo('a.jpg', '2026-01-01T10:00:00'),
+      photo('b.jpg', '2026-01-02T10:00:00'),
+    ]);
+    expect(two.name).toBe('2 Fotos');
+    expect(two.items.map((i) => i.name)).toEqual(['b.jpg', 'a.jpg']);
   });
 
   it('finds nothing without positions', () => {

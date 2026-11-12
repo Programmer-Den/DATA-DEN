@@ -28,6 +28,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/places"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/version"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/web"
 )
@@ -231,6 +232,9 @@ func damagedMessage(account string, paths []string) notify.Message {
 	return notify.Message{Kind: notify.KindCorrupt, Title: "Beschädigte Dateien gefunden", Body: body}
 }
 
+// userAgent names DATA-DEN to OpenStreetMap, as its usage policies ask.
+var userAgent = "DATA-DEN/" + version.Version + " (self-hosted NAS, github.com/Programmer-Den/DATA-DEN)"
+
 // newGeocoder names the towns of the photos with Nominatim at
 // DATA_DEN_GEOCODER (OpenStreetMap's by default), keeping the answers in the
 // data directory; "off" names none. It returns a nil Namer when off.
@@ -247,10 +251,31 @@ func newGeocoder(dataDir string) (files.Namer, *places.Geocoder, error) {
 	}
 	g := places.New(places.Config{
 		URL:       strings.TrimRight(base, "/"),
-		UserAgent: "DATA-DEN/" + version.Version + " (self-hosted NAS, github.com/Programmer-Den/DATA-DEN)",
+		UserAgent: userAgent,
 		File:      filepath.Join(dataDir, ".data-den-places", "names.json"),
 	})
 	return g, g, nil
+}
+
+// newTiles serves the map of the photos with the tiles of DATA_DEN_TILES
+// (OpenStreetMap's by default), keeping them in the data directory; "off"
+// draws no map. It returns nil when off.
+func newTiles(dataDir string) (*tiles.Tiles, error) {
+	base := os.Getenv("DATA_DEN_TILES")
+	switch base {
+	case "off":
+		return nil, nil
+	case "":
+		base = tiles.DefaultURL
+	}
+	if u, err := url.Parse(base); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return nil, fmt.Errorf("DATA_DEN_TILES must be a tile server such as %s, or off, not %q", tiles.DefaultURL, base)
+	}
+	return tiles.New(tiles.Config{
+		URL:       strings.TrimRight(base, "/"),
+		UserAgent: userAgent,
+		Dir:       filepath.Join(dataDir, ".data-den-tiles"),
+	})
 }
 
 func run() error {
@@ -357,6 +382,12 @@ func run() error {
 	if os.Getenv("DATA_DEN_PASSWORD_HASH") == "" {
 		slog.Warn("no DATA_DEN_PASSWORD_HASH set, so nobody can log in; create one with: data-den hash-password")
 	}
+	var mapTiles *tiles.Tiles
+	if data != nil {
+		if mapTiles, err = newTiles(dataDir); err != nil {
+			return err
+		}
+	}
 	officeCfg, wopiAddr, err := officeConfig()
 	if err != nil {
 		return err
@@ -373,7 +404,7 @@ func run() error {
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir()}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir(), Tiles: mapTiles}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},

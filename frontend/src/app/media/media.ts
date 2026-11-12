@@ -2,8 +2,10 @@ import { HttpClient } from '@angular/common/http';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
-import { Album, OwnAlbum, ownAlbums, placeAlbums, tripAlbums } from './albums';
+import { Album, OwnAlbum, ownAlbums, placeAlbums, spotAlbum, tripAlbums } from './albums';
+import { Placed, View, hasPosition } from './geo';
 import { Item, Kind, downloadUrl, takenAt, thumbUrl, viewUrl } from './item';
+import { PhotoMap } from './map';
 import { Viewer } from './viewer';
 
 interface Media {
@@ -25,8 +27,11 @@ interface Year {
   first: number;
 }
 
-/** How the photos are shown: all by month, or as albums by place, by trip or made by hand. */
-export type Mode = 'timeline' | 'places' | 'trips' | 'own';
+/**
+ * How the photos are shown: all by month, on a map, or as albums by place,
+ * by trip or made by hand.
+ */
+export type Mode = 'timeline' | 'map' | 'places' | 'trips' | 'own';
 
 /** Files shown at first and added by "Mehr anzeigen", so thousands of photos stay quick. */
 export const PAGE = 120;
@@ -38,11 +43,12 @@ const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' });
  * Every photo, video or document of the data directory, newest first: photos
  * as a timeline by month taken with a list of years to jump to, or as albums
  * by place and by trip; videos as tiles, documents as a list. A click opens
- * the viewer.
+ * the viewer. The map shows where the photos were taken; a click on a pin
+ * shows its photos.
  */
 @Component({
   selector: 'app-media',
-  imports: [Viewer],
+  imports: [PhotoMap, Viewer],
   templateUrl: './media.html',
   styleUrl: './media.css',
 })
@@ -80,9 +86,13 @@ export class MediaView {
         return [];
     }
   });
+  /** The photos of the pin picked on the map, shown like an album. */
+  private readonly spot = signal<Album | null>(null);
   protected readonly album = computed(
-    () => this.modeAlbums().find((a) => a.id === this.albumId()) ?? null,
+    () => this.spot() ?? this.modeAlbums().find((a) => a.id === this.albumId()) ?? null,
   );
+  /** What the map shows, kept while a pin's photos are open. */
+  protected readonly mapView = signal<View | null>(null);
   /** Paths of the photos chosen, while choosing; null otherwise. */
   protected readonly selected = signal<Set<string> | null>(null);
   /** The own album that "Hinzufügen" adds to. */
@@ -113,8 +123,17 @@ export class MediaView {
   });
   /** True while the album list is shown instead of photos. */
   protected readonly showAlbums = computed(
-    () => this.kind() === 'photo' && this.mode() !== 'timeline' && this.album() === null,
+    () =>
+      this.kind() === 'photo' &&
+      !['timeline', 'map'].includes(this.mode()) &&
+      this.album() === null,
   );
+  /** True while the map is shown instead of photos. */
+  protected readonly showMap = computed(
+    () => this.kind() === 'photo' && this.mode() === 'map' && this.album() === null,
+  );
+  /** The photos found that have a position, for the map. */
+  protected readonly placed = computed<Placed[]>(() => this.found().filter(hasPosition));
   protected readonly shown = computed(() => this.found().slice(0, this.limit()));
   protected readonly months = computed<Month[]>(() => {
     const months: Month[] = [];
@@ -146,6 +165,7 @@ export class MediaView {
   protected readonly page = PAGE;
   protected readonly modes: { mode: Mode; name: string }[] = [
     { mode: 'timeline', name: 'Zeitleiste' },
+    { mode: 'map', name: 'Karte' },
     { mode: 'places', name: 'Orte' },
     { mode: 'trips', name: 'Reisen' },
     { mode: 'own', name: 'Eigene Alben' },
@@ -163,6 +183,8 @@ export class MediaView {
     this.open.set(null);
     this.limit.set(PAGE);
     this.albumId.set(null);
+    this.spot.set(null);
+    this.mapView.set(null);
     this.selected.set(null);
     this.http.get<Media>('/api/media', { params: { kind } }).subscribe({
       next: (media) => this.items.set(media.items),
@@ -188,17 +210,25 @@ export class MediaView {
   protected setMode(mode: Mode): void {
     this.mode.set(mode);
     this.albumId.set(null);
+    this.spot.set(null);
     this.limit.set(PAGE);
     this.renaming.set(false);
   }
 
   protected openAlbum(album: Album | null): void {
     this.albumId.set(album?.id ?? null);
+    this.spot.set(null);
     this.search.set('');
     this.limit.set(PAGE);
     this.open.set(null);
     this.selected.set(null);
     this.renaming.set(false);
+  }
+
+  /** Shows the photos of a pin on the map. */
+  protected openSpot(items: Placed[]): void {
+    this.openAlbum(null);
+    this.spot.set(spotAlbum(items));
   }
 
   /** "14.07.2026" or "01.07.2026 – 06.07.2026"; "leer" for an empty album. */

@@ -133,6 +133,26 @@ func TestNewGeocoder(t *testing.T) {
 	}
 }
 
+func TestNewTiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DATA_DEN_TILES", "off")
+	if got, err := newTiles(dir); got != nil || err != nil {
+		t.Errorf("off: %v, %v", got, err)
+	}
+	for _, value := range []string{"", "https://tiles.example.org/"} {
+		t.Setenv("DATA_DEN_TILES", value)
+		if got, err := newTiles(dir); got == nil || err != nil {
+			t.Errorf("%q: %v, %v", value, got, err)
+		}
+	}
+	for _, value := range []string{"tiles", "ftp://x", "https://"} {
+		t.Setenv("DATA_DEN_TILES", value)
+		if _, err := newTiles(dir); err == nil {
+			t.Errorf("%q: no error", value)
+		}
+	}
+}
+
 func TestOfficeConfig(t *testing.T) {
 	t.Setenv("DATA_DEN_OFFICE_URL", "")
 	t.Setenv("DATA_DEN_WOPI_ADDR", "")
