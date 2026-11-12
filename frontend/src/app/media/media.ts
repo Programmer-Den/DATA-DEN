@@ -2,7 +2,17 @@ import { HttpClient } from '@angular/common/http';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
-import { Album, OwnAlbum, ownAlbums, placeAlbums, spotAlbum, tripAlbums } from './albums';
+import {
+  Album,
+  OwnAlbum,
+  People,
+  labelAlbums,
+  ownAlbums,
+  peopleAlbums,
+  placeAlbums,
+  spotAlbum,
+  tripAlbums,
+} from './albums';
 import { Placed, View, hasPosition } from './geo';
 import { Item, Kind, downloadUrl, takenAt, thumbUrl, viewUrl } from './item';
 import { PhotoMap } from './map';
@@ -29,9 +39,9 @@ interface Year {
 
 /**
  * How the photos are shown: all by month, on a map, or as albums by place,
- * by trip or made by hand.
+ * by trip, by person, by thing or made by hand.
  */
-export type Mode = 'timeline' | 'map' | 'places' | 'trips' | 'own';
+export type Mode = 'timeline' | 'map' | 'places' | 'trips' | 'people' | 'things' | 'own';
 
 /** Files shown at first and added by "Mehr anzeigen", so thousands of photos stay quick. */
 export const PAGE = 120;
@@ -68,6 +78,8 @@ export class MediaView {
   private readonly failedThumbs = signal(new Set<string>());
 
   protected readonly mode = signal<Mode>('timeline');
+  /** The people the server recognised, null until loaded. */
+  protected readonly people = signal<People | null>(null);
   /** The own albums from the server, null until loaded. */
   protected readonly own = signal<OwnAlbum[] | null>(null);
   /** The id of the album open, whose photos are shown; null shows the timeline or the albums. */
@@ -80,6 +92,10 @@ export class MediaView {
         return placeAlbums(items);
       case 'trips':
         return tripAlbums(items);
+      case 'people':
+        return peopleAlbums(this.people()?.people ?? [], items);
+      case 'things':
+        return labelAlbums(items);
       case 'own':
         return ownAlbums(this.own() ?? [], items);
       default:
@@ -168,6 +184,8 @@ export class MediaView {
     { mode: 'map', name: 'Karte' },
     { mode: 'places', name: 'Orte' },
     { mode: 'trips', name: 'Reisen' },
+    { mode: 'people', name: 'Personen' },
+    { mode: 'things', name: 'Dinge' },
     { mode: 'own', name: 'Eigene Alben' },
   ];
   protected readonly formatSize = formatSize;
@@ -195,8 +213,29 @@ export class MediaView {
         next: (res) => this.own.set(res.albums),
         error: (err: unknown) => this.notice.set(errorMessage(err)),
       });
+      this.loadPeople();
     }
   }
+
+  private loadPeople(): void {
+    this.http.get<People>('/api/people').subscribe({
+      next: (people) => this.people.set(people),
+      error: (err: unknown) => this.notice.set(errorMessage(err)),
+    });
+  }
+
+  /** The picture of an album: a person's face, or else its newest photo. */
+  protected coverUrl(album: Album): string | null {
+    if (album.person) {
+      return '/api/people/face?id=' + encodeURIComponent(album.person);
+    }
+    return album.items[0] ? this.tileUrl(album.items[0]) : null;
+  }
+
+  /** The people listed but the one open, to merge it into. */
+  protected readonly others = computed(() =>
+    (this.people()?.people ?? []).filter((p) => p.id !== this.album()?.person),
+  );
 
   /** Shows the photos up to the year and scrolls to it. */
   protected jump(year: Year): void {
@@ -330,10 +369,41 @@ export class MediaView {
     if (!album || !name.trim()) {
       return;
     }
+    if (album.person) {
+      this.http.post('/api/people/rename', { id: album.person, name }).subscribe({
+        next: () => {
+          this.renaming.set(false);
+          this.loadPeople();
+        },
+        error: (err: unknown) => this.failed(err),
+      });
+      return;
+    }
     this.http.post<OwnAlbum>('/api/albums/rename', { id: album.id, name }).subscribe({
       next: (changed) => {
         this.changed(changed);
         this.renaming.set(false);
+      },
+      error: (err: unknown) => this.failed(err),
+    });
+  }
+
+  /** Puts the open person's photos to another person, when the recognition took one for two. */
+  protected mergePerson(into: string): void {
+    const album = this.album();
+    const target = this.others().find((p) => p.id === into);
+    if (!album?.person || !target) {
+      return;
+    }
+    const name = target.name || 'Unbenannt';
+    if (!confirm(`„${album.name}“ und „${name}“ sind dieselbe Person?`)) {
+      return;
+    }
+    this.http.post('/api/people/merge', { id: album.person, into }).subscribe({
+      next: () => {
+        this.openAlbum(null);
+        this.notice.set(`Zusammengeführt mit „${name}“.`);
+        this.loadPeople();
       },
       error: (err: unknown) => this.failed(err),
     });

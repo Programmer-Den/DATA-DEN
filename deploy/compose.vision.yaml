@@ -1,0 +1,33 @@
+# Optional: recognising faces and things in the photos, on the NAS itself,
+# with Immich's machine learning service. Start together with compose.yaml:
+#   sudo docker compose -f compose.yaml -f compose.vision.yaml up -d
+# Guide: deploy/README.md, "Faces and things".
+services:
+  data-den:
+    environment:
+      # Where DATA-DEN reaches the service: only on the VM.
+      DATA_DEN_VISION: http://127.0.0.1:3003
+
+  vision:
+    image: ghcr.io/immich-app/immich-machine-learning:v3.4.1
+    restart: unless-stopped
+    # Like DATA-DEN: the VM's own network, listening only on 127.0.0.1, so
+    # nothing but DATA-DEN reaches it. It never sees the data directory:
+    # DATA-DEN sends it each photo, made smaller.
+    network_mode: host
+    environment:
+      IMMICH_HOST: 127.0.0.1
+      IMMICH_PORT: '3003'
+      # Keep the models in memory between photos; the first photo after a
+      # pause of an hour loads them again.
+      MACHINE_LEARNING_MODEL_TTL: '3600'
+    volumes:
+      # The models, downloaded once on first use (about 400 MB).
+      - vision-models:/cache
+    # Not read_only: Python and the model downloads write to the image's
+    # own folders.
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+
+volumes:
+  vision-models:

@@ -259,3 +259,7 @@ a {
   background: color-mix(in srgb, currentColor 10%, transparent);
   font-size: 2rem;
 }
+
+.albums img.face {
+  border-radius: 50%;
+}

@@ -19,7 +19,12 @@
     </button>
     @if (renaming()) {
       <form class="inline" (submit)="renameAlbum($event, renameInput.value)">
-        <input #renameInput aria-label="Name des Albums" maxlength="100" [value]="album.name" />
+        <input
+          #renameInput
+          [attr.aria-label]="album.person ? 'Name der Person' : 'Name des Albums'"
+          maxlength="100"
+          [value]="album.person && album.name === 'Unbenannt' ? '' : album.name"
+        />
         <button type="submit">Speichern</button>
         <button type="button" (click)="renaming.set(false)">Abbrechen</button>
       </form>
@@ -29,6 +34,22 @@
       @if (album.own) {
         <button type="button" (click)="renaming.set(true)">Umbenennen</button>
         <button type="button" (click)="deleteAlbum()">Album löschen</button>
+      }
+      @if (album.person) {
+        <button type="button" (click)="renaming.set(true)">
+          {{ album.name === 'Unbenannt' ? 'Benennen' : 'Umbenennen' }}
+        </button>
+        @if (others().length > 0) {
+          <select
+            aria-label="Dieselbe Person wie"
+            (change)="mergePerson($any($event.target).value); $any($event.target).value = ''"
+          >
+            <option value="">Dieselbe Person wie …</option>
+            @for (p of others(); track p.id) {
+              <option [value]="p.id">{{ p.name || 'Unbenannt' }} ({{ p.photos }} Fotos)</option>
+            }
+          </select>
+        }
       }
     }
   </div>
@@ -98,6 +119,12 @@
     <app-photo-map [items]="placed()" [(view)]="mapView" (picked)="openSpot($event)" />
   }
 } @else if (showAlbums()) {
+  @if ((mode() === 'people' || mode() === 'things') && people()?.waiting) {
+    <p class="hint" role="status">
+      Noch {{ people()!.waiting }} Fotos werden erkannt; neue Personen und Dinge kommen nach und
+      nach dazu.
+    </p>
+  }
   @if (mode() === 'own') {
     <form class="inline new-album" (submit)="createAlbum($event, nameInput.value)">
       <input
@@ -118,6 +145,14 @@
       } @else if (mode() === 'places') {
         Keine Fotos mit Ort gefunden. Den Ort schreiben Kameras und Handys mit GPS in die Fotos;
         neue Orte werden nach und nach bei OpenStreetMap nachgeschlagen.
+      } @else if ((mode() === 'people' || mode() === 'things') && people()?.enabled === false) {
+        Die Erkennung von Gesichtern und Dingen ist aus. Sie läuft auf dem NAS selbst; wie man sie
+        einschaltet, steht in der Anleitung unter „Faces and things“ (DATA_DEN_VISION).
+      } @else if (mode() === 'people') {
+        Noch keine Personen erkannt. Eine Person erscheint, sobald sie auf mindestens drei Fotos
+        ist.
+      } @else if (mode() === 'things') {
+        Noch keine Dinge erkannt.
       } @else {
         Keine Reisen gefunden: dafür braucht es mindestens drei Fotos mit Ort fern von zu Hause.
       }
@@ -127,7 +162,9 @@
       @for (a of albums(); track a.id) {
         <li>
           <button type="button" (click)="openAlbum(a)">
-            @if (a.items[0]; as cover) {
+            @if (a.person) {
+              <img class="face" [src]="coverUrl(a)" alt="" loading="lazy" />
+            } @else if (a.items[0]; as cover) {
               <img [src]="tileUrl(cover)" alt="" loading="lazy" (error)="noThumb(cover)" />
             } @else {
               <span class="no-cover" aria-hidden="true">🖼</span>

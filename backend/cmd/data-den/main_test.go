@@ -153,6 +153,23 @@ func TestNewTiles(t *testing.T) {
 	}
 }
 
+func TestNewVision(t *testing.T) {
+	t.Setenv("DATA_DEN_VISION", "")
+	if got, err := newVision(); got != nil || err != nil {
+		t.Errorf("off: %v, %v", got, err)
+	}
+	t.Setenv("DATA_DEN_VISION", "http://127.0.0.1:3003/")
+	if got, err := newVision(); got == nil || err != nil {
+		t.Errorf("on: %v, %v", got, err)
+	}
+	for _, value := range []string{"127.0.0.1:3003", "ftp://x", "http://"} {
+		t.Setenv("DATA_DEN_VISION", value)
+		if _, err := newVision(); err == nil {
+			t.Errorf("%q: no error", value)
+		}
+	}
+}
+
 func TestOfficeConfig(t *testing.T) {
 	t.Setenv("DATA_DEN_OFFICE_URL", "")
 	t.Setenv("DATA_DEN_WOPI_ADDR", "")

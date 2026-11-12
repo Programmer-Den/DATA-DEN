@@ -65,6 +65,10 @@ var Routes = []string{
 	"GET /api/tagged",
 	"POST /api/tags",
 	"POST /api/favourites",
+	"GET /api/people",
+	"GET /api/people/face",
+	"POST /api/people/rename",
+	"POST /api/people/merge",
 }
 
 // ShareRoutes are the API paths behind the login for share links.
@@ -102,6 +106,8 @@ type SpacesConfig struct {
 	// Places names the towns where photos were taken; nil leaves them
 	// unnamed.
 	Places Namer
+	// Vision finds faces and things in the photos; nil finds none.
+	Vision Recognizer
 	// Accounts are the names of all accounts, the ones a folder can be
 	// shared with; nil shares with no one.
 	Accounts func() []string
@@ -135,6 +141,7 @@ func OpenSpaces(dir string, cfg SpacesConfig) (*Spaces, error) {
 	}
 	owner.account, owner.audit, owner.damaged = cfg.Owner, cfg.Audit, cfg.Damaged
 	owner.places = cfg.Places
+	owner.people.recognizer = cfg.Vision
 	owner.serve()
 	s := &Spaces{
 		cfg: cfg, owner: owner, byName: map[string]*Files{},
@@ -190,12 +197,16 @@ func (s *Spaces) startLocked(name string, f *Files) {
 	f.background(ctx)
 }
 
-// background keeps the search index fresh, empties the recycle bin on time
-// and runs the checks, until ctx is done.
+// background keeps the search index fresh, empties the recycle bin on time,
+// runs the checks and recognises faces and things in the photos, until ctx
+// is done.
 func (f *Files) background(ctx context.Context) {
 	go f.Index(ctx.Done())
 	go f.PurgeTrashEvery(ctx, time.Hour)
 	f.StartChecks(ctx)
+	if f.people.recognizer != nil {
+		go f.RecognizeEvery(ctx, recognizeInterval)
+	}
 }
 
 // Close releases the data directory and every space.
@@ -406,6 +417,7 @@ func (s *Spaces) space(name string) (*Files, error) {
 	f.shares.guard = s.guard
 	f.account, f.audit, f.damaged = name, s.cfg.Audit, s.cfg.Damaged
 	f.places = s.cfg.Places
+	f.people.recognizer = s.cfg.Vision
 	f.moved = func(from, to string) { s.grantsMoved(name, from, to) }
 	f.serve()
 	s.byName[name] = f

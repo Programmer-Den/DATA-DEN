@@ -160,6 +160,7 @@ describe('App', () => {
     await fixture.whenStable();
     http.expectOne('/api/media?kind=photo').flush({ kind: 'photo', items: [] });
     http.expectOne('/api/albums').flush({ albums: [] });
+    http.expectOne('/api/people').flush({ enabled: false, recognised: 0, waiting: 0, people: [] });
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Keine Fotos gefunden');
 
