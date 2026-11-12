@@ -19,6 +19,10 @@ export interface Item {
   lon?: number;
   /** The town nearest to where a photo was taken. */
   place?: string;
+  /** The ids of the people the server recognised in a photo (/api/people). */
+  people?: string[];
+  /** The things the server recognised in a photo, such as "Hunde". */
+  labels?: string[];
   /** The shared folder the file is in, when it is another account's. */
   grant?: string;
   /** True when the editor can open the file (/api/text). */

@@ -93,6 +93,10 @@ type Item struct {
 	// Place is the town where a photo was taken, from OpenStreetMap; empty
 	// until it was asked for.
 	Place string `json:"place,omitempty"`
+	// People are the ids of the people in a photo (/api/people), Labels the
+	// things seen in it, such as "Hunde"; empty until it was recognised.
+	People []string `json:"people,omitempty"`
+	Labels []string `json:"labels,omitempty"`
 }
 
 // Media is every file of one kind in the data directory.
@@ -197,6 +201,9 @@ func (f *Files) media(w http.ResponseWriter, r *http.Request) {
 		if kind == "photo" {
 			meta := f.photoMeta(name, info)
 			item.Taken, item.Lat, item.Lon, item.Place = meta.Taken, meta.Lat, meta.Lon, f.place(meta)
+			if !byGrant(r) {
+				item.People, item.Labels = f.recognition(name, info)
+			}
 			seen[name] = true
 		}
 		items = append(items, item)

@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { OwnAlbum } from './albums';
+import { OwnAlbum, People } from './albums';
 import { Item, Kind } from './item';
 import { MediaView, PAGE } from './media';
 
@@ -36,6 +36,7 @@ describe('MediaView', () => {
     kind: Kind,
     items: Item[],
     albums: OwnAlbum[] = [],
+    people: People = { enabled: true, recognised: 0, waiting: 0, people: [] },
   ): Promise<ComponentFixture<MediaView>> {
     const fixture = TestBed.createComponent(MediaView);
     fixture.componentRef.setInput('kind', kind);
@@ -43,6 +44,7 @@ describe('MediaView', () => {
     http.expectOne(`/api/media?kind=${kind}`).flush({ kind, items });
     if (kind === 'photo') {
       http.expectOne('/api/albums').flush({ albums });
+      http.expectOne('/api/people').flush(people);
     }
     await fixture.whenStable();
     return fixture;
@@ -179,6 +181,98 @@ describe('MediaView', () => {
     expect(page(fixture).querySelector('.map')).toBeNull();
   });
 
+  it('shows albums by person, names and merges people', async () => {
+    const fixture = await start(
+      'photo',
+      [
+        { ...photo(1, '2026-10-20T10:00:00Z'), people: ['p1', 'p2'], labels: ['Hunde'] },
+        { ...photo(2, '2026-10-19T10:00:00Z'), people: ['p1'] },
+        { ...photo(3, '2026-10-18T10:00:00Z'), people: ['p2'], labels: ['Hunde'] },
+      ],
+      [],
+      {
+        enabled: true,
+        recognised: 3,
+        waiting: 7,
+        people: [
+          { id: 'p1', name: '', photos: 2 },
+          { id: 'p2', name: 'Bert', photos: 2 },
+        ],
+      },
+    );
+    const modes = page(fixture).querySelectorAll<HTMLButtonElement>('.modes button');
+    modes[4].click();
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('Noch 7 Fotos werden erkannt');
+    const albums = page(fixture).querySelectorAll<HTMLButtonElement>('.albums button');
+    expect([...albums].map((a) => a.querySelector('.title')?.textContent)).toEqual([
+      'Unbenannt',
+      'Bert',
+    ]);
+    expect(albums[0].querySelector('img')?.getAttribute('src')).toBe('/api/people/face?id=p1');
+
+    albums[0].click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelectorAll('.photos li').length).toBe(2);
+    const name = [...page(fixture).querySelectorAll<HTMLButtonElement>('.album-head button')].find(
+      (b) => b.textContent?.includes('Benennen'),
+    )!;
+    name.click();
+    await fixture.whenStable();
+    const input = page(fixture).querySelector<HTMLInputElement>('.album-head input')!;
+    expect(input.value).toBe('');
+    input.value = 'Anna';
+    page(fixture)
+      .querySelector<HTMLFormElement>('.album-head form')!
+      .dispatchEvent(new Event('submit'));
+    const rename = http.expectOne('/api/people/rename');
+    expect(rename.request.body).toEqual({ id: 'p1', name: 'Anna' });
+    rename.flush({ id: 'p1', name: 'Anna' });
+    http.expectOne('/api/people').flush({
+      enabled: true,
+      recognised: 3,
+      waiting: 0,
+      people: [
+        { id: 'p1', name: 'Anna', photos: 2 },
+        { id: 'p2', name: 'Bert', photos: 2 },
+      ],
+    });
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.album-head h2')?.textContent).toBe('Anna');
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const merge = page(fixture).querySelector<HTMLSelectElement>('.album-head select')!;
+    merge.value = 'p2';
+    merge.dispatchEvent(new Event('change'));
+    const req = http.expectOne('/api/people/merge');
+    expect(req.request.body).toEqual({ id: 'p1', into: 'p2' });
+    req.flush({ id: 'p2', name: 'Bert' });
+    http.expectOne('/api/people').flush({
+      enabled: true,
+      recognised: 3,
+      waiting: 0,
+      people: [{ id: 'p2', name: 'Bert', photos: 3 }],
+    });
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('Zusammengeführt mit „Bert“');
+
+    modes[5].click();
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.albums .title')?.textContent).toBe('Hunde');
+  });
+
+  it('says when recognition is off', async () => {
+    const fixture = await start('photo', [photo(1, '2026-10-20T10:00:00Z')], [], {
+      enabled: false,
+      recognised: 0,
+      waiting: 0,
+      people: [],
+    });
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[4].click();
+    await fixture.whenStable();
+    expect(page(fixture).textContent).toContain('ist aus');
+  });
+
   it('says when there are no trips', async () => {
     const fixture = await start('photo', [photo(1, '2026-10-20T10:00:00Z')]);
     page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[3].click();
@@ -192,7 +286,7 @@ describe('MediaView', () => {
       photo(2, '2026-10-19T10:00:00Z'),
     ]);
     const modes = page(fixture).querySelectorAll<HTMLButtonElement>('.modes button');
-    modes[4].click();
+    modes[6].click();
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Noch keine eigenen Alben');
 
@@ -253,7 +347,7 @@ describe('MediaView', () => {
       ],
       [album],
     );
-    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[4].click();
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[6].click();
     await fixture.whenStable();
     page(fixture).querySelector<HTMLButtonElement>('.albums button')!.click();
     await fixture.whenStable();
@@ -384,9 +478,14 @@ describe('MediaView', () => {
     http
       .expectOne('/api/media?kind=photo')
       .flush({ error: 'Datenordner nicht verfügbar' }, { status: 503, statusText: 'Unavailable' });
-    http
-      .expectOne('/api/albums')
-      .flush({ error: 'Datenordner nicht verfügbar' }, { status: 503, statusText: 'Unavailable' });
+    for (const url of ['/api/albums', '/api/people']) {
+      http
+        .expectOne(url)
+        .flush(
+          { error: 'Datenordner nicht verfügbar' },
+          { status: 503, statusText: 'Unavailable' },
+        );
+    }
     await fixture.whenStable();
     expect(page(fixture).querySelector('[role=alert]')?.textContent).toContain('nicht verfügbar');
   });

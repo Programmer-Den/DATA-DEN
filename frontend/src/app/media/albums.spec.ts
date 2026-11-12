@@ -1,4 +1,4 @@
-import { placeAlbums, spotAlbum, tripAlbums } from './albums';
+import { labelAlbums, peopleAlbums, placeAlbums, spotAlbum, tripAlbums } from './albums';
 import { Item } from './item';
 
 function photo(name: string, taken: string, place?: string): Item {
@@ -57,6 +57,32 @@ describe('albums', () => {
     ]);
     expect(two.name).toBe('2 Fotos');
     expect(two.items.map((i) => i.name)).toEqual(['b.jpg', 'a.jpg']);
+  });
+
+  it('makes an album per person and per thing', () => {
+    const a = { ...photo('a.jpg', '2026-01-01T10:00:00'), people: ['p1', 'p2'], labels: ['Hunde'] };
+    const b = {
+      ...photo('b.jpg', '2026-01-02T10:00:00'),
+      people: ['p1'],
+      labels: ['Hunde', 'Strand'],
+    };
+    const c = { ...photo('c.jpg', '2026-01-03T10:00:00'), labels: ['Berge'] };
+    const people = peopleAlbums(
+      [
+        { id: 'p1', name: 'Anna', photos: 2 },
+        { id: 'p2', name: '', photos: 1 },
+      ],
+      [a, b, c],
+    );
+    expect(people.map((p) => [p.name, p.person, p.items.map((i) => i.name)])).toEqual([
+      ['Anna', 'p1', ['b.jpg', 'a.jpg']],
+      ['Unbenannt', 'p2', ['a.jpg']],
+    ]);
+    expect(labelAlbums([a, b, c]).map((l) => [l.name, l.items.length])).toEqual([
+      ['Hunde', 2],
+      ['Berge', 1],
+      ['Strand', 1],
+    ]);
   });
 
   it('finds nothing without positions', () => {

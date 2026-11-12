@@ -73,6 +73,8 @@ type Files struct {
 	places Namer
 	// ocr reads the text of scans for the search; nil for none.
 	ocr Recognizer
+	// people are the faces and things found in the photos.
+	people people
 	// marks are the tags, favourites and recently used files.
 	marks marks
 	// account is whose space this is, for the audit log.
@@ -161,7 +163,7 @@ func (f *Files) Close() error {
 // /api/thumb, /api/usage, /api/uploads, /api/folders, /api/move,
 // /api/delete, /api/trash, /api/search, /api/duplicates, /api/integrity,
 // /api/versions, /api/albums, /api/text, /api/sync/tree, /api/marks,
-// /api/tagged, /api/tags and /api/favourites (all of Routes) to mux, behind
+// /api/tagged, /api/tags, /api/favourites and /api/people (all of Routes) to mux, behind
 // require (the login check). The share links are added by RegisterShares.
 func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/files", require(f.list))
@@ -178,6 +180,7 @@ func (f *Files) Register(mux *http.ServeMux, require func(http.HandlerFunc) http
 	f.registerEdit(mux, require)
 	f.registerSync(mux, require)
 	f.registerMarks(mux, require)
+	f.registerPeople(mux, require)
 }
 
 func (f *Files) list(w http.ResponseWriter, r *http.Request) {

@@ -30,6 +30,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/version"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/vision"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/web"
 )
 
@@ -294,6 +295,20 @@ func newTiles(dataDir string) (*tiles.Tiles, error) {
 	})
 }
 
+// newVision finds faces and things in the photos with the machine learning
+// service at DATA_DEN_VISION, such as http://127.0.0.1:3003; without it none
+// are found and it returns nil.
+func newVision() (files.PhotoRecognizer, error) {
+	base := os.Getenv("DATA_DEN_VISION")
+	if base == "" {
+		return nil, nil
+	}
+	if u, err := url.Parse(base); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return nil, fmt.Errorf("DATA_DEN_VISION must be the machine learning service's address, such as http://127.0.0.1:3003, not %q", base)
+	}
+	return vision.New(vision.Config{URL: strings.TrimRight(base, "/")}), nil
+}
+
 func run() error {
 	addr := listenAddr()
 	certFile, keyFile := tlsFiles()
@@ -318,6 +333,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	recognizer, err := newVision()
+	if err != nil {
+		return err
+	}
 	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
 		Owner: os.Getenv("DATA_DEN_USERNAME"),
 		User:  auth.Username,
@@ -328,6 +347,7 @@ func run() error {
 		},
 		Places:   namer,
 		OCR:      ocr,
+		Vision:   recognizer,
 		Accounts: func() []string { return login.Names() },
 		Shared: func(g files.Grant) {
 			notifier.Notify(g.To, sharedMessage(g))

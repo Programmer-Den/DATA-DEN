@@ -168,6 +168,36 @@ Use the same `-f` files for `pull`, `up`, `ps` and `logs` from then on, also
 together with `compose.office.yaml`. Without `compose.ocr.yaml` the search
 reads only the text of TXT, PDF, DOCX and ODT files, as before.
 
+## Faces and things (optional)
+
+The server can recognise faces and things in the photos, on the NAS itself:
+**Personen** and **Dinge** in the photos then show an album per person and
+per thing, such as Hunde, Strand or Berge. `compose.vision.yaml` adds
+Immich's machine learning service as a second container:
+
+```bash
+cd ~/data-den
+scp <you>@<your PC>:<repo>/deploy/compose.vision.yaml .
+sudo docker compose -f compose.yaml -f compose.vision.yaml up -d
+sudo docker compose -f compose.yaml -f compose.vision.yaml logs -f vision   # "Application startup complete"
+```
+
+- The service listens only on `127.0.0.1:3003` in the VM and never sees the
+  data directory: DATA-DEN sends it each photo, made smaller (1440 pixels),
+  one at a time. No photo leaves the NAS.
+- On first use it downloads its models from Hugging Face, about 400 MB, into
+  the volume `vision-models`; after that it needs no internet.
+- Each photo is recognised once, in the background, and again when it
+  changes. On the VM's CPU that takes about a second per photo, so a large
+  collection takes a few hours the first time; **Personen** says how many
+  photos are still waiting.
+- It needs about 2 GB of RAM more while it works; give the VM 6 GB or more
+  (`-MemoryGB 6` in `vm/New-DataDenVM.ps1`) if it gets tight.
+
+Use the same `-f` files for `pull`, `up`, `ps` and `logs` from then on; with
+office documents too, list all three. Without `compose.vision.yaml`,
+**Personen** and **Dinge** say that the recognition is off.
+
 ## Update
 
 ```bash
@@ -176,7 +206,7 @@ sudo docker compose pull && sudo docker compose up -d
 sudo docker image prune -f
 ```
 
-With office documents or text recognition: `sudo docker compose -f compose.yaml -f compose.office.yaml -f compose.ocr.yaml pull`
+With office documents, text recognition or faces and things: `sudo docker compose -f compose.yaml -f compose.office.yaml -f compose.ocr.yaml -f compose.vision.yaml pull`
 (only the files you use) and `... up -d` the same way.
 
 `sudo docker compose logs -f` shows what the server does, including the

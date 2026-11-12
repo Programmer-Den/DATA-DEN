@@ -11,6 +11,26 @@ export interface Album {
   to: Date | null;
   /** True for an album made by hand (/api/albums). */
   own?: boolean;
+  /** The id of the person whose photos these are (/api/people). */
+  person?: string;
+}
+
+/** A person the server recognised, as /api/people lists them. */
+export interface Person {
+  id: string;
+  /** "" until named. */
+  name: string;
+  photos: number;
+}
+
+/** What /api/people answers. */
+export interface People {
+  /** False when face recognition is off (no DATA_DEN_VISION). */
+  enabled: boolean;
+  /** How many photos were recognised, and how many are still waiting. */
+  recognised: number;
+  waiting: number;
+  people: Person[];
 }
 
 /** An own album as the server keeps it. */
@@ -110,6 +130,36 @@ export function tripAlbums(items: Item[]): Album[] {
   return trips
     .map((trip) => album('trip:' + trip[0].path, byCount(trip).slice(0, 3).join(', '), trip))
     .sort((a, b) => b.to!.getTime() - a.to!.getTime());
+}
+
+/** The name shown for a person; unnamed people are "Unbenannt". */
+export function personName(person: Person): string {
+  return person.name || 'Unbenannt';
+}
+
+/** One album per person listed, as the server sorts them: most photos first. */
+export function peopleAlbums(people: Person[], items: Item[]): Album[] {
+  return people.map((person) => ({
+    ...album(
+      'person:' + person.id,
+      personName(person),
+      items.filter((item) => item.people?.includes(person.id)),
+    ),
+    person: person.id,
+  }));
+}
+
+/** One album per thing recognised, such as "Hunde", most photos first. */
+export function labelAlbums(items: Item[]): Album[] {
+  const byLabel = new Map<string, Item[]>();
+  for (const item of items) {
+    for (const label of item.labels ?? []) {
+      byLabel.set(label, [...(byLabel.get(label) ?? []), item]);
+    }
+  }
+  return [...byLabel]
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+    .map(([label, labelled]) => album('label:' + label, label, labelled));
 }
 
 /**
