@@ -3,10 +3,14 @@
 // directory; when it grows past MaxBytes it moves to a .1 file, so the log
 // keeps the latest between MaxBytes and twice as much.
 //
-//	GET /api/audit?user=anna&limit=200 -> {"entries": [...]}, newest first
+//	GET /api/audit?user=anna&action=upload,delete&target=fotos&before=<time>&limit=200
+//	  -> {"entries": [...]}, newest first
 //
 // Admins see everyone's entries and may filter by user; everyone else sees
-// only their own.
+// their own, and what other accounts did in the folders they share with them,
+// without their IP. action keeps only the listed actions, target only entries whose target
+// contains the text (ignoring case), and before only entries older than the
+// RFC 3339 time, to page back from the oldest entry shown.
 package audit
 
 import (
@@ -21,6 +25,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -122,8 +127,34 @@ func (l *Log) write(e Entry) error {
 	return file.Close()
 }
 
-// Entries returns the newest entries of user (all for ""), at most limit.
-func (l *Log) Entries(user string, limit int) ([]Entry, error) {
+// Filter picks entries; its zero value picks all.
+type Filter struct {
+	// User keeps the entries of this account, and those that other
+	// accounts made in its shared folders, which name it as "user:/path".
+	User string
+	// Actions keeps only these actions.
+	Actions []string
+	// Target keeps entries whose target contains this, ignoring case.
+	Target string
+	// Before keeps entries older than this.
+	Before time.Time
+}
+
+func (f Filter) match(e Entry) bool {
+	if f.User != "" && e.User != f.User && !strings.HasPrefix(e.Target, f.User+":/") {
+		return false
+	}
+	if len(f.Actions) > 0 && !slices.Contains(f.Actions, e.Action) {
+		return false
+	}
+	if f.Target != "" && !strings.Contains(strings.ToLower(e.Target), strings.ToLower(f.Target)) {
+		return false
+	}
+	return f.Before.IsZero() || e.Time.Before(f.Before)
+}
+
+// Entries returns the newest entries that filter picks, at most limit.
+func (l *Log) Entries(filter Filter, limit int) ([]Entry, error) {
 	entries := []Entry{}
 	if l == nil || l.cfg.File == "" {
 		return entries, nil
@@ -131,7 +162,7 @@ func (l *Log) Entries(user string, limit int) ([]Entry, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, name := range []string{l.cfg.File + ".1", l.cfg.File} {
-		read, err := readFile(name, user)
+		read, err := readFile(name, filter)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +175,7 @@ func (l *Log) Entries(user string, limit int) ([]Entry, error) {
 	return entries, nil
 }
 
-func readFile(name, user string) ([]Entry, error) {
+func readFile(name string, filter Filter) ([]Entry, error) {
 	file, err := os.Open(filepath.Clean(name))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -160,7 +191,7 @@ func readFile(name, user string) ([]Entry, error) {
 		var e Entry
 		// A line cut off by a crash, or anything else that is not an
 		// entry, is skipped.
-		if len(line) > 0 && json.Unmarshal(line, &e) == nil && e.Action != "" && (user == "" || e.User == user) {
+		if len(line) > 0 && json.Unmarshal(line, &e) == nil && e.Action != "" && filter.match(e) {
 			entries = append(entries, e)
 		}
 		if errors.Is(err, io.EOF) {
@@ -179,9 +210,20 @@ func (l *Log) Register(mux *http.ServeMux, require func(http.HandlerFunc) http.H
 
 func (l *Log) list(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	user := l.cfg.User(r)
+	filter := Filter{User: l.cfg.User(r), Target: cut(query.Get("target"))}
 	if l.cfg.Admin(r) {
-		user = query.Get("user")
+		filter.User = query.Get("user")
+	}
+	if value := query.Get("action"); value != "" {
+		filter.Actions = strings.Split(value, ",")
+	}
+	if value := query.Get("before"); value != "" {
+		before, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Ungültige Zeit"})
+			return
+		}
+		filter.Before = before
 	}
 	limit := DefaultLimit
 	if value := query.Get("limit"); value != "" {
@@ -192,11 +234,19 @@ func (l *Log) list(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = min(n, MaxLimit)
 	}
-	entries, err := l.Entries(user, limit)
+	entries, err := l.Entries(filter, limit)
 	if err != nil {
 		slog.Error("reading the audit log", "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Protokoll nicht lesbar"})
 		return
+	}
+	if !l.cfg.Admin(r) {
+		// Where other accounts work from is for admins only.
+		for i := range entries {
+			if entries[i].User != filter.User {
+				entries[i].IP = ""
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }

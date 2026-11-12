@@ -150,7 +150,12 @@ changes, accounts created, changed or deleted, and changes to files
 (uploads, new folders, moves and renames, the recycle bin) and share links
 (created, deleted, files fetched through a link, wrong link passwords).
 Admins see everyone's entries and can filter by user; everyone else sees
-their own. Viewing and downloading within one's own space is not logged.
+their own, and what other accounts did in the folders they share with them
+(without their IP address).
+Everyone can narrow the list to a kind of entry (changed files, deleted and
+restored, sharing, logins, accounts) and to a file or folder name, and load
+older entries page by page. Viewing and downloading within one's own space is
+not logged.
 
 The log is `.data-den-audit/audit.log` in the data directory, one JSON line
 per entry, readable only by the server. At 5 MB it moves to `audit.log.1`,

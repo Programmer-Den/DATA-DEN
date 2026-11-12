@@ -30,6 +30,7 @@ export const ACTIONS: Record<string, string> = {
   replace: 'Ersetzt (alte Version aufbewahrt)',
   create: 'Textdatei angelegt',
   edit: 'Bearbeitet',
+  office: 'Im Office-Editor bearbeitet',
   folder: 'Ordner angelegt',
   move: 'Verschoben oder umbenannt',
   delete: 'In den Papierkorb',
@@ -52,9 +53,40 @@ export const ACTIONS: Record<string, string> = {
   'version-delete': 'Ältere Version gelöscht',
 };
 
+/** The kinds of entries to pick from, each a list of actions. */
+export const KINDS: { name: string; actions: string }[] = [
+  { name: 'Alles', actions: '' },
+  {
+    name: 'Dateien geändert',
+    actions:
+      'upload,replace,share-upload,create,edit,office,folder,move,version-restore,integrity-accept',
+  },
+  {
+    name: 'Gelöscht und wiederhergestellt',
+    actions: 'delete,restore,purge,trash-empty,version-delete',
+  },
+  {
+    name: 'Geteilt',
+    actions:
+      'share-create,share-delete,share-download,share-password-failed,grant-create,grant-delete,team-create,team-delete,team-member,team-member-delete',
+  },
+  { name: 'Anmeldungen', actions: 'login,login-failed,logout,token-failed' },
+  {
+    name: 'Konten',
+    actions:
+      'password,2fa-on,2fa-off,2fa-reset,token-create,token-revoke,tokens-revoke,user-create,user-change,user-delete',
+  },
+];
+
+/** How many entries one page shows, as the server does without a limit. */
+const PAGE = 200;
+
 const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'medium' });
 
-/** The audit log: who did what and when. Admins see everyone's entries. */
+/**
+ * The audit log: who did what and when. Admins see everyone's entries, the
+ * others their own and what other accounts did in folders they share.
+ */
 @Component({
   selector: 'app-audit',
   templateUrl: './audit.html',
@@ -66,23 +98,50 @@ export class AuditView {
 
   protected readonly entries = signal<AuditEntry[] | null>(null);
   protected readonly error = signal<string | null>(null);
+  /** Whether there may be older entries than those shown. */
+  protected readonly more = signal(false);
+  protected readonly kinds = KINDS;
+  private params: Record<string, string> = {};
 
   constructor() {
-    this.load('');
+    this.load(false);
   }
 
-  protected load(user: string): void {
-    const params: Record<string, string> = user.trim() ? { user: user.trim() } : {};
+  /** Loads the newest entries, or with older the page before those shown. */
+  private load(older: boolean): void {
+    const params = { ...this.params };
+    const shown = this.entries() ?? [];
+    if (older && shown.length > 0) {
+      params['before'] = shown[shown.length - 1].time;
+    }
     this.error.set(null);
     this.http.get<{ entries: AuditEntry[] }>('/api/audit', { params }).subscribe({
-      next: (answer) => this.entries.set(answer.entries),
+      next: (answer) => {
+        this.entries.set(older ? [...shown, ...answer.entries] : answer.entries);
+        this.more.set(answer.entries.length === PAGE);
+      },
       error: (err: unknown) => this.error.set(errorMessage(err)),
     });
   }
 
-  protected filter(event: Event, user: string): void {
+  protected filter(event: Event): void {
     event.preventDefault();
-    this.load(user);
+    const form = new FormData(event.target as HTMLFormElement);
+    const params: Record<string, string> = {};
+    for (const [field, param] of [
+      ['user', 'user'],
+      ['kind', 'action'],
+      ['target', 'target'],
+    ]) {
+      const value = String(form.get(field) ?? '').trim();
+      if (value) params[param] = value;
+    }
+    this.params = params;
+    this.load(false);
+  }
+
+  protected older(): void {
+    this.load(true);
   }
 
   protected action(entry: AuditEntry): string {

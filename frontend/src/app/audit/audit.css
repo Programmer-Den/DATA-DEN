@@ -40,3 +40,7 @@ td {
 .failed td {
   color: #c62828;
 }
+
+.older {
+  margin-top: 0.75rem;
+}
