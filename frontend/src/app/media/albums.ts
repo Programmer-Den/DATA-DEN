@@ -132,6 +132,7 @@ export function tripAlbums(items: Item[]): Album[] {
     .sort((a, b) => b.to!.getTime() - a.to!.getTime());
 }
 
+<<<<<<< HEAD
 /** The name shown for a person; unnamed people are "Unbenannt". */
 export function personName(person: Person): string {
   return person.name || 'Unbenannt';
@@ -162,6 +163,8 @@ export function labelAlbums(items: Item[]): Album[] {
     .map(([label, labelled]) => album('label:' + label, label, labelled));
 }
 
+=======
+>>>>>>> origin/claude/project-thread-dlouur
 /**
  * The photos of one spot on the map, named after their towns, such as
  * "Florenz, Siena", or "3 Fotos" when no town is known.

@@ -279,6 +279,7 @@ func newTiles(dataDir string) (*tiles.Tiles, error) {
 	})
 }
 
+<<<<<<< HEAD
 // newVision finds faces and things in the photos with the machine learning
 // service at DATA_DEN_VISION, such as http://127.0.0.1:3003; without it none
 // are found and it returns nil.
@@ -293,6 +294,8 @@ func newVision() (files.Recognizer, error) {
 	return vision.New(vision.Config{URL: strings.TrimRight(base, "/")}), nil
 }
 
+=======
+>>>>>>> origin/claude/project-thread-dlouur
 func run() error {
 	addr := listenAddr()
 	certFile, keyFile := tlsFiles()

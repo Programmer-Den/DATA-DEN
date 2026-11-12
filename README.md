@@ -49,7 +49,10 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_SMTP_FROM` | The sender, such as `DATA-DEN <nas@example.org>` |
 | `DATA_DEN_PUSH_CONTACT` | The contact the push services see, `mailto:` or `https://`; default the sender above. Without either, no push messages |
 | `DATA_DEN_GEOCODER` | The Nominatim server that names the towns of the photos, default `https://nominatim.openstreetmap.org`; `off` sends no positions anywhere |
+<<<<<<< HEAD
 | `DATA_DEN_VISION` | Immich's machine learning service on the VM, such as `http://127.0.0.1:3003`, which recognises faces and things in the photos ([deploy/README.md](deploy/README.md)); without it none are recognised |
+=======
+>>>>>>> origin/claude/project-thread-dlouur
 | `DATA_DEN_TILES` | The tile server that draws the photo map (**Karte**), default `https://tile.openstreetmap.org`; `off` fetches no tiles |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
@@ -193,8 +196,13 @@ by `taken`, or by the file's time when a photo has no date. Only JPEGs carry
 EXIF that is read; it is read once per photo and kept in memory until the
 photo changes, ahead of time by the search index's walk.
 
+<<<<<<< HEAD
 Above the gallery, **Zeitleiste**, **Karte**, **Orte**, **Reisen**,
 **Personen** and **Dinge** switch between the timeline, the map and albums. Each photo with a GPS position gets `place`, the
+=======
+Above the gallery, **Zeitleiste**, **Karte**, **Orte** and **Reisen** switch
+between the timeline, the map and albums. Each photo with a GPS position gets `place`, the
+>>>>>>> origin/claude/project-thread-dlouur
 town it was taken in, from OpenStreetMap's reverse geocoding (Nominatim,
 `DATA_DEN_GEOCODER`). The position is rounded to 0.01° (about a kilometre)
 before it is sent, each rounded position is asked for only once, at most one
@@ -207,6 +215,7 @@ town with the most photos), ended by a photo at home or three days without
 one; at least three photos make a trip. These albums are made in the browser
 from `/api/media`, nothing is stored.
 
+<<<<<<< HEAD
 **Personen** and **Dinge** show who and what is in the photos, recognised on
 the NAS itself by Immich's machine learning service (`DATA_DEN_VISION`, a
 second container next to DATA-DEN: [deploy/README.md](deploy/README.md)). In
@@ -228,6 +237,8 @@ thumbnails. API: `GET /api/people` → `{"enabled", "recognised", "waiting",
 `POST /api/people/merge {"id", "into"}`; `/api/media` gives each photo its
 `people` (ids) and `labels`.
 
+=======
+>>>>>>> origin/claude/project-thread-dlouur
 **Karte** shows the photos with a GPS position on a map of OpenStreetMap:
 photos close together are one pin with the newest photo and their number, and
 a click on a pin shows its photos. Dragging, the mouse wheel, a pinch, the

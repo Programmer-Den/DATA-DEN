@@ -181,6 +181,7 @@ describe('MediaView', () => {
     expect(page(fixture).querySelector('.map')).toBeNull();
   });
 
+<<<<<<< HEAD
   it('shows albums by person, names and merges people', async () => {
     const fixture = await start(
       'photo',
@@ -273,6 +274,8 @@ describe('MediaView', () => {
     expect(page(fixture).textContent).toContain('ist aus');
   });
 
+=======
+>>>>>>> origin/claude/project-thread-dlouur
   it('says when there are no trips', async () => {
     const fixture = await start('photo', [photo(1, '2026-10-20T10:00:00Z')]);
     page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[3].click();
@@ -286,7 +289,11 @@ describe('MediaView', () => {
       photo(2, '2026-10-19T10:00:00Z'),
     ]);
     const modes = page(fixture).querySelectorAll<HTMLButtonElement>('.modes button');
+<<<<<<< HEAD
     modes[6].click();
+=======
+    modes[4].click();
+>>>>>>> origin/claude/project-thread-dlouur
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Noch keine eigenen Alben');
 
@@ -347,7 +354,11 @@ describe('MediaView', () => {
       ],
       [album],
     );
+<<<<<<< HEAD
     page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[6].click();
+=======
+    page(fixture).querySelectorAll<HTMLButtonElement>('.modes button')[4].click();
+>>>>>>> origin/claude/project-thread-dlouur
     await fixture.whenStable();
     page(fixture).querySelector<HTMLButtonElement>('.albums button')!.click();
     await fixture.whenStable();
