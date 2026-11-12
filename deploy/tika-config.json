@@ -1,0 +1,4 @@
+{
+  "server": { "port": 9998 },
+  "text-recognizers": [{ "tesseract-ocr-parser": { "language": "deu+eng" } }]
+}

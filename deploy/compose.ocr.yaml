@@ -1,0 +1,40 @@
+# Optional: the search reads the text of scans, photos of documents and more
+# office formats with Apache Tika and Tesseract, in the VM, without a cloud.
+# Start together with compose.yaml, with tika-config.json next to it:
+#   sudo docker compose -f compose.yaml -f compose.ocr.yaml up -d
+# Guide: deploy/README.md, "Text recognition".
+services:
+  data-den:
+    environment:
+      # Where DATA-DEN reaches Tika: only on the VM.
+      DATA_DEN_OCR_URL: http://127.0.0.1:9998
+
+  tika:
+    # The -full image brings Tesseract with German and English.
+    image: apache/tika:4.2.0-1-full
+    restart: unless-stopped
+    # Like DATA-DEN: the VM's own network, and Tika listening only on
+    # 127.0.0.1 (the image's own start command would listen on every
+    # address), so nothing but DATA-DEN reaches it.
+    network_mode: host
+    entrypoint:
+      - java
+      - -cp
+      - /opt/tika-server/*:/opt/tika-server/lib/*
+      - org.apache.tika.server.core.TikaServerCli
+      - -h
+      - 127.0.0.1
+      - -c
+      - /tika-config.json
+    volumes:
+      # Recognize German and English text, on images and scanned PDF pages.
+      - ./tika-config.json:/tika-config.json:ro
+    # It never sees the data directory: DATA-DEN sends it one file at a
+    # time and keeps the text.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    # Recognizing a large scan takes about 1 GB.
+    mem_limit: 2g
+

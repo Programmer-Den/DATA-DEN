@@ -59,6 +59,8 @@ type indexed struct {
 	// text is the document's text, "" for other files.
 	text      string
 	textLower string
+	// ocr is true while the file waits for the Recognizer.
+	ocr bool
 }
 
 type index struct {
@@ -66,6 +68,12 @@ type index struct {
 	files map[string]*indexed
 	// ready is false until the first build is done.
 	ready bool
+	// waiting are the files for the Recognizer, as of the last refresh;
+	// left is how many of them still wait.
+	waiting []string
+	left    int
+	// wake tells Recognize that the index was refreshed.
+	wake chan struct{}
 }
 
 func (f *Files) registerSearch(mux *http.ServeMux, require func(http.HandlerFunc) http.HandlerFunc) {
@@ -95,6 +103,9 @@ func (f *Files) refreshIndex() int {
 
 	files := make(map[string]*indexed, len(old))
 	photos := map[string]bool{}
+	// recognized are the kept texts of the Recognizer still in use.
+	recognized := map[string]bool{}
+	var waiting []string
 	_ = fs.WalkDir(f.root.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || name == "." {
 			return nil
@@ -121,24 +132,62 @@ func (f *Files) refreshIndex() int {
 		}
 		if prev, ok := old[name]; ok && prev.entry.Size == entry.Size && prev.entry.Modified.Equal(entry.Modified) && prev.entry.Dir == entry.Dir {
 			files[name] = prev
+			f.keepRecognized(name, info, prev, recognized, &waiting)
 			return nil
 		}
 		item := &indexed{entry: entry, path: "/" + name, name: strings.ToLower(entry.Name), lower: strings.ToLower("/" + name)}
 		if !entry.Dir {
 			item.text = f.documentText(name, info.Size())
+			if f.ocr != nil && needsOCR(name, item.text, info.Size()) {
+				key := ocrKey(name, info)
+				if text, ok := f.recognized(key); ok {
+					if text != "" {
+						item.text = text
+					}
+				} else {
+					item.ocr = true
+				}
+			}
 			item.textLower = strings.ToLower(item.text)
 		}
 		files[name] = item
+		f.keepRecognized(name, info, item, recognized, &waiting)
 		return nil
 	})
+	if f.ocr != nil {
+		f.pruneRecognized(recognized)
+	}
 
 	f.prunePhotos(photos)
 
 	f.index.mu.Lock()
 	f.index.files = files
 	f.index.ready = true
+	f.index.waiting, f.index.left = waiting, len(waiting)
 	f.index.mu.Unlock()
+	if len(waiting) > 0 {
+		select {
+		case f.index.wake <- struct{}{}:
+		default:
+		}
+	}
 	return len(files)
+}
+
+// keepRecognized notes item, the file name, for the Recognizer: its kept
+// text stays, or it waits for one.
+func (f *Files) keepRecognized(name string, info fs.FileInfo, item *indexed, recognized map[string]bool, waiting *[]string) {
+	if f.ocr == nil || item.entry.Dir {
+		return
+	}
+	f.index.mu.RLock()
+	ocr := item.ocr
+	f.index.mu.RUnlock()
+	if ocr {
+		*waiting = append(*waiting, name)
+	} else if needsOCR(name, "", info.Size()) {
+		recognized[ocrKey(name, info)] = true
+	}
 }
 
 // documentText reads the text of a document, "" if it has none or cannot be
@@ -158,6 +207,12 @@ func (f *Files) documentText(name string, size int64) string {
 		slog.Debug("reading a document for the search", "path", name, "err", err)
 		return ""
 	}
+	return cleanText(text)
+}
+
+// cleanText is text with single spaces between the words, cut to
+// maxIndexText.
+func cleanText(text string) string {
 	text = strings.Join(strings.Fields(text), " ")
 	if len(text) > maxIndexText {
 		text = text[:maxIndexText]
@@ -335,6 +390,8 @@ func (f *Files) search(w http.ResponseWriter, r *http.Request) {
 		"total":   len(found),
 		"indexed": len(f.index.files),
 		"ready":   f.index.ready,
+		// How many files still wait for the text recognition.
+		"recognizing": f.index.left,
 	})
 }
 
