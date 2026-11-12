@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { StatusView } from './status';
-import { StatusReport, warnings } from './status.service';
+import { StatusReport, quotaWarning, warnings } from './status.service';
 
 const report: StatusReport = {
   version: '1.2.3',
@@ -51,6 +51,20 @@ describe('warnings', () => {
       'RAID md127 läuft nur mit 1 von 2 Platten. Ausgefallen: sdc.',
       'RAID md2 ist gestoppt.',
     ]);
+  });
+});
+
+describe('quotaWarning', () => {
+  it('stays quiet without a limit and below 90 %', () => {
+    expect(quotaWarning({ used: 5e12, quota: 0 })).toBeNull();
+    expect(quotaWarning({ used: 8.9 * 1024 ** 3, quota: 10 * 1024 ** 3 })).toBeNull();
+  });
+
+  it('warns from 90 % and when full', () => {
+    expect(quotaWarning({ used: 9 * 1024 ** 3, quota: 10 * 1024 ** 3 })).toBe(
+      'Dein Speicherplatz ist fast voll (9 GB von 10 GB belegt).',
+    );
+    expect(quotaWarning({ used: 1e10, quota: 1e10 })).toContain('Dein Speicherplatz ist voll');
   });
 });
 

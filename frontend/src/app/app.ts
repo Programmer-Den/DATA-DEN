@@ -37,7 +37,7 @@ type View =
   | 'search'
   | 'audit';
 
-/** How often the warnings about space and the RAID are checked. */
+/** How often the warnings about space, the quota and the RAID are checked. */
 export const STATUS_INTERVAL = 5 * 60 * 1000;
 
 interface Health {
@@ -128,6 +128,7 @@ export class App {
       if (this.auth.user()) {
         untracked(() => {
           this.status.refresh();
+          this.status.refreshUsage();
           this.office.load();
         });
       }
@@ -135,6 +136,7 @@ export class App {
     const timer = setInterval(() => {
       if (this.auth.user()) {
         this.status.refresh();
+        this.status.refreshUsage();
       }
     }, STATUS_INTERVAL);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));

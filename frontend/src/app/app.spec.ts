@@ -2,7 +2,10 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { App, shareIdOf } from './app';
+import type { Usage } from './account/account';
 import { StatusReport } from './status/status.service';
+
+const unlimited: Usage = { used: 4e9, quota: 0 };
 
 const fine: StatusReport = {
   version: '1.2.3',
@@ -28,6 +31,7 @@ describe('App', () => {
     session: string | null,
     status: StatusReport = fine,
     admin = false,
+    usage: Usage = unlimited,
   ): Promise<ComponentFixture<App>> {
     const fixture = TestBed.createComponent(App);
     http.expectOne('/api/health').flush({ status: 'ok', version: '1.2.3' });
@@ -37,6 +41,7 @@ describe('App', () => {
       await fixture.whenStable();
       http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
       http.expectOne('/api/status').flush(status);
+      http.expectOne('/api/usage').flush(usage);
       for (const office of http.match('/api/office')) office.flush({ extensions: [] });
     } else {
       req.flush({ error: 'Nicht angemeldet' }, { status: 401, statusText: 'Unauthorized' });
@@ -88,6 +93,7 @@ describe('App', () => {
     await fixture.whenStable();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
     http.expectOne('/api/status').flush(fine);
+    http.expectOne('/api/usage').flush(unlimited);
     for (const office of http.match('/api/office')) office.flush({ extensions: [] });
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Angemeldet als chriszly');
@@ -114,6 +120,7 @@ describe('App', () => {
     await fixture.whenStable();
     http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
     http.expectOne('/api/status').flush(fine);
+    http.expectOne('/api/usage').flush(unlimited);
     for (const office of http.match('/api/office')) office.flush({ extensions: [] });
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Angemeldet als chriszly');
@@ -184,6 +191,19 @@ describe('App', () => {
     await fixture.whenStable();
     expect(page(fixture).querySelector('.warnings')).toBeNull();
     expect(page(fixture).textContent).toContain('Alles in Ordnung');
+  });
+
+  it('warns when the own quota is almost full, and links to the account page', async () => {
+    const fixture = await start('anna', fine, false, { used: 9.5e9, quota: 1e10 });
+    const banner = page(fixture).querySelector('.warnings')!;
+    expect(banner.textContent).toContain('Dein Speicherplatz ist fast voll');
+
+    banner.querySelector('button')!.click();
+    await fixture.whenStable();
+    http.expectOne('/api/usage').flush({ used: 9.5e9, quota: 1e10 });
+    for (const req of http.match(() => true)) req.flush({});
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('.warnings')).toBeNull();
   });
 
   it('shows no warning when all is well', async () => {

@@ -19,6 +19,14 @@
         <button type="button" (click)="view.set('status')">Details</button>
       </div>
     }
+    @if (status.quotaWarning(); as warning) {
+      @if (view() !== 'account') {
+        <div class="warnings quota" role="alert">
+          <p>⚠ {{ warning }}</p>
+          <button type="button" (click)="view.set('account')">Konto</button>
+        </div>
+      }
+    }
     <form class="search" role="search" (submit)="search($event, searchInput.value)">
       <input
         #searchInput

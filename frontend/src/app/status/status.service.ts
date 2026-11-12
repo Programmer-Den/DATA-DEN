@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import type { Usage } from '../account/account';
 import { errorMessage } from '../auth.service';
 import { formatSize } from '../format';
 
@@ -64,6 +65,20 @@ export function warnings(report: StatusReport): string[] {
   return out;
 }
 
+/** From how many percent of the own quota on the banner warns. */
+export const QUOTA_WARN_PERCENT = 90;
+
+/** A warning when the account's own quota is almost or completely full, else null. */
+export function quotaWarning(usage: Usage): string | null {
+  if (usage.quota <= 0 || usage.used * 100 < usage.quota * QUOTA_WARN_PERCENT) {
+    return null;
+  }
+  const taken = `${formatSize(usage.used)} von ${formatSize(usage.quota)} belegt`;
+  return usage.used >= usage.quota
+    ? `Dein Speicherplatz ist voll (${taken}). Bitte Dateien löschen und den Papierkorb leeren.`
+    : `Dein Speicherplatz ist fast voll (${taken}).`;
+}
+
 /** The server's status, shared by the warning banner and the status page. */
 @Injectable({ providedIn: 'root' })
 export class StatusService {
@@ -76,6 +91,12 @@ export class StatusService {
     const report = this.report();
     return report ? warnings(report) : [];
   });
+  /** The account's own usage, null until it was counted. */
+  readonly usage = signal<Usage | null>(null);
+  readonly quotaWarning = computed(() => {
+    const usage = this.usage();
+    return usage ? quotaWarning(usage) : null;
+  });
 
   refresh(): void {
     this.http.get<StatusReport>('/api/status').subscribe({
@@ -84,6 +105,15 @@ export class StatusService {
         this.error.set(null);
       },
       error: (err: unknown) => this.error.set(errorMessage(err)),
+    });
+  }
+
+  /** Counts the account's own usage again, for the quota warning. */
+  refreshUsage(): void {
+    this.http.get<Usage>('/api/usage').subscribe({
+      next: (usage) => this.usage.set(usage),
+      // The warning stays as it was; the account page says what failed.
+      error: () => undefined,
     });
   }
 }
