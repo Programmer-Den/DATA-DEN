@@ -92,7 +92,7 @@ func TestRotate(t *testing.T) {
 	if _, err := os.Stat(file + ".1"); err != nil {
 		t.Fatalf("the full file was not moved: %v", err)
 	}
-	entries, err := l.Entries("", 10)
+	entries, err := l.Entries(Filter{}, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,9 +113,45 @@ func TestBadLimitAndNoFile(t *testing.T) {
 	// Without a file nothing is kept, and nothing breaks.
 	none := New(Config{})
 	none.Record(nil, "anna", "login", "")
-	if entries, err := none.Entries("", 10); err != nil || len(entries) != 0 {
+	if entries, err := none.Entries(Filter{}, 10); err != nil || len(entries) != 0 {
 		t.Errorf("no file: %v, %v", entries, err)
 	}
 	var nilLog *Log
 	nilLog.Record(nil, "anna", "login", "")
+}
+
+func TestFilter(t *testing.T) {
+	l, _ := setup(t)
+	l.Record(nil, "anna", "upload", "/Fotos/Urlaub.jpg")
+	l.Record(nil, "anna", "delete", "/Fotos/alt.jpg")
+	// bob in the folder anna shares with him.
+	bobs := httptest.NewRequest(http.MethodPut, "/", nil)
+	bobs.RemoteAddr = "192.0.2.7"
+	l.Record(bobs, "bob", "upload", "anna:/Fotos/Strand.jpg")
+	l.Record(nil, "bob", "delete", "/Notizen.txt")
+	l.Record(nil, "anna", "login", "")
+	admin := http.Header{"X-User": {"chef"}, "X-Admin": {"1"}}
+
+	if got := list(t, l, "/api/audit?action=upload,delete&target=fotos", admin); len(got) != 3 || got[0].User != "bob" || got[2].Action != "upload" {
+		t.Errorf("uploads and deletions in Fotos: %+v", got)
+	}
+	// anna sees what bob did in her folder, but not bob's own files.
+	got := list(t, l, "/api/audit?action=upload", http.Header{"X-User": {"anna"}})
+	if len(got) != 2 || got[0].Target != "anna:/Fotos/Strand.jpg" || got[0].IP != "" || got[1].User != "anna" {
+		t.Errorf("anna's uploads: %+v", got)
+	}
+	// Paging back from the oldest entry shown.
+	page := list(t, l, "/api/audit?limit=2", admin)
+	older := list(t, l, "/api/audit?limit=2&before="+page[1].Time.Format(time.RFC3339Nano), admin)
+	if len(older) != 2 || older[0].IP != "192.0.2.7" || older[1].Action != "delete" {
+		t.Errorf("older entries: %+v", older)
+	}
+
+	mux := http.NewServeMux()
+	l.Register(mux, func(h http.HandlerFunc) http.HandlerFunc { return h })
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/audit?before=gestern", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad time: status %d", rec.Code)
+	}
 }
