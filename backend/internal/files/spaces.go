@@ -323,7 +323,8 @@ func (s *Spaces) serveDavShared(w http.ResponseWriter, r *http.Request) {
 	if s.davShared == nil {
 		s.davShared = map[string]davShared{}
 	}
-	// A grant that was moved or changed gets a new handler; its locks go.
+	// A grant that was moved or changed gets a new handler; the locks stay
+	// with the space.
 	shared, ok := s.davShared[g.ID]
 	if !ok || shared.d != d {
 		shared = davShared{d: d, h: newDavHandler(DavSharedPrefix+"/"+g.ID, d)}

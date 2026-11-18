@@ -32,6 +32,10 @@ const (
 	// deletedDir keeps deleted calendars and address books, so a wrong
 	// click on a phone loses nothing.
 	deletedDir = dir + "/.deleted"
+	// keepDeleted is how long a deleted calendar or address book is kept.
+	keepDeleted = 30 * 24 * time.Hour
+	// deletedTime ends the name of a deleted collection.
+	deletedTime = "20060102-150405.000"
 	// defaultCollection is the calendar and the address book every account
 	// starts with.
 	defaultCollection = "default"
@@ -98,6 +102,19 @@ type account struct {
 	added func(n int64)
 }
 
+// fit refuses n more bytes when they do not fit into a's quota.
+func (a account) fit(n int64) error {
+	if n <= 0 || a.fits == nil {
+		return nil
+	}
+	if ok, err := a.fits(n); err != nil {
+		return err
+	} else if !ok {
+		return statusError{http.StatusInsufficientStorage, errQuota}
+	}
+	return nil
+}
+
 // home is the URL of k's home set of a.
 func (a account) home(k kind) string {
 	return k.prefix + "/" + a.name + "/" + k.dir + "/"
@@ -139,6 +156,10 @@ func (s *store) ensure(a account, k kind) error {
 	if _, err := a.root.Stat(path.Join(dir, k.dir)); !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	// The default collection is a few bytes and comes with every request,
+	// so it is made even when the quota is full: else a full account could
+	// not even list its calendars.
+	a.fits = nil
 	err := s.create(a, k, collection{ID: defaultCollection, Name: k.defaultName})
 	if errors.Is(err, errExists) {
 		return nil
@@ -199,6 +220,9 @@ func (s *store) create(a account, k kind, c collection) error {
 	if err != nil {
 		return err
 	}
+	if err := a.fit(int64(len(data))); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	base := path.Join(dir, k.dir)
@@ -211,7 +235,13 @@ func (s *store) create(a account, k kind, c collection) error {
 	} else if err != nil {
 		return err
 	}
-	return writeFile(a.root, path.Join(folder, collectionFile), data)
+	if err := writeFile(a.root, path.Join(folder, collectionFile), data); err != nil {
+		return err
+	}
+	if a.added != nil {
+		a.added(int64(len(data)))
+	}
+	return nil
 }
 
 // remove moves the collection id of k to deletedDir.
@@ -224,8 +254,33 @@ func (s *store) remove(a account, k kind, id string) error {
 	if err := a.root.MkdirAll(deletedDir, 0o750); err != nil {
 		return err
 	}
-	to := path.Join(deletedDir, fmt.Sprintf("%s-%s-%s", k.dir, id, time.Now().UTC().Format("20060102-150405.000")))
+	s.purgeDeleted(a, time.Now().Add(-keepDeleted))
+	to := path.Join(deletedDir, fmt.Sprintf("%s-%s-%s", k.dir, id, time.Now().UTC().Format(deletedTime)))
 	return a.root.Rename(path.Join(dir, k.dir, id), to)
+}
+
+// purgeDeleted removes the collections deleted before cutoff for good, so
+// they stop counting against the quota. The caller holds mu.
+func (s *store) purgeDeleted(a account, cutoff time.Time) {
+	entries, err := fs.ReadDir(a.root.FS(), deletedDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		// The name ends with the time of the deletion; the folder's own
+		// time is that of its last change.
+		name := e.Name()
+		if len(name) < len(deletedTime) {
+			continue
+		}
+		at, err := time.Parse(deletedTime, name[len(name)-len(deletedTime):])
+		if err != nil || !at.Before(cutoff) {
+			continue
+		}
+		if err := a.root.RemoveAll(path.Join(deletedDir, e.Name())); err != nil {
+			slog.Warn("removing a deleted collection", "account", a.name, "name", e.Name(), "err", err)
+		}
+	}
 }
 
 // objects lists the objects in the collection id of k.
@@ -294,12 +349,8 @@ func (s *store) put(a account, k kind, id, name string, data []byte, ifMatch, if
 	}
 	// Calendars and contacts count against the quota like files.
 	more := int64(len(data) - len(old.data))
-	if more > 0 && a.fits != nil {
-		if ok, err := a.fits(more); err != nil {
-			return object{}, err
-		} else if !ok {
-			return object{}, statusError{http.StatusInsufficientStorage, errQuota}
-		}
+	if err := a.fit(more); err != nil {
+		return object{}, err
 	}
 	file := path.Join(dir, k.dir, id, name)
 	if err := writeFile(a.root, file, data); err != nil {

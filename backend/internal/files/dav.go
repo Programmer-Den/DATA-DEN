@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/net/webdav"
 
@@ -45,7 +46,7 @@ var errQuota = errors.New("the quota is full")
 
 type requestKey struct{}
 
-// davHandler serves WebDAV for this space, with its own locks.
+// davHandler serves WebDAV for this space.
 func (f *Files) davHandler() *webdav.Handler {
 	f.davOnce.Do(func() {
 		f.dav = newDavHandler(DavPrefix, davFS{f: f, dir: ".", quota: true})
@@ -53,18 +54,65 @@ func (f *Files) davHandler() *webdav.Handler {
 	return f.dav
 }
 
-// newDavHandler serves d under prefix, with its own locks.
+// newDavHandler serves d under prefix, with the locks of its space.
 func newDavHandler(prefix string, d davFS) *webdav.Handler {
 	return &webdav.Handler{
 		Prefix:     prefix,
 		FileSystem: d,
-		LockSystem: webdav.NewMemLS(),
+		LockSystem: lockIn{ls: d.f.locks(), dir: d.dir},
 		Logger: func(r *http.Request, err error) {
 			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				slog.Warn("webdav", "method", r.Method, "path", r.URL.Path, "err", err)
 			}
 		},
 	}
+}
+
+// locks are the WebDAV locks of this space.
+func (f *Files) locks() webdav.LockSystem {
+	f.davLocksOnce.Do(func() { f.davLocks = webdav.NewMemLS() })
+	return f.davLocks
+}
+
+// lockIn are the locks of a space as a drive of its folder dir sees them:
+// a file locked on one drive is locked on every drive that shows it.
+type lockIn struct {
+	ls  webdav.LockSystem
+	dir string
+}
+
+// full is the name within the space of name within dir.
+func (l lockIn) full(name string) string {
+	if name == "" || l.dir == "." {
+		return name
+	}
+	return path.Join("/", l.dir, name)
+}
+
+func (l lockIn) Confirm(now time.Time, name0, name1 string, conditions ...webdav.Condition) (func(), error) {
+	return l.ls.Confirm(now, l.full(name0), l.full(name1), conditions...)
+}
+
+func (l lockIn) Create(now time.Time, details webdav.LockDetails) (string, error) {
+	details.Root = l.full(details.Root)
+	return l.ls.Create(now, details)
+}
+
+func (l lockIn) Refresh(now time.Time, token string, duration time.Duration) (webdav.LockDetails, error) {
+	details, err := l.ls.Refresh(now, token, duration)
+	if err == nil && l.dir != "." {
+		root, ok := strings.CutPrefix(details.Root, "/"+l.dir)
+		if !ok || (root != "" && !strings.HasPrefix(root, "/")) {
+			// A lock of another drive, outside this folder.
+			return webdav.LockDetails{}, webdav.ErrNoSuchLock
+		}
+		details.Root = "/" + strings.TrimPrefix(root, "/")
+	}
+	return details, err
+}
+
+func (l lockIn) Unlock(now time.Time, token string) error {
+	return l.ls.Unlock(now, token)
 }
 
 // ServeDAV answers a WebDAV request for this space; the login was checked
@@ -94,7 +142,8 @@ func (d davFS) name(name string) (string, error) {
 	}
 	clean := path.Join(d.dir, strings.TrimPrefix(path.Clean("/"+name), "/"))
 	if hidden(clean) || (d.dir != "." && d.f.symlinkIn(clean)) {
-		return "", fs.ErrNotExist
+		// A PathError, so a listing skips the entry instead of stopping.
+		return "", &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 	return clean, nil
 }

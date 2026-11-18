@@ -47,9 +47,12 @@ const (
 	vaultFilesDir  = vaultDir + "/files"
 	maxVaultKeys   = 4096
 	vaultProofSize = 32
-	// MaxVaultFile is the largest encrypted file, since the browser holds it
-	// in memory to encrypt and decrypt it.
-	MaxVaultFile = 1 << 30
+	// maxVaultPlain is the largest file before encryption, as the browser
+	// checks it, since it holds the file in memory to encrypt and decrypt it.
+	maxVaultPlain = 1 << 30
+	// MaxVaultFile is the largest encrypted file: maxVaultPlain with the
+	// magic, the salt and the tag of each 1 MiB chunk.
+	MaxVaultFile int64 = maxVaultPlain + int64(len(vaultMagic)) + 32 + 16*(maxVaultPlain>>20)
 	// vaultMagic starts every encrypted file, followed by a 32-byte salt and
 	// at least one sealed chunk with its 16-byte tag.
 	vaultMagic   = "DDV1"

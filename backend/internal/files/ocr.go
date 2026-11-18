@@ -61,6 +61,15 @@ type Recognizer interface {
 // ErrRecognizerDown means the Recognizer is not reachable now.
 var ErrRecognizerDown = errors.New("text recognition not reachable")
 
+// errDropped comes with ErrRecognizerDown when the Recognizer went away
+// while it read the file, which the file may have caused.
+var errDropped = errors.New("the connection was dropped")
+
+// maxDrops is how often a file may be read while the Recognizer went away
+// before it is given up, so a file that crashes it does not hold up the
+// others for good.
+const maxDrops = 3
+
 // Tika is a Recognizer: Apache Tika's server.
 type Tika struct {
 	url    *url.URL
@@ -99,6 +108,12 @@ func (t *Tika) Text(ctx context.Context, name string, r io.Reader, size int64) (
 		// others. A timeout is this file's, as is the caller giving up.
 		var uerr *url.Error
 		if ctx.Err() == nil && errors.As(err, &uerr) && !uerr.Timeout() && !t.reachable(ctx) {
+			// Tika may have crashed on this very file: say so, so a file
+			// that does it again and again is given up.
+			var dial *net.OpError
+			if !errors.As(err, &dial) || dial.Op != "dial" {
+				err = fmt.Errorf("%w: %w", errDropped, err)
+			}
 			return "", fmt.Errorf("%w: %w", ErrRecognizerDown, err)
 		}
 		return "", err
@@ -198,6 +213,18 @@ func (f *Files) recognizeWaiting(ctx context.Context) (int, error) {
 			return done, ctx.Err()
 		}
 		read, err := f.recognize(ctx, name)
+		if errors.Is(err, errDropped) {
+			if f.ocrDrops == nil {
+				f.ocrDrops = map[string]int{}
+			}
+			f.ocrDrops[name]++
+			if f.ocrDrops[name] >= maxDrops {
+				slog.Warn("text recognition went away on this file each time, giving it up", "path", name, "err", err)
+				delete(f.ocrDrops, name)
+				f.giveUp(name)
+				continue
+			}
+		}
 		if errors.Is(err, ErrRecognizerDown) {
 			return done, err
 		}
@@ -254,6 +281,26 @@ func (f *Files) recognize(ctx context.Context, name string) (read bool, err erro
 	}
 	f.recognizedAs(item, text)
 	return true, err
+}
+
+// giveUp keeps an empty text for the file name, so it is not tried again
+// until it changes.
+func (f *Files) giveUp(name string) {
+	f.index.mu.RLock()
+	item := f.index.files[name]
+	f.index.mu.RUnlock()
+	if item == nil || !item.ocr {
+		return
+	}
+	info, err := f.root.Stat(name)
+	if err != nil {
+		f.recognizedAs(item, "")
+		return
+	}
+	if err := f.saveRecognized(ocrKey(name, info), ""); err != nil {
+		slog.Error("keeping the recognized text", "path", name, "err", err)
+	}
+	f.recognizedAs(item, "")
 }
 
 // recognizedAs puts the text of item into the index; "" keeps what the

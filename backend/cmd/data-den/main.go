@@ -319,7 +319,6 @@ func run() error {
 	}
 	dataDir := dataDir()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	// Runs before data.Close, which waits for the checks to stop.
 	defer stop()
 	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
 	if err != nil {
@@ -378,7 +377,11 @@ func run() error {
 	if err != nil {
 		slog.Warn("the data directory cannot be opened, so no files are served; set DATA_DEN_DATA_DIR", "dir", dataDir, "err", err)
 	} else {
-		defer func() { _ = data.Close() }()
+		// stop first: data.Close waits for the checks, which end with ctx.
+		defer func() {
+			stop()
+			_ = data.Close()
+		}()
 		if err := setTrashDays(data); err != nil {
 			return err
 		}

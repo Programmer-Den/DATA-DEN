@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,8 @@ type fakeOCR struct {
 	mu    sync.Mutex
 	asked []string
 	down  bool
+	// crash is a file on which it goes away.
+	crash string
 }
 
 func (o *fakeOCR) Text(_ context.Context, name string, r io.Reader, _ int64) (string, error) {
@@ -30,6 +33,9 @@ func (o *fakeOCR) Text(_ context.Context, name string, r io.Reader, _ int64) (st
 	defer o.mu.Unlock()
 	if o.down {
 		return "", ErrRecognizerDown
+	}
+	if name == o.crash {
+		return "", fmt.Errorf("%w: %w", ErrRecognizerDown, errDropped)
 	}
 	o.asked = append(o.asked, name)
 	b, err := io.ReadAll(r)
@@ -206,6 +212,28 @@ func TestRecognizeDown(t *testing.T) {
 	}
 	if got := paths(search(t, h, "mietvertrag")); len(got) != 1 {
 		t.Errorf("after: %v", got)
+	}
+}
+
+// A file on which the Recognizer goes away each time is given up after
+// maxDrops tries, and the files after it are read.
+func TestRecognizeGivesUpAFileThatCrashesIt(t *testing.T) {
+	ocr := &fakeOCR{crash: "Scans/rechnung.png"}
+	_, f, h := ocrData(t, ocr)
+	f.refreshIndex()
+	f.index.mu.Lock()
+	f.index.waiting = append([]string{ocr.crash}, slices.DeleteFunc(f.index.waiting, func(n string) bool { return n == ocr.crash })...)
+	f.index.mu.Unlock()
+	for i := range maxDrops - 1 {
+		if _, err := f.recognizeWaiting(t.Context()); !errors.Is(err, ErrRecognizerDown) {
+			t.Fatalf("try %d: %v", i, err)
+		}
+	}
+	if done, err := f.recognizeWaiting(t.Context()); err != nil || done != 3 {
+		t.Errorf("recognized %d, %v; want the 3 others", done, err)
+	}
+	if n := recognizing(t, h); n != 0 {
+		t.Errorf("waiting: %d, want 0", n)
 	}
 }
 

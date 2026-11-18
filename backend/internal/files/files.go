@@ -67,6 +67,9 @@ type Files struct {
 	// makes checking and reserving one step.
 	reserved  atomic.Int64
 	reserveMu sync.Mutex
+	// ocrDrops counts per file how often the Recognizer went away while
+	// reading it; only Recognize uses it.
+	ocrDrops map[string]int
 	// mux serves the API of this space alone, for Spaces.
 	mux  *http.ServeMux
 	sums sums
@@ -96,6 +99,10 @@ type Files struct {
 	// dav serves WebDAV, made on first use.
 	dav     *webdav.Handler
 	davOnce sync.Once
+	// davLocks are the WebDAV locks on the files of this space, from its
+	// own drive and from the drives of its shared folders alike.
+	davLocks     webdav.LockSystem
+	davLocksOnce sync.Once
 	// damaged is told about the files a check found damaged; nil tells no one.
 	damaged func(account string, paths []string)
 }
