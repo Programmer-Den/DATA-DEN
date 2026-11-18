@@ -47,6 +47,17 @@ describe('TokensView', () => {
     expect(page(fixture).querySelector('.dav')?.textContent).toBe(`${location.origin}/dav/`);
   });
 
+  it('shows where calendars and contacts sync', async () => {
+    const fixture = await start([]);
+    const addresses = [...page(fixture).querySelectorAll('.dav')].map((code) => code.textContent);
+    expect(addresses).toEqual([
+      `${location.origin}/dav/`,
+      location.origin,
+      `${location.origin}/caldav/`,
+      `${location.origin}/carddav/`,
+    ]);
+  });
+
   it('creates one and shows it once', async () => {
     const fixture = await start([]);
     expect(page(fixture).textContent).toContain('Noch keine');

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"path"
 	"regexp"
 	"strconv"
@@ -427,4 +428,14 @@ func (s *Spaces) space(name string) (*Files, error) {
 	s.byName[name] = f
 	s.startLocked(name, f)
 	return f, nil
+}
+
+// Root is the folder of the space of the account name, for keeping more of
+// its data there, such as its calendars.
+func (s *Spaces) Root(name string) (*os.Root, error) {
+	f, err := s.space(name)
+	if err != nil {
+		return nil, err
+	}
+	return f.root, nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/pim"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 )
@@ -47,6 +48,9 @@ type Config struct {
 	Clients fs.FS
 	// Tiles adds the map tiles behind the login; nil leaves them out.
 	Tiles *tiles.Tiles
+	// PIM adds the calendars and contacts over CalDAV and CardDAV behind
+	// the login with app passwords; nil with Data nil answers 503 there.
+	PIM *pim.PIM
 }
 
 // clientName is what /api/sync/client serves, such as
@@ -85,6 +89,9 @@ func New(cfg Config) http.Handler {
 			cfg.Data.RegisterDAV(mux, cfg.Auth.RequireToken)
 			cfg.Data.RegisterGrants(mux, cfg.Auth.Require)
 			cfg.Data.RegisterTeams(mux, cfg.Auth.RequireAdmin)
+			if cfg.PIM != nil {
+				cfg.PIM.Register(mux, cfg.Auth.RequireToken)
+			}
 		} else {
 			missing := func(w http.ResponseWriter, _ *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Datenordner nicht verfügbar"})
@@ -94,6 +101,9 @@ func New(cfg Config) http.Handler {
 			}
 			mux.HandleFunc("/api/s/", missing)
 			mux.HandleFunc(files.DavPrefix+"/", cfg.Auth.RequireToken(missing))
+			for _, route := range pim.Routes {
+				mux.HandleFunc(route, cfg.Auth.RequireToken(missing))
+			}
 		}
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

@@ -25,6 +25,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/pim"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/places"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
@@ -433,6 +434,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	var calendars *pim.PIM
+	if data != nil {
+		calendars = pim.New(pim.Config{User: auth.Username, Space: data.Root})
+	}
 	var office *files.Office
 	var wopi *http.Server
 	if wopiAddr != "" && data != nil {
@@ -445,7 +450,7 @@ func run() error {
 	}
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir(), Tiles: mapTiles}),
+		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir(), Tiles: mapTiles, PIM: calendars}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},

@@ -8,6 +8,13 @@
     Als Netzlaufwerk einbinden: <code class="dav">{{ davUrl }}</code
     >, mit dem eigenen Benutzernamen und einem App-Passwort.
   </p>
+  <p class="hint">
+    Kalender und Kontakte synchronisieren (CalDAV und CardDAV, etwa mit DAVx⁵, iPhone oder
+    Thunderbird): als Server <code class="dav">{{ origin }}</code
+    >, ebenfalls mit Benutzernamen und App-Passwort. Fragt ein Programm nach einer genauen Adresse:
+    <code class="dav">{{ origin }}/caldav/</code> für Kalender,
+    <code class="dav">{{ origin }}/carddav/</code> für Kontakte.
+  </p>
   @if (created(); as created) {
     <div class="recovery">
       <p>

@@ -122,6 +122,12 @@ func TestFilesWithoutDataDirectory(t *testing.T) {
 	if rec := get(t, h, "/api/s/0123456789abcdef0123456789abcdef"); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("/api/s/ without data directory: status %d, want 503", rec.Code)
 	}
+	// Calendars and contacts ask for an app password, not the website.
+	for _, endpoint := range []string{"/.well-known/caldav", "/.well-known/carddav", "/caldav/", "/carddav/chriszly/"} {
+		if rec := get(t, h, endpoint); rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s without data directory: status %d, want 401", endpoint, rec.Code)
+		}
+	}
 }
 
 func TestStatusAPI(t *testing.T) {

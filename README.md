@@ -122,7 +122,7 @@ curl -H "Authorization: Bearer $DATA_DEN_TOKEN" https://<host>/api/files
 
 It works for everything a login can do with files, but not for the
 account's settings (password, 2FA, app passwords) or for managing accounts.
-A read-only one only reads (GET, HEAD, OPTIONS and PROPFIND). Each can be revoked in the
+A read-only one only reads (GET, HEAD, OPTIONS, PROPFIND and REPORT). Each can be revoked in the
 **Konto** tab; an admin can revoke all of an account's in the **Benutzer**
 tab, and deleting an account revokes its own. Wrong tokens count as failed
 logins.
@@ -143,6 +143,31 @@ WebDAV downloads to 50 MB by default; for larger videos raise
 `FileSizeLimitInBytes` under
 `HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters` (for
 example to `0xFFFFFFFF`, 4 GB) and restart the WebClient service.
+
+### Calendars and contacts (CalDAV, CardDAV)
+
+Each account also keeps calendars (with tasks) and address books, which
+phones and desktop programs sync over CalDAV and CardDAV. Like the network
+drive, this only takes the username and an app password. Every account
+starts with the calendar **Kalender** and the address book **Kontakte**;
+clients can add more and delete them.
+
+| Program | What to enter |
+|---|---|
+| Android: DAVx⁵ | **Mit URL und Benutzername anmelden**, URL `https://<host>`, then username and app password |
+| iPhone, iPad, Mac | In the settings, add an account of type **Andere → CalDAV-Account** with server `<host>`, and a **CardDAV-Account** the same way for the contacts |
+| Thunderbird | **Neuer Kalender → Im Netzwerk**, address `https://<host>`; contacts: **Neues CardDAV-Adressbuch**, the same address |
+
+Clients that want an exact address get `https://<host>/caldav/` and
+`https://<host>/carddav/`; the others find them through
+`/.well-known/caldav` and `/.well-known/carddav`, which the Pi passes on
+like every other path. The **Konto** tab shows the addresses too.
+
+The data stays in the account's space, in `.data-den-pim`, one `.ics` or
+`.vcf` file per event or contact, so it is mirrored and backed up with the
+files but never shows among them. A deleted calendar or address book is
+moved to `.data-den-pim/.deleted/` and can be recovered in the VM. Renaming
+a calendar from a client is not supported yet.
 
 ### Audit log
 
