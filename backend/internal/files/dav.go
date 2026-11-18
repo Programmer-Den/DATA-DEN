@@ -174,9 +174,10 @@ func (l lockIn) Confirm(now time.Time, name0, name1 string, conditions ...webdav
 	return l.s.ls.Confirm(now, l.full(name0), l.full(name1), inner...)
 }
 
-// duration is how long a lock taken or refreshed through this drive lasts.
-func (l lockIn) duration(d time.Duration) time.Duration {
-	if l.grant != "" && (d < 0 || d > sharedLockMax) {
+// lockDuration is how long a lock of grant ("" for the space's own drive)
+// lasts when d was asked for.
+func lockDuration(grant string, d time.Duration) time.Duration {
+	if grant != "" && (d < 0 || d > sharedLockMax) {
 		return sharedLockMax
 	}
 	return d
@@ -184,7 +185,7 @@ func (l lockIn) duration(d time.Duration) time.Duration {
 
 func (l lockIn) Create(now time.Time, details webdav.LockDetails) (string, error) {
 	details.Root = l.full(details.Root)
-	details.Duration = l.duration(details.Duration)
+	details.Duration = lockDuration(l.grant, details.Duration)
 	inner, err := l.s.ls.Create(now, details)
 	if err != nil {
 		return "", err
@@ -212,7 +213,9 @@ func (l lockIn) Refresh(now time.Time, token string, duration time.Duration) (we
 	if !ok {
 		return webdav.LockDetails{}, webdav.ErrNoSuchLock
 	}
-	duration = l.duration(duration)
+	// By the grant it was taken through, also when refreshed on the
+	// owner's drive.
+	duration = lockDuration(lock.grant, duration)
 	details, err := l.s.ls.Refresh(now, lock.token, duration)
 	if err != nil {
 		if errors.Is(err, webdav.ErrNoSuchLock) {
@@ -648,13 +651,14 @@ func (u *davUpload) hold(n int64) error {
 		return nil
 	}
 	need := u.size + n - u.held
-	// The whole length at once when the request says it.
 	block := max(need, davHoldBlock)
-	if length := requestLength(u.ctx); length >= 0 {
+	length := requestLength(u.ctx)
+	// The whole length at once when the request says it.
+	if length >= 0 {
 		block = max(need, length-u.held)
 	}
 	_, ok, err := u.d.f.reserve(block)
-	if err == nil && !ok && block > need {
+	if err == nil && !ok && length < 0 && block > need {
 		// Near the quota, only what is needed.
 		block = need
 		_, ok, err = u.d.f.reserve(block)

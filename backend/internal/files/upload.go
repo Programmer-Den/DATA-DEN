@@ -140,17 +140,6 @@ func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 		writeError(w, http.StatusInternalServerError, "Upload nicht möglich")
 		return
 	}
-	if err := f.root.MkdirAll(uploadDir, 0o750); err != nil {
-		f.diskError(w, "creating the upload folder", err)
-		return
-	}
-	chunks, err := f.root.OpenFile(path.Join(uploadDir, id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
-	if err != nil {
-		f.diskError(w, "creating an upload", err)
-		return
-	}
-	_ = chunks.Close()
-
 	// Checking the quota and counting the upload as pending are one step,
 	// as for reserve, so writes at the same time cannot take the same room.
 	err = f.countUsage()
@@ -165,9 +154,6 @@ func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 		}
 		f.reserveMu.Unlock()
 	}
-	if err != nil || !ok {
-		_ = f.root.Remove(path.Join(uploadDir, id))
-	}
 	if err != nil {
 		f.diskError(w, "counting the usage", err)
 		return
@@ -177,6 +163,22 @@ func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 			message = "Kein Speicherplatz mehr frei"
 		}
 		writeError(w, http.StatusInsufficientStorage, message)
+		return
+	}
+
+	err = f.root.MkdirAll(uploadDir, 0o750)
+	if err == nil {
+		var chunks *os.File
+		chunks, err = f.root.OpenFile(path.Join(uploadDir, id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
+		if err == nil {
+			_ = chunks.Close()
+		}
+	}
+	if err != nil {
+		f.uploads.mu.Lock()
+		delete(f.uploads.byID, id)
+		f.uploads.mu.Unlock()
+		f.diskError(w, "creating an upload", err)
 		return
 	}
 
