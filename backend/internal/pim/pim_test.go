@@ -255,6 +255,13 @@ func TestQuota(t *testing.T) {
 	if used != before-1 {
 		t.Errorf("used %d after making it smaller, want %d", used, before-1)
 	}
+	// Deleting it frees its room at once.
+	if resp := request(t, srv, "anna", http.MethodDelete, "/caldav/anna/calendars/default/a.ics", "", nil); resp.StatusCode >= 300 {
+		t.Fatalf("delete: %d", resp.StatusCode)
+	}
+	if want := before - 1 - int64(len(body(""))); used != want {
+		t.Errorf("used %d after deleting the event, want %d", used, want)
+	}
 }
 
 func TestAccountsAreSeparate(t *testing.T) {
@@ -405,11 +412,15 @@ func TestPurgeDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = root.Close() })
-	a := account{name: "anna", root: root}
+	var used int64 = 100
+	a := account{name: "anna", root: root, added: func(n int64) { used += n }}
 	old := "calendars-alt-mit-strich-" + time.Now().Add(-31*24*time.Hour).UTC().Format(deletedTime)
 	recent := "calendars-neu-" + time.Now().Add(-time.Hour).UTC().Format(deletedTime)
 	for _, name := range []string{old, recent} {
 		if err := root.MkdirAll(deletedDir+"/"+name, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := root.WriteFile(deletedDir+"/"+name+"/a.ics", []byte("0123456789"), 0o640); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -420,6 +431,9 @@ func TestPurgeDeleted(t *testing.T) {
 	}
 	if _, err := root.Stat(deletedDir + "/" + recent); err != nil {
 		t.Errorf("the recent one is gone: %v", err)
+	}
+	if used != 90 {
+		t.Errorf("used %d after purging 10 bytes of 100, want 90", used)
 	}
 }
 

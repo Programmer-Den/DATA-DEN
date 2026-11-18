@@ -63,8 +63,9 @@ type Files struct {
 	quota atomic.Int64
 	// used caches what usage found.
 	used usedCache
-	// reserved is what the vault uploads under way will add; reserveMu
-	// makes checking and reserving one step.
+	// reserved is what the vault and WebDAV uploads under way hold of
+	// the quota; reserveMu makes checking and reserving one step, also
+	// for the chunked uploads.
 	reserved  atomic.Int64
 	reserveMu sync.Mutex
 	// ocrDrops counts per file how often the Recognizer went away while

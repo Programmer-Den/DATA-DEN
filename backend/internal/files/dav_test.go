@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 )
 
 // davSetup serves WebDAV with Spaces like spacesSetup: the account is the
@@ -121,7 +122,7 @@ func TestDavMoveAndDelete(t *testing.T) {
 }
 
 func TestDavSpacesAndQuota(t *testing.T) {
-	_, h, data := davSetup(t)
+	s, h, data := davSetup(t)
 	if rec := dav(h, "anna", http.MethodPut, "/dav/klein.txt", "0123", nil); rec.Code != http.StatusCreated {
 		t.Fatalf("anna's PUT: status %d", rec.Code)
 	}
@@ -133,6 +134,9 @@ func TestDavSpacesAndQuota(t *testing.T) {
 	}
 	if exists(data, ".data-den-users/anna/gross.txt") {
 		t.Error("the file over the quota was kept")
+	}
+	if f, err := s.space("anna"); err != nil || f.reserved.Load() != 0 {
+		t.Errorf("still held after the uploads: %v", err)
 	}
 	entries, _ := os.ReadDir(filepath.Join(data, ".data-den-users", "anna", uploadDir))
 	if len(entries) != 0 {
@@ -451,5 +455,164 @@ func TestDavProppatchKeepsTheFile(t *testing.T) {
 	other := `<?xml version="1.0"?><propertyupdate xmlns="DAV:"><set><prop><displayname>b</displayname></prop></set></propertyupdate>`
 	if rec := dav(h, "chef", "PROPPATCH", "/dav/a.txt", other, nil); !strings.Contains(rec.Body.String(), "403") {
 		t.Errorf("PROPPATCH of another property: status %d, body %s", rec.Code, rec.Body)
+	}
+}
+
+// Ending a grant, or making it read-only, releases the locks taken through
+// its drive: nobody else could ever undo them.
+func TestDavGrantEndReleasesItsLocks(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	for _, end := range []string{"revoke", "read-only"} {
+		g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+		rec := dav(h, "anna", "LOCK", "/dav-shared/"+g.ID+"/a.txt", lock, map[string]string{"Depth": "0"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: anna LOCK: status %d %s", end, rec.Code, rec.Body)
+		}
+		if rec := dav(h, "chef", "LOCK", "/dav/Projekt/"+end+".txt", lock, map[string]string{"Depth": "0"}); rec.Code >= 300 {
+			t.Fatalf("%s: chef LOCK: status %d", end, rec.Code)
+		}
+		if end == "revoke" {
+			if code, _ := do(h, http.MethodPost, "/api/grants/delete", "application/json", `{"id":"`+g.ID+`"}`, as("chef")); code != http.StatusOK {
+				t.Fatalf("revoke: status %d", code)
+			}
+		} else {
+			grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna"}`)
+		}
+		if rec := dav(h, "chef", http.MethodPut, "/dav/Projekt/a.txt", "chef", nil); rec.Code >= 400 {
+			t.Errorf("%s: chef PUT after the grant ended: status %d", end, rec.Code)
+		}
+		// The owner's own lock stays.
+		if rec := dav(h, "chef", http.MethodPut, "/dav/Projekt/"+end+".txt", "chef", nil); rec.Code != http.StatusLocked {
+			t.Errorf("%s: chef's own lock is gone: PUT status %d", end, rec.Code)
+		}
+		do(h, http.MethodPost, "/api/grants/delete", "application/json", `{"id":"`+g.ID+`"}`, as("chef"))
+	}
+}
+
+// A lock through a shared drive runs out within sharedLockMax, a refresh
+// answers the lock root as the drive sees it, and a drive cannot refresh a
+// lock outside its folder.
+func TestDavRefreshStaysWithTheDrive(t *testing.T) {
+	sp, h, _, _ := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+	root := "/dav-shared/" + g.ID + "/"
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	rec := dav(h, "anna", "LOCK", root+"a.txt", lock, map[string]string{"Depth": "0", "Timeout": "Infinite"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anna LOCK: status %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "<D:timeout>Second-3600</D:timeout>") {
+		t.Errorf("the client does not hear how long its lock lasts: %s", rec.Body)
+	}
+	token := rec.Header().Get("Lock-Token")
+	// A lock through a shared folder always runs out.
+	f, err := sp.space("chef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, ok := f.locks().lock(strings.Trim(token, "<>")); !ok || l.until.IsZero() || time.Until(l.until) > sharedLockMax {
+		t.Errorf("a shared folder's lock without an end: %+v %v", l, ok)
+	}
+	rec = dav(h, "anna", "LOCK", root+"a.txt", "", map[string]string{"If": "(" + token + ")", "Timeout": "Second-600"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anna refresh: status %d %s", rec.Code, rec.Body)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "<D:href>/a.txt</D:href>") || strings.Contains(body, "Projekt") {
+		t.Errorf("refresh answers the root outside the drive: %s", body)
+	}
+	rec = dav(h, "chef", "LOCK", "/dav/geheim.txt", lock, map[string]string{"Depth": "0"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chef LOCK: status %d", rec.Code)
+	}
+	outside := rec.Header().Get("Lock-Token")
+	if rec := dav(h, "anna", "LOCK", root+"a.txt", "", map[string]string{"If": "(" + outside + ")"}); rec.Code < 400 {
+		t.Errorf("anna refreshed chef's lock outside the folder: status %d", rec.Code)
+	}
+}
+
+// Uploads at the same time hold their room, so together they cannot go
+// over the quota.
+func TestDavParallelUploadsKeepTheQuota(t *testing.T) {
+	s, _, _ := davSetup(t)
+	f, err := s.space("anna")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.quota.Store(10)
+	d := davFS{f: f, dir: ".", quota: true}
+	a, err := d.create(context.Background(), "a.txt", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := d.create(context.Background(), "b.txt", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Write([]byte("012345")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Write([]byte("012345")); err == nil {
+		t.Error("the second upload went over the quota")
+	}
+	_ = a.Close()
+	_ = b.Close()
+	if got := f.reserved.Load(); got != 0 {
+		t.Errorf("still held after the uploads: %d bytes", got)
+	}
+}
+
+// Taking a member out of a team releases the locks of their team drive.
+func TestDavTeamMemberLeavesReleasesLocks(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	admin := func(method, target, body string) int {
+		code, _ := do(h, method, target, "application/json", body, as("chef"))
+		return code
+	}
+	if code := admin(http.MethodPost, "/api/teams", `{"name":"familie"}`); code != http.StatusCreated {
+		t.Fatalf("create: status %d", code)
+	}
+	for _, to := range []string{"anna", "bob"} {
+		if code := admin(http.MethodPost, "/api/teams/familie/members", `{"to":"`+to+`","write":true}`); code != http.StatusOK {
+			t.Fatalf("member %s: status %d", to, code)
+		}
+	}
+	_, withMe := grants(t, h, "anna")
+	_, bobs := grants(t, h, "bob")
+	if len(withMe) != 1 || len(bobs) != 1 {
+		t.Fatalf("grants: %+v %+v", withMe, bobs)
+	}
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	if rec := dav(h, "anna", "LOCK", "/dav-shared/"+withMe[0].ID+"/a.txt", lock, map[string]string{"Depth": "0"}); rec.Code >= 300 {
+		t.Fatalf("anna LOCK: status %d", rec.Code)
+	}
+	bob := "/dav-shared/" + bobs[0].ID + "/a.txt"
+	if rec := dav(h, "bob", http.MethodPut, bob, "bob", nil); rec.Code != http.StatusLocked {
+		t.Fatalf("bob PUT on anna's lock: status %d, want 423", rec.Code)
+	}
+	if code := admin(http.MethodPost, "/api/teams/familie/members/delete", `{"to":"anna"}`); code != http.StatusOK {
+		t.Fatalf("remove anna: status %d", code)
+	}
+	if rec := dav(h, "bob", http.MethodPut, bob, "bob", nil); rec.Code >= 400 {
+		t.Errorf("bob PUT after anna left: status %d", rec.Code)
+	}
+}
+
+func TestLimitLockTimeout(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                            "Second-3600",
+		"Infinite":                    "Second-3600",
+		"Second-86400":                "Second-3600",
+		"Second-600":                  "Second-600",
+		"Infinite, Second-4100000000": "Second-3600",
+		"Infinite, Second-120":        "Second-120",
+		"Second-x":                    "Second-3600",
+	} {
+		r := httptest.NewRequest("LOCK", "/", nil)
+		r.Header.Set("Timeout", in)
+		limitLockTimeout(r)
+		if got := r.Header.Get("Timeout"); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
 	}
 }

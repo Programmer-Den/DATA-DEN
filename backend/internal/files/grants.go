@@ -129,11 +129,40 @@ func (s *Spaces) grant(id string) (Grant, bool) {
 	return Grant{}, false
 }
 
-// changeGrants applies change to the list of grants and saves it.
+// changeGrants applies change to the list of grants and saves it. The
+// WebDAV locks taken through a grant that ended, was moved or may no longer
+// change its folder are released: nobody else knows their tokens, and its
+// drive no longer reaches them.
 func (s *Spaces) changeGrants(change func([]Grant) []Grant) error {
 	s.grantsMu.Lock()
-	defer s.grantsMu.Unlock()
-	return s.writeGrants(change(s.readGrants()))
+	old := s.readGrants()
+	list := change(slices.Clone(old))
+	err := s.writeGrants(list)
+	s.grantsMu.Unlock()
+	if err != nil {
+		return err
+	}
+	for _, g := range old {
+		i := slices.IndexFunc(list, func(n Grant) bool { return n.ID == g.ID })
+		if g.Write && (i < 0 || !list[i].Write || list[i].Path != g.Path) {
+			s.releaseLocks(g)
+		}
+	}
+	return nil
+}
+
+// releaseLocks unlocks the WebDAV locks taken through the drive of g. Only
+// an open space can hold locks.
+func (s *Spaces) releaseLocks(g Grant) {
+	f, ok := s.owner, g.Owner == s.cfg.Owner
+	if !ok {
+		s.mu.Lock()
+		f, ok = s.byName[g.Owner]
+		s.mu.Unlock()
+	}
+	if ok {
+		f.locks().release(g.ID)
+	}
 }
 
 // RegisterGrants adds GrantRoutes to mux behind require (the login check).

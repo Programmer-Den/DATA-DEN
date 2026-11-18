@@ -318,11 +318,14 @@ func (s *Spaces) serveDavShared(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Quota != nil {
 		f.quota.Store(s.cfg.Quota(g.Owner))
 	}
-	d := davFS{f: f, dir: g.dir(), readOnly: !g.Write}
+	d := davFS{f: f, dir: g.dir(), readOnly: !g.Write, grant: g.ID}
 	if d.readOnly && r.Method == "LOCK" {
 		// A lock would keep the owner and the others from writing.
 		http.Error(w, "Nur zum Lesen geteilt", http.StatusForbidden)
 		return
+	}
+	if r.Method == "LOCK" {
+		limitLockTimeout(r)
 	}
 	s.davMu.Lock()
 	if s.davShared == nil {
@@ -338,6 +341,23 @@ func (s *Spaces) serveDavShared(w http.ResponseWriter, r *http.Request) {
 	s.davMu.Unlock()
 	r = r.WithContext(context.WithValue(r.Context(), actingKey{}, acting{user: user, owner: g.Owner}))
 	shared.h.ServeHTTP(w, davRequest(r))
+}
+
+// limitLockTimeout asks for at most sharedLockMax in a LOCK to a shared
+// folder, so the client hears how long its lock really lasts and refreshes
+// it in time.
+func limitLockTimeout(r *http.Request) {
+	longest := "Second-" + strconv.Itoa(int(sharedLockMax/time.Second))
+	for _, t := range strings.Split(r.Header.Get("Timeout"), ",") {
+		t = strings.TrimSpace(t)
+		if n, ok := strings.CutPrefix(t, "Second-"); ok {
+			if s, err := strconv.ParseInt(n, 10, 64); err == nil && s >= 0 && s <= int64(sharedLockMax/time.Second) {
+				r.Header.Set("Timeout", t)
+				return
+			}
+		}
+	}
+	r.Header.Set("Timeout", longest)
 }
 
 // RegisterShares adds ShareRoutes to mux behind require, each account's

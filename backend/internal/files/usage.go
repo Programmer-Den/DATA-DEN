@@ -82,6 +82,9 @@ func (f *Files) pending() int64 {
 // fit, so writes at the same time cannot all take the same room. release
 // gives them back; call it after addUsage.
 func (f *Files) reserve(size int64) (release func(), ok bool, err error) {
+	if err := f.countUsage(); err != nil {
+		return nil, false, err
+	}
 	f.reserveMu.Lock()
 	defer f.reserveMu.Unlock()
 	if ok, err := f.fits(size); err != nil || !ok {
@@ -89,6 +92,16 @@ func (f *Files) reserve(size int64) (release func(), ok bool, err error) {
 	}
 	f.reserved.Add(size)
 	return func() { f.reserved.Add(-size) }, true, nil
+}
+
+// countUsage counts the usage when it is due, before taking reserveMu: the
+// count can walk the whole space, and should not hold the others up.
+func (f *Files) countUsage() error {
+	if f.quota.Load() <= 0 {
+		return nil
+	}
+	_, err := f.usage()
+	return err
 }
 
 // fits reports whether size more bytes fit into the quota.

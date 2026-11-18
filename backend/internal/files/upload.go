@@ -135,7 +135,26 @@ func readUploadStart(w http.ResponseWriter, r *http.Request) (uploadStart, bool)
 func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 	u.touched.Store(time.Now().UnixNano())
 	f.dropIdleUploads()
-	if ok, err := f.fits(u.size); err != nil {
+	id, err := newID()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Upload nicht möglich")
+		return
+	}
+	// Checking the quota and counting the upload as pending are one step,
+	// as for reserve, so writes at the same time cannot take the same room.
+	err = f.countUsage()
+	ok := false
+	if err == nil {
+		f.reserveMu.Lock()
+		ok, err = f.fits(u.size)
+		if err == nil && ok {
+			f.uploads.mu.Lock()
+			f.uploads.byID[id] = u
+			f.uploads.mu.Unlock()
+		}
+		f.reserveMu.Unlock()
+	}
+	if err != nil {
 		f.diskError(w, "counting the usage", err)
 		return
 	} else if !ok {
@@ -147,25 +166,21 @@ func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 		return
 	}
 
-	id, err := newID()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Upload nicht möglich")
-		return
+	err = f.root.MkdirAll(uploadDir, 0o750)
+	if err == nil {
+		var chunks *os.File
+		chunks, err = f.root.OpenFile(path.Join(uploadDir, id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
+		if err == nil {
+			_ = chunks.Close()
+		}
 	}
-	if err := f.root.MkdirAll(uploadDir, 0o750); err != nil {
-		f.diskError(w, "creating the upload folder", err)
-		return
-	}
-	chunks, err := f.root.OpenFile(path.Join(uploadDir, id), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 	if err != nil {
+		f.uploads.mu.Lock()
+		delete(f.uploads.byID, id)
+		f.uploads.mu.Unlock()
 		f.diskError(w, "creating an upload", err)
 		return
 	}
-	_ = chunks.Close()
-
-	f.uploads.mu.Lock()
-	f.uploads.byID[id] = u
-	f.uploads.mu.Unlock()
 
 	answer := map[string]any{"id": id, "offset": u.offset}
 	if u.size == 0 {

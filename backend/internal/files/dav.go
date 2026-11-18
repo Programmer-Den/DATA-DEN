@@ -60,7 +60,7 @@ func newDavHandler(prefix string, d davFS) *webdav.Handler {
 	return &webdav.Handler{
 		Prefix:     prefix,
 		FileSystem: d,
-		LockSystem: lockIn{s: d.f.locks(), dir: d.dir},
+		LockSystem: lockIn{s: d.f.locks(), dir: d.dir, grant: d.grant},
 		Logger: func(r *http.Request, err error) {
 			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				slog.Warn("webdav", "method", r.Method, "path", r.URL.Path, "err", err)
@@ -89,10 +89,12 @@ type spaceLocks struct {
 }
 
 // spaceLock is a lock as spaceLocks keeps it: the lock system's token, the
-// lock's root within the space and when it runs out.
+// lock's root within the space, the grant whose drive took it ("" for the
+// space's own drive) and when it runs out.
 type spaceLock struct {
 	token string
 	root  string
+	grant string
 	// until is when it runs out, zero for never.
 	until time.Time
 }
@@ -105,11 +107,33 @@ func (s *spaceLocks) lock(token string) (spaceLock, bool) {
 	return l, ok
 }
 
+// sharedLockMax is the longest a lock taken through a shared folder's drive
+// lasts before it is refreshed. A lock that release cannot undo, as a
+// request still uses it or was taking it at that moment, runs out by then.
+const sharedLockMax = time.Hour
+
+// release unlocks every lock taken through the drive of grant, when the
+// grant ends or may no longer change the folder; nobody else knows their
+// tokens.
+func (s *spaceLocks) release(grant string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	for t, lock := range s.byToken {
+		if lock.grant == grant {
+			_ = s.ls.Unlock(now, lock.token)
+			delete(s.byToken, t)
+		}
+	}
+}
+
 // lockIn are the locks of a space as a drive of its folder dir sees them:
-// a file locked on one drive is locked on every drive that shows it.
+// a file locked on one drive is locked on every drive that shows it. grant
+// is the drive's grant, "" for the space's own drive.
 type lockIn struct {
-	s   *spaceLocks
-	dir string
+	s     *spaceLocks
+	dir   string
+	grant string
 }
 
 // full is the name within the space of name within dir.
@@ -150,8 +174,18 @@ func (l lockIn) Confirm(now time.Time, name0, name1 string, conditions ...webdav
 	return l.s.ls.Confirm(now, l.full(name0), l.full(name1), inner...)
 }
 
+// lockDuration is how long a lock of grant ("" for the space's own drive)
+// lasts when d was asked for.
+func lockDuration(grant string, d time.Duration) time.Duration {
+	if grant != "" && (d < 0 || d > sharedLockMax) {
+		return sharedLockMax
+	}
+	return d
+}
+
 func (l lockIn) Create(now time.Time, details webdav.LockDetails) (string, error) {
 	details.Root = l.full(details.Root)
+	details.Duration = lockDuration(l.grant, details.Duration)
 	inner, err := l.s.ls.Create(now, details)
 	if err != nil {
 		return "", err
@@ -166,11 +200,11 @@ func (l lockIn) Create(now time.Time, details webdav.LockDetails) (string, error
 	defer l.s.mu.Unlock()
 	// The lock system drops locks that ran out; so are their tokens here.
 	for t, lock := range l.s.byToken {
-		if !lock.until.IsZero() && now.After(lock.until) {
+		if !lock.until.IsZero() && !now.Before(lock.until) {
 			delete(l.s.byToken, t)
 		}
 	}
-	l.s.byToken[token] = spaceLock{token: inner, root: details.Root, until: expires(now, details.Duration)}
+	l.s.byToken[token] = spaceLock{token: inner, root: details.Root, grant: l.grant, until: expires(now, details.Duration)}
 	return token, nil
 }
 
@@ -179,6 +213,9 @@ func (l lockIn) Refresh(now time.Time, token string, duration time.Duration) (we
 	if !ok {
 		return webdav.LockDetails{}, webdav.ErrNoSuchLock
 	}
+	// By the grant it was taken through, also when refreshed on the
+	// owner's drive.
+	duration = lockDuration(lock.grant, duration)
 	details, err := l.s.ls.Refresh(now, lock.token, duration)
 	if err != nil {
 		if errors.Is(err, webdav.ErrNoSuchLock) {
@@ -186,9 +223,12 @@ func (l lockIn) Refresh(now time.Time, token string, duration time.Duration) (we
 		}
 		return details, err
 	}
-	lock.until = expires(now, duration)
 	l.s.mu.Lock()
-	l.s.byToken[token] = lock
+	// An Unlock at the same time may have forgotten the token meanwhile.
+	if cur, ok := l.s.byToken[token]; ok {
+		cur.until = expires(now, duration)
+		l.s.byToken[token] = cur
+	}
 	l.s.mu.Unlock()
 	if l.dir != "." {
 		details.Root = "/" + strings.TrimPrefix(strings.TrimPrefix(details.Root, "/"+l.dir), "/")
@@ -252,6 +292,16 @@ func (b *davBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// requestLength is the length of the PUT body of the request in ctx, -1
+// when it is not known.
+func requestLength(ctx context.Context) int64 {
+	r, ok := ctx.Value(requestKey{}).(*http.Request)
+	if !ok || r.Method != http.MethodPut {
+		return -1
+	}
+	return r.ContentLength
+}
+
 // complete reports whether the upload of size bytes for the request in ctx
 // arrived whole: its body was read without an error, and to its length.
 // Only a PUT writes its body; COPY and LOCK write other content.
@@ -276,6 +326,8 @@ type davFS struct {
 	readOnly bool
 	// quota shows the space's quota on its folders.
 	quota bool
+	// grant is the id of the grant a shared folder is served for.
+	grant string
 }
 
 // name turns a WebDAV path into a name within the root, refusing the
@@ -567,16 +619,15 @@ type davUpload struct {
 	replace bool
 	hash    hash.Hash
 	size    int64
-	failed  bool
-	once    sync.Once
+	// held is the quota held for what was written so far.
+	held   int64
+	failed bool
+	once   sync.Once
 }
 
 func (u *davUpload) Write(p []byte) (int, error) {
-	if ok, err := u.d.f.fits(u.size + int64(len(p))); err != nil || !ok {
+	if err := u.hold(int64(len(p))); err != nil {
 		u.failed = true
-		if err == nil {
-			err = errQuota
-		}
 		return 0, err
 	}
 	n, err := u.file.Write(p)
@@ -586,6 +637,40 @@ func (u *davUpload) Write(p []byte) (int, error) {
 		u.failed = true
 	}
 	return n, err
+}
+
+// davHoldBlock is how much quota an upload of unknown length holds at a
+// time, so it does not take the quota's lock for every piece it writes.
+const davHoldBlock = 1 << 20
+
+// hold makes sure the upload holds room for n more bytes, so uploads at the
+// same time cannot all take the same room. Without a quota there is nothing
+// to hold.
+func (u *davUpload) hold(n int64) error {
+	if u.d.f.quota.Load() <= 0 || u.size+n <= u.held {
+		return nil
+	}
+	need := u.size + n - u.held
+	block := max(need, davHoldBlock)
+	length := requestLength(u.ctx)
+	// The whole length at once when the request says it.
+	if length >= 0 {
+		block = max(need, length-u.held)
+	}
+	_, ok, err := u.d.f.reserve(block)
+	if err == nil && !ok && length < 0 && block > need {
+		// Near the quota, only what is needed.
+		block = need
+		_, ok, err = u.d.f.reserve(block)
+	}
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errQuota
+	}
+	u.held += block
+	return nil
 }
 
 func (u *davUpload) Read(p []byte) (int, error) { return u.file.Read(p) }
@@ -610,6 +695,8 @@ func (u *davUpload) finish() error {
 	f := u.d.f
 	closeErr := u.file.Close()
 	defer func() { _ = f.root.Remove(u.tmp) }()
+	// After addUsage, so the bytes count either way.
+	defer f.reserved.Add(-u.held)
 	if u.failed || closeErr != nil || !complete(u.ctx, u.size) {
 		return errors.Join(errors.New("upload not finished"), closeErr)
 	}
