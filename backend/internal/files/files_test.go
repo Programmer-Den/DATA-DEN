@@ -117,6 +117,20 @@ func TestListErrors(t *testing.T) {
 	}
 }
 
+// The server's own folders, such as the other accounts' spaces, are never
+// listed, not even when asked for by name.
+func TestListHidden(t *testing.T) {
+	h, data := uploadSetup(t)
+	if err := os.MkdirAll(filepath.Join(data, ".data-den-users", "anna"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"/.data-den-users", "/.data-den-users/anna", ".data-den-users/"} {
+		if rec := get(h, "/api/files", p, nil); rec.Code != http.StatusNotFound {
+			t.Errorf("%q: status %d, want 404", p, rec.Code)
+		}
+	}
+}
+
 func TestDownload(t *testing.T) {
 	h := setup(t, true)
 	rec := get(h, "/api/download", "/Fotos/urlaub.jpg", nil)

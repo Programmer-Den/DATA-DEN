@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // Uploads come in chunks, so a large video survives a broken connection:
@@ -30,10 +32,15 @@ import (
 // only replaced when the start says "replace": true, and its old content is
 // then kept as a version. With "expect" {"size", "mod"} (see sync.go) a
 // replace only happens while the file is still so.
+//
+// An upload that gets no chunk for uploadIdle is given up: its chunks are
+// removed and its size no longer counts against the quota.
 const (
 	uploadDir = ".data-den-uploads"
 	// MaxChunk is the most one PUT may carry.
 	MaxChunk = 32 << 20
+	// uploadIdle is how long an unfinished upload waits for its next chunk.
+	uploadIdle = 24 * time.Hour
 )
 
 type upload struct {
@@ -51,6 +58,9 @@ type upload struct {
 	expect *fileState
 	// hash is the checksum of what arrived so far.
 	hash hash.Hash
+	// touched is when the upload started or last got a chunk, in Unix
+	// nanoseconds.
+	touched atomic.Int64
 }
 
 type uploads struct {
@@ -123,6 +133,8 @@ func readUploadStart(w http.ResponseWriter, r *http.Request) (uploadStart, bool)
 
 // beginUpload checks the quota and starts the upload u, answering with its id.
 func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
+	u.touched.Store(time.Now().UnixNano())
+	f.dropIdleUploads()
 	if ok, err := f.fits(u.size); err != nil {
 		f.diskError(w, "counting the usage", err)
 		return
@@ -193,6 +205,7 @@ func (f *Files) receiveChunk(w http.ResponseWriter, r *http.Request, id, share s
 		writeError(w, http.StatusNotFound, "Upload nicht gefunden")
 		return
 	}
+	u.touched.Store(time.Now().UnixNano())
 	offset, err := strconv.ParseInt(r.Header.Get("Upload-Offset"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "Upload-Offset fehlt")
@@ -332,6 +345,27 @@ func (f *Files) upload(id, share string) *upload {
 		return nil
 	}
 	return u
+}
+
+// dropIdleUploads gives up the uploads that got no chunk for uploadIdle, such
+// as those of a closed browser tab, so their chunks do not stay on the disk
+// and their size does not keep counting against the quota.
+func (f *Files) dropIdleUploads() {
+	cutoff := time.Now().Add(-uploadIdle).UnixNano()
+	var idle []string
+	f.uploads.mu.Lock()
+	for id, u := range f.uploads.byID {
+		if u.touched.Load() < cutoff {
+			delete(f.uploads.byID, id)
+			idle = append(idle, id)
+		}
+	}
+	f.uploads.mu.Unlock()
+	for _, id := range idle {
+		if err := f.root.Remove(path.Join(uploadDir, id)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("removing an unfinished upload", "err", err)
+		}
+	}
 }
 
 // freeName is name, or when that is taken the first free one of

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // uploadSetup is like setup and also returns the data directory.
@@ -192,5 +193,37 @@ func TestUploadFolderHidden(t *testing.T) {
 	}
 	if rec := get(h, "/api/download", "/"+uploadDir+"/"+id, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("download of a chunk file: status %d, want 404", rec.Code)
+	}
+}
+
+// An upload that gets no chunk for a day is given up: its chunks go and its
+// size no longer counts against the quota.
+func TestIdleUploadDropped(t *testing.T) {
+	data := t.TempDir()
+	f, err := Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	f.quota.Store(10)
+	mux := http.NewServeMux()
+	f.Register(mux, func(next http.HandlerFunc) http.HandlerFunc { return next })
+
+	code, idle := start(t, mux, "/a.bin", 10)
+	if code != http.StatusCreated {
+		t.Fatalf("start: status %d", code)
+	}
+	if code, _ := start(t, mux, "/b.bin", 10); code != http.StatusInsufficientStorage {
+		t.Fatalf("second start while the first is open: status %d, want 507", code)
+	}
+	f.uploads.byID[idle].touched.Store(time.Now().Add(-uploadIdle - time.Minute).UnixNano())
+	if code, _ := start(t, mux, "/b.bin", 10); code != http.StatusCreated {
+		t.Fatalf("start after the first went idle: status %d", code)
+	}
+	if code, _ := chunk(mux, idle, 0, "0123456789"); code != http.StatusNotFound {
+		t.Errorf("chunk of the idle upload: status %d, want 404", code)
+	}
+	if _, err := os.Stat(filepath.Join(data, uploadDir, idle)); !os.IsNotExist(err) {
+		t.Errorf("the idle upload's chunks are still there: %v", err)
 	}
 }
