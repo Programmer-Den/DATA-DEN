@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -75,4 +76,10 @@ func autostart(on bool) error {
 	}
 	fmt.Println("Autostart an: die Synchronisation startet bei jeder Anmeldung")
 	return nil
+}
+
+// openFile opens name with the program Windows has for it, as a double
+// click would.
+func openFile(name string) error {
+	return exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", name).Start() //nolint:gosec // a file the user asked to open
 }

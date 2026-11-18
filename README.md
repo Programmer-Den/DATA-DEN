@@ -550,8 +550,9 @@ What this costs:
 - No search, previews, thumbnails, text recognition, share links, shared
   folders, versions or recycle bin for the vault: the server cannot read
   what it would need. Deleting there is for good, after a question.
-- The desktop sync client, the Android app and the network drive (WebDAV)
-  do not see the vault; only the website does.
+- The folder sync, the Android app and the network drive (WebDAV) do not
+  see the vault. Besides the website, the desktop sync client opens it on
+  demand with `data-den-sync tresor` (see [Desktop sync](#desktop-sync)).
 - At most 1 GB per file, as the browser holds a file in memory to encrypt
   or decrypt it.
 - It protects against the server side, not against the device the vault is
@@ -575,6 +576,9 @@ How it works (all WebCrypto, in `frontend/src/app/vault/vault-crypto.ts`):
   sealed with AES-256-GCM under a counter nonce with a last-chunk flag, so
   chunks cannot be swapped, dropped or cut off unnoticed. Layout: `DDV1`,
   the 32-byte salt, the chunks.
+- The sync client does the same in Go with the standard library
+  (`backend/internal/vault`), tested against a vault the website made
+  (`testdata/web.json`), so either side opens what the other sealed.
 - The server keeps the wrapped keys in `.data-den-vault/keys.json` with the
   SHA-256 of a proof derived from the vault key. New wrapped keys (a new
   passphrase or recovery key) are only accepted with that proof, so a
@@ -639,6 +643,35 @@ stops instead of deleting everything. Names Windows cannot hold (`:`, `?`,
 `CON` and the like) and names that differ only in case are left out with a
 line in the log; `desktop.ini`, `Thumbs.db`, `~$` Office lock files and
 `.tmp` files are never synced.
+
+### Vault (Tresor) on the PC
+
+The vault is not synced: a synced copy would keep every file decrypted on
+the PC's disk, and the passphrase stored for the background sync, which is
+what the vault is meant to avoid. Instead `data-den-sync tresor` opens it on
+demand in the window, with the passphrase or the recovery key typed in
+(never stored), and encrypts and decrypts on the PC in the same format as
+the website:
+
+```text
+.\data-den-sync.exe tresor
+Passphrase oder Wiederherstellungsschlüssel:
+Tresor /> ls
+Tresor /> cd Steuern
+Tresor /Steuern> put "C:\Scans\Bescheid 2025.pdf"
+Tresor /Steuern> get "Bescheid 2025.pdf" C:\Users\me\Desktop
+Tresor /Steuern> open "Bescheid 2025.pdf"
+Tresor /Steuern> exit
+```
+
+`help` lists all commands (`ls`, `cd`, `get`, `put`, `open`, `mkdir`, `mv`,
+`rm`, `lock`, `exit`). `get` writes a decrypted copy where it is told and
+keeps it; `open` decrypts into a temporary folder, opens the file with its
+program and deletes that copy when the vault locks, so changes to it must go
+back up with `put`. The vault locks on `exit`, `lock`, Ctrl+C or after 15
+minutes without a command. A download that does not decrypt in full
+(damaged or changed on the server) leaves nothing behind. The vault itself
+is set up, and its passphrase and recovery key changed, on the website.
 
 ## Status
 

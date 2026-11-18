@@ -31,6 +31,7 @@ const usage = `Usage: data-den-sync <command>
   run [--hidden]   sync now and then every minute; --hidden closes the window (Windows)
   once             sync once
   autostart on|off start "run --hidden" at login (Windows)
+  tresor           open the vault (Tresor) with its passphrase, on this PC only
   version          print the version`
 
 // Config is what setup asks for, kept in config.json.
@@ -64,6 +65,10 @@ func main() {
 		} else {
 			err = autostart(os.Args[2] == "on")
 		}
+	case "tresor":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		err = runTresor(ctx)
+		stop()
 	case "version":
 		fmt.Println(version.Version)
 	default:
