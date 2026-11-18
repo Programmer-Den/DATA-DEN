@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { App, shareIdOf } from './app';
+import { App, SETUP_POLL, shareIdOf } from './app';
 import type { Usage } from './account/account';
 import { StatusReport } from './status/status.service';
 
@@ -68,6 +68,40 @@ describe('App', () => {
     http.expectOne('/api/health');
     http.expectOne('/api/session');
     expect(page(fixture).querySelector('h1')?.textContent).toBe('DATA-DEN');
+  });
+
+  it('shows the setup until the owner is created, then the login', async () => {
+    const fixture = TestBed.createComponent(App);
+    http.expectOne('/api/health').flush({ status: 'ok', version: '1.2.3', setup: true });
+    http
+      .expectOne('/api/session')
+      .flush({ error: 'not found' }, { status: 404, statusText: 'Not Found' });
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('app-setup')).not.toBeNull();
+    expect(page(fixture).querySelector('form.login')).toBeNull();
+
+    vi.useFakeTimers();
+    try {
+      const setup = fixture.debugElement.query((d) => d.name === 'app-setup');
+      setup.triggerEventHandler('done', 'chriszly');
+      // The setup's server still answers, then none, then the full one.
+      http.expectOne('/api/health').flush({ status: 'ok', version: '1.2.3', setup: true });
+      vi.advanceTimersByTime(SETUP_POLL);
+      http.expectOne('/api/health').flush('', { status: 502, statusText: 'Bad Gateway' });
+      vi.advanceTimersByTime(SETUP_POLL);
+      http.expectOne('/api/health').flush({ status: 'ok', version: '1.2.3' });
+      http
+        .expectOne('/api/session')
+        .flush({ error: 'Nicht angemeldet' }, { status: 401, statusText: 'Unauthorized' });
+    } finally {
+      vi.useRealTimers();
+    }
+    await fixture.whenStable();
+    expect(page(fixture).querySelector('app-setup')).toBeNull();
+    expect(page(fixture).querySelector<HTMLInputElement>('input[name=username]')?.value).toBe(
+      'chriszly',
+    );
+    expect(page(fixture).textContent).toContain('Hauptkonto angelegt');
   });
 
   it('says when the server cannot be reached', async () => {

@@ -6,8 +6,10 @@ export interface Session {
   username: string;
   /** Admins manage the accounts. */
   admin?: boolean;
-  /** The owner's account comes from the server's settings. */
+  /** The owner's account is always an admin. */
   owner?: boolean;
+  /** The owner's password is in the server's settings and cannot be changed here. */
+  fixedPassword?: boolean;
   /** Whether the login needs a code from an authenticator app. */
   twoFactor?: boolean;
 }
@@ -21,8 +23,10 @@ export class AuthService {
   readonly user = signal<string | null | undefined>(undefined);
   /** Whether the logged-in user manages the accounts. */
   readonly admin = signal(false);
-  /** Whether the logged-in user is the owner, whose password is in the server's settings. */
+  /** Whether the logged-in user is the owner. */
   readonly owner = signal(false);
+  /** Whether the user's password is in the server's settings, not changeable here. */
+  readonly fixedPassword = signal(false);
   /** Whether the logged-in user has the two-factor login on. */
   readonly twoFactor = signal(false);
 
@@ -50,6 +54,7 @@ export class AuthService {
   private set(session: Session | null): void {
     this.admin.set(session?.admin ?? false);
     this.owner.set(session?.owner ?? false);
+    this.fixedPassword.set(session?.fixedPassword ?? false);
     this.twoFactor.set(session?.twoFactor ?? false);
     this.user.set(session?.username ?? null);
   }

@@ -1,0 +1,44 @@
+form {
+  display: grid;
+  gap: 1rem;
+  max-width: 20rem;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+pre {
+  overflow-x: auto;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.checks {
+  padding-left: 0;
+  list-style: none;
+}
+
+.checks li {
+  margin-bottom: 0.5rem;
+}
+
+.ok {
+  color: #2e7d32;
+}
+
+.error,
+.warn {
+  color: #c62828;
+}
+
+.hint {
+  opacity: 0.7;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}

@@ -24,8 +24,36 @@ downloads, uploads and a status page.
 
 ## Login
 
-The owner's account comes from the settings below. Its password is stored
-only as a bcrypt hash:
+### First run
+
+On a fresh install, with `DATA_DEN_PASSWORD_HASH` left empty, DATA-DEN only
+serves its setup page (**Einrichtung**) until the owner's account exists:
+
+1. **Setup code:** it proves that you have access to the VM, as the page is
+   already reachable from the internet. The server prints it in its log and
+   writes it to `.data-den-accounts/setup-code` in the data directory:
+   `sudo docker compose logs data-den | grep code` or
+   `sudo cat /srv/data-den/.data-den-accounts/setup-code` in the VM. Ten wrong
+   codes replace it with a new one.
+2. **Checks:** whether the data directory is writable, the free space, the
+   RAID, HTTPS between the Pi and the VM (`DATA_DEN_TLS_CERT`), the Pi's
+   address (`DATA_DEN_TRUSTED_PROXY`) and whether the page was opened over
+   HTTPS, each with what to do about a warning. Only a data directory that is
+   not writable stops the setup; the rest can be fixed later.
+3. **Account:** the owner's name (a-z, 0-9, `.`, `-`, `_`) and password (at
+   least 10 characters). It is saved as `.data-den-accounts/owner.json` in the
+   data directory, with a bcrypt hash of the password; the code file is
+   removed and the full server starts on the same port, without a restart.
+
+The owner then logs in, and changes the password in the **Konto** tab like
+everyone else. Deleting `owner.json` while DATA-DEN is stopped starts the
+setup again with the same files.
+
+### Owner in the settings
+
+Instead, the owner's account can come from the settings below, which take
+precedence over `owner.json`. Its password is stored only as a bcrypt hash
+and can then only be changed in the settings:
 
 ```bash
 cd backend && go run ./cmd/data-den hash-password       # or: docker run --rm -i data-den hash-password
@@ -38,8 +66,8 @@ Compose reads its `$` signs as variables.
 
 | Setting | Meaning |
 |---|---|
-| `DATA_DEN_USERNAME` | The owner's account name |
-| `DATA_DEN_PASSWORD_HASH` | The hash from `hash-password`; without it nobody can log in |
+| `DATA_DEN_USERNAME` | The owner's account name, used together with the hash |
+| `DATA_DEN_PASSWORD_HASH` | The hash from `hash-password`; without it the owner comes from the [setup page](#first-run) |
 | `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
 | `DATA_DEN_TRASH_DAYS` | How many days, 1 to 3650, a deleted item stays in the recycle bin before it is deleted for good; default 30 |
@@ -66,8 +94,7 @@ The owner is always an admin. Admins add further accounts in the
 **Benutzer** tab: a name (a-z, 0-9, `.`, `-`, `_`), a first password (at
 least 10 characters), whether it is an admin too, and a quota in GB (empty
 for no limit). They can change the quota and admin role, set a new password
-and delete an account later; the owner's account can only be changed in the
-settings. In the **Konto** tab everyone sees how much they store of their
+and delete an account later; the owner's account cannot be changed there. In the **Konto** tab everyone sees how much they store of their
 quota and changes their own password; a new password logs out the other
 devices.
 

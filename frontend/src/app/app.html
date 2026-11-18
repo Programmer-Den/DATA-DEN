@@ -4,6 +4,12 @@
     <app-public-share [id]="id" />
   } @else if (offline()) {
     <p class="status">Server nicht erreichbar</p>
+  } @else if (setup()) {
+    @if (newOwner()) {
+      <p class="status" role="status">Hauptkonto angelegt, DATA-DEN startet …</p>
+    } @else {
+      <app-setup (done)="setupDone($event)" />
+    }
   } @else if (auth.user() === undefined) {
     <p class="status">Verbinde …</p>
   } @else if (auth.user(); as user) {
@@ -99,9 +105,15 @@
     }
   } @else {
     <form class="login" (submit)="login($event, username.value, password.value)">
+      @if (newOwner()) {
+        <p class="ok" role="status">
+          Hauptkonto angelegt. Melde dich an und schalte danach unter Konto die
+          Zwei-Faktor-Anmeldung ein.
+        </p>
+      }
       <label>
         Benutzername
-        <input #username name="username" autocomplete="username" required />
+        <input #username name="username" autocomplete="username" [value]="newOwner()" required />
       </label>
       <label>
         Passwort

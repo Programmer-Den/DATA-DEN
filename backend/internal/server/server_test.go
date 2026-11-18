@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/setup"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 )
@@ -37,6 +39,35 @@ func TestHealth(t *testing.T) {
 	}
 	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Errorf("X-Content-Type-Options %q, want nosniff", got)
+	}
+}
+
+func TestSetupMode(t *testing.T) {
+	dir := t.TempDir()
+	first, err := setup.New(setup.Config{OwnerFile: filepath.Join(dir, "owner.json"), DataDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(Config{Files: fstest.MapFS{"index.html": {Data: []byte("app")}}, Version: "1.2.3", Setup: first})
+	var health map[string]any
+	if err := json.Unmarshal(get(t, h, "/api/health").Body.Bytes(), &health); err != nil {
+		t.Fatal(err)
+	}
+	if health["setup"] != true {
+		t.Errorf("health %v, want setup", health)
+	}
+	// No login and no files before the setup.
+	for _, path := range []string{"/api/session", "/api/files/"} {
+		if rec := get(t, h, path); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: status %d, want 404", path, rec.Code)
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/setup/check", strings.NewReader(`{"code":"x"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("setup check: status %d, want 403", rec.Code)
 	}
 }
 

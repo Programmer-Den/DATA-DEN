@@ -15,7 +15,7 @@
 
 <section>
   <h2>Passwort</h2>
-  @if (auth.owner()) {
+  @if (auth.fixedPassword()) {
     <p class="hint">
       Das Passwort des Hauptkontos steht in den Einstellungen des Servers (DATA_DEN_PASSWORD_HASH).
     </p>
