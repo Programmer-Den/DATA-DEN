@@ -430,7 +430,9 @@ func TestCreateCountsAgainstTheQuota(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = root.Close() })
 	var used int64
-	a := account{name: "anna", root: root,
+	a := account{
+		name:  "anna",
+		root:  root,
 		fits:  func(n int64) (bool, error) { return used+n <= 100, nil },
 		added: func(n int64) { used += n },
 	}
