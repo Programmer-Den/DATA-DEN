@@ -2,12 +2,14 @@ package files
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 // davSetup serves WebDAV with Spaces like spacesSetup: the account is the
@@ -266,6 +268,71 @@ func TestDavLocksAcrossDrives(t *testing.T) {
 	}
 	if rec := dav(h, "chef", http.MethodPut, "/dav/Projekt/a.txt", "chef", nil); rec.Code != http.StatusLocked {
 		t.Errorf("chef PUT on anna's lock: status %d, want 423", rec.Code)
+	}
+}
+
+// A grantee can neither undo nor use the owner's locks, and a read-only
+// grantee takes none.
+func TestDavLocksStayWithTheirDrive(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+	ro := grantTo(t, h, "chef", `{"path":"/Projekt","to":"bob"}`)
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	rec := dav(h, "chef", "LOCK", "/dav/geheim.txt", lock, map[string]string{"Depth": "0"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chef LOCK: status %d", rec.Code)
+	}
+	outside := strings.Trim(rec.Header().Get("Lock-Token"), "<>")
+	if !strings.HasPrefix(outside, "opaquelocktoken:") || len(outside) < 40 {
+		t.Errorf("a guessable token: %q", outside)
+	}
+	if rec := dav(h, "chef", "LOCK", "/dav/Projekt/a.txt", lock, map[string]string{"Depth": "0"}); rec.Code != http.StatusOK {
+		t.Fatalf("chef LOCK inside: status %d", rec.Code)
+	}
+	root := "/dav-shared/" + g.ID + "/"
+	if rec := dav(h, "anna", "UNLOCK", root+"a.txt", "", map[string]string{"Lock-Token": "<" + outside + ">"}); rec.Code == http.StatusNoContent {
+		t.Error("anna removed chef's lock outside the shared folder")
+	}
+	if rec := dav(h, "chef", http.MethodPut, "/dav/geheim.txt", "x", nil); rec.Code != http.StatusLocked {
+		t.Errorf("chef's lock is gone: PUT status %d", rec.Code)
+	}
+	if rec := dav(h, "chef", "UNLOCK", "/dav/geheim.txt", "", map[string]string{"Lock-Token": "<" + outside + ">"}); rec.Code != http.StatusNoContent {
+		t.Errorf("chef UNLOCK: status %d", rec.Code)
+	}
+	// The lock system's own tokens count up; they are no way in.
+	for _, guess := range []string{"1", "2"} {
+		if rec := dav(h, "anna", http.MethodPut, root+"a.txt", "anna", map[string]string{"If": "(<" + guess + ">)"}); rec.Code < 400 {
+			t.Errorf("anna PUT with token %s: status %d", guess, rec.Code)
+		}
+	}
+	if rec := dav(h, "bob", "LOCK", "/dav-shared/"+ro.ID+"/", lock, map[string]string{"Depth": "infinity"}); rec.Code != http.StatusForbidden {
+		t.Errorf("read-only LOCK: status %d, want 403", rec.Code)
+	}
+}
+
+// An upload whose body broke off leaves the old file as it was.
+func TestDavBrokenUploadKeepsTheFile(t *testing.T) {
+	_, h, data := davSetup(t)
+	if rec := dav(h, "chef", http.MethodPut, "/dav/a.txt", "alt", nil); rec.Code != http.StatusCreated {
+		t.Fatalf("PUT: status %d", rec.Code)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/dav/a.txt", io.MultiReader(strings.NewReader("neu und abgebr"), iotest.ErrReader(io.ErrUnexpectedEOF)))
+	req.Header.Set("X-User", "chef")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code < 400 {
+		t.Errorf("broken PUT: status %d", rec.Code)
+	}
+	req = httptest.NewRequest(http.MethodPut, "/dav/a.txt", strings.NewReader("kurz"))
+	req.ContentLength = 100
+	req.Header.Set("X-User", "chef")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code < 400 {
+		t.Errorf("short PUT: status %d", rec.Code)
+	}
+	if got := readFile(t, filepath.Join(data, "a.txt")); got != "alt" {
+		t.Errorf("the file holds %q, want the old one", got)
 	}
 }
 

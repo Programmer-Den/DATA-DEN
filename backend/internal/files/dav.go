@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"hash"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -59,7 +60,7 @@ func newDavHandler(prefix string, d davFS) *webdav.Handler {
 	return &webdav.Handler{
 		Prefix:     prefix,
 		FileSystem: d,
-		LockSystem: lockIn{ls: d.f.locks(), dir: d.dir},
+		LockSystem: lockIn{s: d.f.locks(), dir: d.dir, readOnly: d.readOnly},
 		Logger: func(r *http.Request, err error) {
 			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				slog.Warn("webdav", "method", r.Method, "path", r.URL.Path, "err", err)
@@ -69,16 +70,49 @@ func newDavHandler(prefix string, d davFS) *webdav.Handler {
 }
 
 // locks are the WebDAV locks of this space.
-func (f *Files) locks() webdav.LockSystem {
-	f.davLocksOnce.Do(func() { f.davLocks = webdav.NewMemLS() })
+func (f *Files) locks() *spaceLocks {
+	f.davLocksOnce.Do(func() {
+		f.davLocks = &spaceLocks{ls: webdav.NewMemLS(), byToken: map[string]spaceLock{}}
+	})
 	return f.davLocks
+}
+
+// spaceLocks are the locks of a space, shared by its own drive and the
+// drives of its shared folders. The lock system's own tokens count up, so
+// a client only ever sees a random token of its own in their place, and
+// each lock remembers its root, so a drive can only touch the locks within
+// its folder.
+type spaceLocks struct {
+	ls      webdav.LockSystem
+	mu      sync.Mutex
+	byToken map[string]spaceLock
+}
+
+// spaceLock is a lock as spaceLocks keeps it: the lock system's token, the
+// lock's root within the space and when it runs out.
+type spaceLock struct {
+	token string
+	root  string
+	// until is when it runs out, zero for never.
+	until time.Time
+}
+
+// lock is the lock of the client's token, false when there is none.
+func (s *spaceLocks) lock(token string) (spaceLock, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l, ok := s.byToken[token]
+	return l, ok
 }
 
 // lockIn are the locks of a space as a drive of its folder dir sees them:
 // a file locked on one drive is locked on every drive that shows it.
 type lockIn struct {
-	ls  webdav.LockSystem
+	s   *spaceLocks
 	dir string
+	// readOnly refuses new locks: a drive that may only be read must not
+	// keep others from writing.
+	readOnly bool
 }
 
 // full is the name within the space of name within dir.
@@ -89,36 +123,152 @@ func (l lockIn) full(name string) string {
 	return path.Join("/", l.dir, name)
 }
 
+// mine is the lock of token when its root lies within dir.
+func (l lockIn) mine(token string) (spaceLock, bool) {
+	lock, ok := l.s.lock(token)
+	if !ok {
+		return spaceLock{}, false
+	}
+	if l.dir == "." {
+		return lock, true
+	}
+	top := "/" + l.dir
+	return lock, lock.root == top || strings.HasPrefix(lock.root, top+"/")
+}
+
 func (l lockIn) Confirm(now time.Time, name0, name1 string, conditions ...webdav.Condition) (func(), error) {
-	return l.ls.Confirm(now, l.full(name0), l.full(name1), conditions...)
+	inner := make([]webdav.Condition, len(conditions))
+	for i, c := range conditions {
+		inner[i] = c
+		if c.Token == "" {
+			continue
+		}
+		// An unknown token, or one of a lock outside this drive, matches
+		// no lock.
+		inner[i].Token = "unknown:" + c.Token
+		if lock, ok := l.mine(c.Token); ok {
+			inner[i].Token = lock.token
+		}
+	}
+	return l.s.ls.Confirm(now, l.full(name0), l.full(name1), inner...)
 }
 
 func (l lockIn) Create(now time.Time, details webdav.LockDetails) (string, error) {
+	if l.readOnly {
+		return "", webdav.ErrForbidden
+	}
 	details.Root = l.full(details.Root)
-	return l.ls.Create(now, details)
+	inner, err := l.s.ls.Create(now, details)
+	if err != nil {
+		return "", err
+	}
+	id, err := newID()
+	if err != nil {
+		_ = l.s.ls.Unlock(now, inner)
+		return "", err
+	}
+	token := "opaquelocktoken:" + id
+	l.s.mu.Lock()
+	defer l.s.mu.Unlock()
+	// The lock system drops locks that ran out; so are their tokens here.
+	for t, lock := range l.s.byToken {
+		if !lock.until.IsZero() && now.After(lock.until) {
+			delete(l.s.byToken, t)
+		}
+	}
+	l.s.byToken[token] = spaceLock{token: inner, root: details.Root, until: expires(now, details.Duration)}
+	return token, nil
 }
 
 func (l lockIn) Refresh(now time.Time, token string, duration time.Duration) (webdav.LockDetails, error) {
-	details, err := l.ls.Refresh(now, token, duration)
-	if err == nil && l.dir != "." {
-		root, ok := strings.CutPrefix(details.Root, "/"+l.dir)
-		if !ok || (root != "" && !strings.HasPrefix(root, "/")) {
-			// A lock of another drive, outside this folder.
-			return webdav.LockDetails{}, webdav.ErrNoSuchLock
-		}
-		details.Root = "/" + strings.TrimPrefix(root, "/")
+	lock, ok := l.mine(token)
+	if !ok {
+		return webdav.LockDetails{}, webdav.ErrNoSuchLock
 	}
-	return details, err
+	details, err := l.s.ls.Refresh(now, lock.token, duration)
+	if err != nil {
+		if errors.Is(err, webdav.ErrNoSuchLock) {
+			l.s.forget(token)
+		}
+		return details, err
+	}
+	lock.until = expires(now, duration)
+	l.s.mu.Lock()
+	l.s.byToken[token] = lock
+	l.s.mu.Unlock()
+	if l.dir != "." {
+		details.Root = "/" + strings.TrimPrefix(strings.TrimPrefix(details.Root, "/"+l.dir), "/")
+	}
+	return details, nil
 }
 
 func (l lockIn) Unlock(now time.Time, token string) error {
-	return l.ls.Unlock(now, token)
+	lock, ok := l.mine(token)
+	if !ok {
+		return webdav.ErrNoSuchLock
+	}
+	err := l.s.ls.Unlock(now, lock.token)
+	if err == nil || errors.Is(err, webdav.ErrNoSuchLock) {
+		l.s.forget(token)
+	}
+	return err
+}
+
+// forget drops the client's token.
+func (s *spaceLocks) forget(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.byToken, token)
+}
+
+// expires is when a lock of duration taken at now runs out; zero for never.
+func expires(now time.Time, duration time.Duration) time.Time {
+	if duration < 0 {
+		return time.Time{}
+	}
+	return now.Add(duration)
 }
 
 // ServeDAV answers a WebDAV request for this space; the login was checked
 // before.
 func (f *Files) ServeDAV(w http.ResponseWriter, r *http.Request) {
-	f.davHandler().ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestKey{}, r)))
+	f.davHandler().ServeHTTP(w, davRequest(r))
+}
+
+// davRequest is r for the WebDAV handler: with itself in its context, for
+// the audit log, and with a body that remembers when reading it failed.
+func davRequest(r *http.Request) *http.Request {
+	r = r.WithContext(r.Context())
+	r.Body = &davBody{ReadCloser: r.Body}
+	return r.WithContext(context.WithValue(r.Context(), requestKey{}, r))
+}
+
+// davBody is a request body that remembers when reading it failed, as the
+// WebDAV handler closes an upload as finished even then.
+type davBody struct {
+	io.ReadCloser
+	err error
+}
+
+func (b *davBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && err != io.EOF {
+		b.err = err
+	}
+	return n, err
+}
+
+// complete reports whether the upload of size bytes for the request in ctx
+// arrived whole: its body was read without an error, and to its length.
+func complete(ctx context.Context, size int64) bool {
+	r, ok := ctx.Value(requestKey{}).(*http.Request)
+	if !ok {
+		return true
+	}
+	if b, ok := r.Body.(*davBody); ok && b.err != nil {
+		return false
+	}
+	return r.ContentLength < 0 || r.ContentLength == size
 }
 
 // davFS is a space, or a folder in it, as a webdav.FileSystem.
@@ -465,7 +615,7 @@ func (u *davUpload) finish() error {
 	f := u.d.f
 	closeErr := u.file.Close()
 	defer func() { _ = f.root.Remove(u.tmp) }()
-	if u.failed || closeErr != nil {
+	if u.failed || closeErr != nil || !complete(u.ctx, u.size) {
 		return errors.Join(errors.New("upload not finished"), closeErr)
 	}
 	link := f.root.Link
