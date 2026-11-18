@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -59,6 +60,9 @@ type Config struct {
 	// Audit notes logins and changes to accounts in the audit log; nil
 	// notes nothing.
 	Audit func(r *http.Request, user, action, target string)
+	// Origin is the address the site is opened at, such as
+	// https://nas.example.de, for passkeys; empty turns them off.
+	Origin string
 	// TrustedProxy is the address of the reverse proxy (the Pi). Only for
 	// requests from it is X-Forwarded-For used as the client's address.
 	TrustedProxy string
@@ -80,9 +84,17 @@ type Auth struct {
 	// pendingSecrets are secrets being set up, until the first code fits.
 	pendingSecrets map[string]pendingSecret
 	// tokens are the app passwords, by the hash of the token.
-	tokens   map[string]Token
-	sessions map[string]session
-	failures map[string][]time.Time
+	tokens map[string]Token
+	// rp checks passkeys; nil when Config.Origin is empty.
+	rp *webauthn.WebAuthn
+	// passkeys are by credential ID (base64url).
+	passkeys map[string]Passkey
+	// pendingPasskeys are registrations by account, passkeyLogins started
+	// logins by their id.
+	pendingPasskeys map[string]ceremony
+	passkeyLogins   map[string]ceremony
+	sessions        map[string]session
+	failures        map[string][]time.Time
 }
 
 type session struct {
@@ -123,20 +135,28 @@ func New(cfg Config) (*Auth, error) {
 	if err != nil {
 		return nil, err
 	}
+	rp, err := newRelyingParty(cfg.Origin)
+	if err != nil {
+		return nil, err
+	}
 	stored, err := loadAccounts(cfg.AccountsFile, cfg.Username)
 	if err != nil {
 		return nil, err
 	}
 	return &Auth{
-		cfg:            cfg,
-		dummy:          dummy,
-		ownerHash:      cfg.PasswordHash,
-		accounts:       stored.accounts,
-		twoFactor:      stored.twoFactor,
-		pendingSecrets: map[string]pendingSecret{},
-		tokens:         stored.tokens,
-		sessions:       map[string]session{},
-		failures:       map[string][]time.Time{},
+		cfg:             cfg,
+		dummy:           dummy,
+		ownerHash:       cfg.PasswordHash,
+		accounts:        stored.accounts,
+		twoFactor:       stored.twoFactor,
+		pendingSecrets:  map[string]pendingSecret{},
+		tokens:          stored.tokens,
+		rp:              rp,
+		passkeys:        stored.passkeys,
+		pendingPasskeys: map[string]ceremony{},
+		passkeyLogins:   map[string]ceremony{},
+		sessions:        map[string]session{},
+		failures:        map[string][]time.Time{},
 	}, nil
 }
 
@@ -149,6 +169,7 @@ func (a *Auth) Register(mux *http.ServeMux) {
 	a.registerAccounts(mux)
 	a.registerTwoFactor(mux)
 	a.registerTokens(mux)
+	a.registerPasskeys(mux)
 }
 
 type userKey struct{}
@@ -351,7 +372,11 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.clearFailures(ip)
+	a.startSession(w, r, account, "password")
+}
 
+// startSession logs account in on the client of r, which used method.
+func (a *Auth) startSession(w http.ResponseWriter, r *http.Request, account Account, method string) {
 	token, err := newToken()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Anmeldung fehlgeschlagen")
@@ -363,8 +388,12 @@ func (a *Auth) login(w http.ResponseWriter, r *http.Request) {
 	a.sessions[token] = session{username: account.Name, expires: expires}
 	a.mu.Unlock()
 
-	slog.Info("login", "ip", ip, "username", account.Name)
-	a.note(r, account.Name, "login", "")
+	slog.Info("login", "ip", a.clientIP(r), "username", account.Name, "method", method)
+	target := ""
+	if method == "passkey" {
+		target = "Passkey"
+	}
+	a.note(r, account.Name, "login", target)
 	http.SetCookie(w, cookie(token, expires))
 	writeJSON(w, http.StatusOK, a.sessionInfo(account))
 }

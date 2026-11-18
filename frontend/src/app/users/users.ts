@@ -17,6 +17,8 @@ export interface User {
   twoFactor: boolean;
   /** How many app passwords it has. */
   tokens: number;
+  /** How many passkeys it has. */
+  passkeys: number;
 }
 
 const GB = 1024 ** 3;
@@ -132,6 +134,19 @@ export class UsersView {
       this.act(
         this.http.post(`/api/users/${user.name}`, { tokens: false }),
         `App-Passwörter von „${user.name}“ widerrufen`,
+      );
+    }
+  }
+
+  protected removePasskeys(user: User): void {
+    if (
+      confirm(
+        `Alle ${user.passkeys} Passkeys von „${user.name}“ entfernen, etwa weil ein Gerät verloren ist?`,
+      )
+    ) {
+      this.act(
+        this.http.post(`/api/users/${user.name}`, { passkeys: false }),
+        `Passkeys von „${user.name}“ entfernt`,
       );
     }
   }

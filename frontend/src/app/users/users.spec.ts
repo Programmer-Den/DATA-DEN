@@ -13,6 +13,7 @@ const users: User[] = [
     used: 2 * 1024 ** 3,
     twoFactor: false,
     tokens: 1,
+    passkeys: 0,
   },
   {
     name: 'anna',
@@ -22,6 +23,7 @@ const users: User[] = [
     used: 1024,
     twoFactor: true,
     tokens: 2,
+    passkeys: 0,
   },
 ];
 

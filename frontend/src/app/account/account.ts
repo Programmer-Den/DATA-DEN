@@ -3,6 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { AuthService, errorMessage } from '../auth.service';
 import { formatSize } from '../format';
+import { PasskeysView } from './passkeys';
 import { TokensView } from './tokens';
 
 export interface Usage {
@@ -26,10 +27,10 @@ export interface TwoFactorSetup {
   qr: string;
 }
 
-/** One's own account: storage used, password, two-factor login and app passwords. */
+/** One's own account: storage used, password, two-factor login, passkeys and app passwords. */
 @Component({
   selector: 'app-account',
-  imports: [TokensView],
+  imports: [PasskeysView, TokensView],
   templateUrl: './account.html',
   styleUrl: './account.css',
 })

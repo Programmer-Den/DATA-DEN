@@ -72,6 +72,7 @@ nano .env && chmod 600 .env
 
 ```bash
 DATA_DEN_TRUSTED_PROXY=192.168.1.20      # the Pi's address
+DATA_DEN_ORIGIN=https://nas.example.de   # the Pi's DATADEN_DOMAIN, for passkeys
 ```
 
 The owner's account is created on the setup page after the start

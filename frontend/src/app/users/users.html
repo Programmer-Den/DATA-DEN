@@ -13,6 +13,7 @@
         <th scope="col">Admin</th>
         <th scope="col">2FA</th>
         <th scope="col">App-Passwörter</th>
+        <th scope="col">Passkeys</th>
         <th scope="col" class="size">Belegt</th>
         <th scope="col">Kontingent (GB)</th>
         <th scope="col"><span class="visually-hidden">Aktionen</span></th>
@@ -38,6 +39,7 @@
           </td>
           <td>{{ user.twoFactor ? 'an' : 'aus' }}</td>
           <td>{{ user.tokens }}</td>
+          <td>{{ user.passkeys }}</td>
           <td class="size">{{ user.used >= 0 ? formatSize(user.used) : '–' }}</td>
           <td>
             @if (user.owner) {
@@ -68,6 +70,11 @@
               @if (user.tokens > 0 && !user.owner) {
                 <button type="button" [disabled]="busy()" (click)="revokeTokens(user)">
                   App-Passwörter widerrufen
+                </button>
+              }
+              @if (user.passkeys > 0) {
+                <button type="button" [disabled]="busy()" (click)="removePasskeys(user)">
+                  Passkeys entfernen
                 </button>
               }
               @if (user.name !== auth.user()) {

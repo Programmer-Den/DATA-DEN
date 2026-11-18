@@ -132,6 +132,11 @@
         <p class="error" role="alert">{{ error }}</p>
       }
       <button type="submit" [disabled]="busy()">Anmelden</button>
+      @if (passkeys()) {
+        <button type="button" class="passkey" [disabled]="busy()" (click)="loginWithPasskey()">
+          Mit Passkey anmelden
+        </button>
+      }
     </form>
   }
 </main>
