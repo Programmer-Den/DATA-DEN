@@ -5,7 +5,9 @@ name: Release
 # (image.yml), and only then creates the tag v1.2.3 and the GitHub release
 # with the notes of the pull requests since the last one. The release gets
 # the Windows sync client, taken from that image, and the deploy folder as a
-# ZIP. "assets only" adds them again to a release that exists already.
+# ZIP, and the Android app, signed with the key from the secrets
+# ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and
+# ANDROID_KEY_PASSWORD (android/README.md). "assets only" adds them again to a release that exists already.
 # "Deploy DATA-DEN" in rpi-deploy-and-update deploys the newest release by
 # default.
 on:
@@ -36,6 +38,10 @@ jobs:
           VERSION: ${{ inputs.version }}
           ASSETS_ONLY: ${{ inputs.assets_only }}
           REF: ${{ github.ref }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
@@ -46,6 +52,10 @@ jobs:
           fi
           if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::'$VERSION' is not a version such as 1.2.3 (without v)."
+            exit 1
+          fi
+          if [[ -z "$KEYSTORE" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo "::error::The Android signing key is missing: add the secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD (android/README.md, Release signing)."
             exit 1
           fi
           if [[ "$ASSETS_ONLY" == true ]]; then
@@ -79,7 +89,17 @@ jobs:
       contents: write
       packages: read
     steps:
+      # The release's own commit, also when files are attached again later.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.assets_only && format('v{0}', inputs.version) || github.sha }}
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -102,6 +122,29 @@ jobs:
           ls assets/data-den-sync-windows-amd64.exe assets/data-den-sync-windows-arm64.exe
           git archive --format=zip --prefix="data-den-deploy-$VERSION/" -o "assets/data-den-deploy-$VERSION.zip" HEAD deploy
 
+      # Built unsigned and signed with apksigner, so this also works for a
+      # release from before the signing was set up.
+      - name: Build and sign the Android app
+        env:
+          VERSION: ${{ inputs.version }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          (cd android && ./gradlew --no-daemon :app:assembleRelease -PappVersion="$VERSION")
+          tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          keystore="$RUNNER_TEMP/release.jks"
+          trap 'rm -f "$keystore"' EXIT
+          base64 -d <<< "$KEYSTORE" > "$keystore"
+          apk="assets/data-den-android-$VERSION.apk"
+          "$tools/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD \
+            --out "$apk" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" verify "$apk"
+
       - name: Create the release
         if: ${{ !inputs.assets_only }}
         env:
@@ -112,7 +155,7 @@ jobs:
           set -euo pipefail
           gh release create "v$VERSION" --repo "$REPO" --target "$GITHUB_SHA" \
             --title "DATA-DEN $VERSION" --generate-notes \
-            --notes "Image: \`ghcr.io/${REPO,,}:$VERSION\` (amd64, arm64). Files: the Windows sync client and the deploy folder (compose files)."
+            --notes "Image: \`ghcr.io/${REPO,,}:$VERSION\` (amd64, arm64). Files: the Android app, the Windows sync client and the deploy folder (compose files)."
 
       - name: Attach the files
         env:
