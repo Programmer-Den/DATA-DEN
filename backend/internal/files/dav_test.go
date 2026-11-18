@@ -207,6 +207,32 @@ func TestDavSharedFolderRead(t *testing.T) {
 	}
 }
 
+func TestDavSharedFolderRefusesSymlinks(t *testing.T) {
+	_, h, data, _ := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+	root := "/dav-shared/" + g.ID + "/"
+	if err := os.Symlink("..", filepath.Join(data, "Projekt", "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../geheim.txt", filepath.Join(data, "Projekt", "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{root + "link/geheim.txt", root + "link.txt"} {
+		if rec := dav(h, "anna", http.MethodGet, target, "", nil); rec.Code == http.StatusOK {
+			t.Errorf("GET %s: served %q from outside the shared folder", target, rec.Body)
+		}
+	}
+	if rec := dav(h, "anna", "PROPFIND", root+"link/", "", map[string]string{"Depth": "1"}); rec.Code == http.StatusMultiStatus {
+		t.Errorf("PROPFIND through a symlink: %s", rec.Body)
+	}
+	if rec := dav(h, "anna", http.MethodPut, root+"link/neu.txt", "x", nil); rec.Code < 400 {
+		t.Errorf("PUT through a symlink: status %d", rec.Code)
+	}
+	if exists(data, "neu.txt") {
+		t.Error("wrote next to the shared folder")
+	}
+}
+
 func TestDavSharedFolderWrite(t *testing.T) {
 	_, h, data, audited := davGrantsSetup(t)
 	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
