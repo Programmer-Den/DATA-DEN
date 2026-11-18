@@ -55,10 +55,43 @@ resumes after the problem is fixed in the app.
 
 ## Install
 
-Every CI run builds a debug APK, `data-den-android-debug`, among the run's
+Each [release](https://github.com/Programmer-Den/DATA-DEN/releases) has the
+app as `data-den-android-<version>.apk`, signed with the project's own key,
+so a newer release installs over an older one and keeps its settings.
+Download it on the phone and allow installing from that source. It cannot
+replace a debug build (below): remove that one first.
+
+For testing, every CI run builds a debug APK, `data-den-android-debug`, among the run's
 artifacts. Download it on the phone and allow installing from that source.
 Debug builds of different runs are signed with different keys, so an
 update may need the old app removed first, and its settings with it.
+
+## Release signing
+
+The Release workflow (deploy/README.md, Releases) signs the app with a key
+kept only in the repository's secrets. Create it once, on any machine with
+a JDK, and keep `data-den-release.jks` and its password safe outside the
+repository, for example in a password manager: an app signed with another
+key cannot update the installed one.
+
+```bash
+keytool -genkeypair -v -keystore data-den-release.jks -alias data-den \
+  -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=DATA-DEN"
+base64 -w0 data-den-release.jks > data-den-release.jks.b64   # macOS: base64 -i data-den-release.jks
+```
+
+Then under **Settings › Secrets and variables › Actions › New repository
+secret**:
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the content of `data-den-release.jks.b64` |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password `keytool` asked for |
+| `ANDROID_KEY_ALIAS` | `data-den` |
+| `ANDROID_KEY_PASSWORD` | the same password (keytool uses the keystore's) |
+
+Delete the `.b64` file afterwards. One key per app: a key shared by several
+apps lets each of them claim to be the others' update.
 
 ## Development
 
