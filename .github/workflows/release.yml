@@ -1,0 +1,74 @@
+name: Release
+
+# Makes a release: Actions > Release > Run workflow on main, with a version
+# such as 1.2.3. It builds and pushes the image as "1.2.3" and "latest"
+# (image.yml), and only then creates the tag v1.2.3 and the GitHub release
+# with the notes of the pull requests since the last one. "Deploy DATA-DEN"
+# in rpi-deploy-and-update deploys the newest release by default.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version without v, such as 1.2.3'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check
+        env:
+          VERSION: ${{ inputs.version }}
+          REF: ${{ github.ref }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF" != refs/heads/main ]]; then
+            echo "::error::Releases come from main; run this workflow on main, not $REF."
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::'$VERSION' is not a version such as 1.2.3 (without v)."
+            exit 1
+          fi
+          if gh api "repos/$REPO/git/ref/tags/v$VERSION" --silent 2>/dev/null; then
+            echo "::error::v$VERSION exists already; pick the next version."
+            exit 1
+          fi
+
+  image:
+    name: Image
+    needs: check
+    uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ inputs.version }}
+    permissions:
+      contents: read
+      packages: write
+
+  release:
+    name: Tag and release
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release create "v$VERSION" --repo "$REPO" --target "$GITHUB_SHA" \
+            --title "DATA-DEN $VERSION" --generate-notes
+          echo "Released v$VERSION: ghcr.io/${REPO,,}:$VERSION" >> "$GITHUB_STEP_SUMMARY"

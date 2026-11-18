@@ -1,8 +1,8 @@
 # Running DATA-DEN in the storage VM
 
 Each push to `main` builds the image for amd64 and arm64 and pushes it to
-`ghcr.io/programmer-den/data-den:main` (`.github/workflows/image.yml`); a tag
-`v1.2.3` also as `1.2.3` and `latest`. In the storage VM it runs with
+`ghcr.io/programmer-den/data-den:main` (`.github/workflows/image.yml`); a
+release also as `1.2.3` and `latest`. In the storage VM it runs with
 `compose.yaml` from this folder:
 
 - on port **8443** with HTTPS, so the way from the Pi is encrypted too
@@ -215,6 +215,19 @@ With office documents, text recognition or faces and things: `sudo docker compos
 
 `sudo docker compose logs -f` shows what the server does, including the
 failed logins.
+
+## Releases
+
+A release is a version number for what is on `main`: under **Actions ›
+Release › Run workflow** on `main`, enter the version, such as `0.0.2`
+(semantic versioning: the last number for fixes, the middle one for new
+features). It builds and pushes the image as `0.0.2` and
+`latest`, and only then creates the tag `v0.0.2` and the release under
+**Releases** with the pull requests since the last one. A version that
+exists already is refused.
+
+"Deploy DATA-DEN" in rpi-deploy-and-update deploys the newest release by
+default; `main` there deploys the newest commit instead.
 
 ## Deploy from Windows
 
