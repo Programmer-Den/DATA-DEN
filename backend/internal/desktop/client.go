@@ -57,13 +57,18 @@ func (c *Client) do(ctx context.Context, method, endpoint string, query url.Valu
 	if err != nil {
 		return nil, err
 	}
+	for k, v := range header {
+		req.Header[k] = v
+	}
+	return c.send(req, contentType)
+}
+
+// send sends req with the app password; ErrLogin when the server refuses it.
+func (c *Client) send(req *http.Request, contentType string) (*http.Response, error) {
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("User-Agent", "data-den-sync")
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
-	}
-	for k, v := range header {
-		req.Header[k] = v
 	}
 	httpClient := c.HTTP
 	if httpClient == nil {

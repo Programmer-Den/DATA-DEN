@@ -34,8 +34,10 @@ import (
 //	POST /api/vault/delete  {"path"}                 -> 200, gone for good
 //
 // The vault lives in vaultDir, hidden like the server's other folders, so
-// the search, thumbnails, text recognition, share links, the sync client and
-// WebDAV never see it. Its files count against the quota.
+// the search, thumbnails, text recognition, share links, the folder sync and
+// WebDAV never see it; clients that decrypt themselves, such as
+// "data-den-sync tresor", use the API above. Its files count against the
+// quota.
 //
 // proof is what the browser derives from the vault key for this purpose.
 // The server keeps only its SHA-256 hash: the first POST sets it up, and

@@ -1,0 +1,34 @@
+{
+  "passphrase": "korrekt Pferd Batterie Heftklammer",
+  "recovery": "NNWW-3ZHH-YTNE-TFE4-DG0J-M00B-2841-7TD2-P6EY-0HYF-K6M0-XS0Y-NV00",
+  "keys": {
+    "version": 1,
+    "passphrase": {
+      "kdf": "PBKDF2-SHA256",
+      "iterations": 100000,
+      "salt": "S+3G/lc3v9KSwDqXi5NU7w==",
+      "iv": "pZX9JaxdXcqpIpOl",
+      "wrapped": "or21BIfy+pqdNJptTOwXwHWbJSv5oJ7J/LG9AqvlBt0vFEIz0SXWR2lsreZMIHOy"
+    },
+    "recovery": {
+      "kdf": "HKDF-SHA256",
+      "salt": "DC6y7EDzHyFINcMuEydSNBFg/AnnIZHBp+eJb+UBgrM=",
+      "iv": "+B1W02iZUCquNon1",
+      "wrapped": "aBuMF56wQfVPXa6MAiwTGXUO3jThAu3PlOEzURyALY/BJSTsyFI8j6STQaHUDO7J"
+    }
+  },
+  "names": {
+    "Steuer 2025.pdf": "hRQqvD-uxD7L8nrcLVqK0-YM5f9lD8JvcJIVWcCQSZfm_kpfyAG5JypWEA",
+    "Ärztebrief – Mai 🩺.txt": "ovY7RoDrndGhzCrD876aaqabikKjHyjlh9aNziqG4jzEDyvFBPKQrzOqkyK69nw1GmHIpfr1hsI"
+  },
+  "files": {
+    "small": {
+      "plain": "SGFsbG8gVHJlc29yISBHcsO8w59lIGF1cyBkZW0gQnJvd3Nlci4K",
+      "sealed": "RERWMWNJQQGMzGeDJKm+rFXM0hcO795yey7s/d6J8C+1/b11G9QiGLE/Y4i9CYNFrPWDyuLb2mm8QNCuJZafe4u2W2tdI3A4cFO4nMW1NmvW/og7LSUTaA4B7g=="
+    },
+    "empty": {
+      "plain": "",
+      "sealed": "RERWMd2MlLVlbFMqr2WxMsdFl7m1cwwABuyH7doH+cgcpUETIXzZkrrfvmukWpRRdXacSg=="
+    }
+  }
+}
