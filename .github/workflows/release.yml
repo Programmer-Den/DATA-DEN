@@ -141,7 +141,7 @@ jobs:
           apk="assets/data-den-android-$VERSION.apk"
           "$tools/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
           "$tools/apksigner" sign --ks "$keystore" --ks-key-alias "$KEY_ALIAS" \
-            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD \
+            --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEY_PASSWORD --v4-signing-enabled false \
             --out "$apk" "$RUNNER_TEMP/aligned.apk"
           "$tools/apksigner" verify "$apk"
 
