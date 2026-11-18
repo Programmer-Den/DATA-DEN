@@ -222,7 +222,7 @@ func (a *Auth) Require(next http.HandlerFunc) http.HandlerFunc {
 // reading is true for the methods a read-only app password may use.
 func reading(method string) bool {
 	switch method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions, "PROPFIND":
+	case http.MethodGet, http.MethodHead, http.MethodOptions, "PROPFIND", "REPORT":
 		return true
 	}
 	return false

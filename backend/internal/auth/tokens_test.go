@@ -243,6 +243,9 @@ func TestRequireTokenForWebDAV(t *testing.T) {
 	if code, body := withToken(mux, "PROPFIND", "/dav/", "", basic("chriszly", token)); code != http.StatusOK || body != "chriszly" {
 		t.Errorf("PROPFIND with a read-only token: status %d, %q", code, body)
 	}
+	if code, _ := withToken(mux, "REPORT", "/dav/", "", basic("chriszly", token)); code != http.StatusOK {
+		t.Errorf("REPORT (a calendar query) with a read-only token: status %d", code)
+	}
 	if code, _ := withToken(mux, http.MethodPut, "/dav/a.txt", "x", basic("chriszly", token)); code != http.StatusForbidden {
 		t.Errorf("PUT with a read-only token: status %d, want 403", code)
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/pim"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/places"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/setup"
@@ -439,6 +440,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	var calendars *pim.PIM
+	if data != nil {
+		calendars = pim.New(pim.Config{User: auth.Username, Space: data.Root})
+	}
 	var office *files.Office
 	var wopi *http.Server
 	if wopiAddr != "" && data != nil {
@@ -449,7 +454,7 @@ func run() error {
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 	}
-	srv := newServer(server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir(), Tiles: mapTiles}))
+	srv := newServer(server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir(), Tiles: mapTiles, PIM: calendars}))
 
 	if wopi != nil {
 		go func() {
