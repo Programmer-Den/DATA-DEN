@@ -11,7 +11,7 @@ flowchart LR
 ```
 
 - **Pi:** the only machine reachable from the internet. It terminates HTTPS
-  and forwards to the storage VM, nothing else (rpi-setup task `dataden`).
+  and forwards to the storage VM, nothing else (rpi-setup task `gateway`).
 - **Storage VM:** a Debian VM on the Windows PC with both disks passed
   through, mirrored and encrypted. Windows itself does not see the disks,
   and only the Pi can reach the VM. An optional nightly backup with versioned snapshots

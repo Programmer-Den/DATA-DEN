@@ -51,7 +51,7 @@ pi_settings() {
 	fp="$(openssl x509 -noout -fingerprint -sha256 -in "$cert" | sed 's/^.*=//')"
 	vm="$(vm_address)"
 	[[ -n "$vm" ]] || { echo "The VM's address is unknown: ip -4 route shows no default route." >&2; return 1; }
-	printf 'DATADEN_VM=%s\nDATADEN_VM_FINGERPRINT=%s\n' "$vm" "$fp"
+	printf 'GATEWAY_UPSTREAM=%s\nGATEWAY_UPSTREAM_PORT=%s\nGATEWAY_UPSTREAM_NAME=data-den\nGATEWAY_UPSTREAM_FINGERPRINT=%s\n' "$vm" "$port" "$fp"
 }
 
 pi=""
@@ -208,9 +208,9 @@ echo "DATA-DEN answers on port $port."
 step "9/9 Deploys from Windows"
 "$here/setup-deploy.sh" on "$dir"
 
-step "Done. On the Pi, in config/rpi-setup.env (rpi-setup task dataden):"
+step "Done. On the Pi, in config/rpi-setup.env (rpi-setup task gateway):"
 pi_settings "$dir"
-echo "DATADEN_DOMAIN=<the Pi's public name, such as nas.example.org>"
+echo "GATEWAY_DOMAIN=<the Pi's public name, such as nas.example.org>"
 code="$data/.data-den-accounts/setup-code"
 if [[ -f "$code" ]]; then
 	echo

@@ -325,8 +325,10 @@ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 
 fp="$(openssl x509 -noout -fingerprint -sha256 -in "$tmp/tls/cert.pem" | sed 's/^.*=//')"
 printf '#!/bin/sh\necho "1.1.1.1 via 192.168.1.1 dev eth0 src 192.168.1.30 uid 1000"\n' > "$tmp/bin/ip"
 chmod +x "$tmp/bin/ip"
-expect 0 "DATADEN_VM_FINGERPRINT=$fp" env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
-expect 0 'DATADEN_VM=192.168.1.30' env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
+expect 0 "GATEWAY_UPSTREAM_FINGERPRINT=$fp" env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
+expect 0 'GATEWAY_UPSTREAM=192.168.1.30' env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
+expect 0 'GATEWAY_UPSTREAM_PORT=8443' env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
+expect 0 'GATEWAY_UPSTREAM_NAME=data-den' env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
 rm -rf "$tmp"
 
 exit "$failed"

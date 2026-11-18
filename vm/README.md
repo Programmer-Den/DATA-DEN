@@ -117,8 +117,9 @@ described below and in [deploy/README.md](../deploy/README.md):
 
 A step that is already done is skipped, so after a stop it simply runs
 again. At the end it prints the lines for `config/rpi-setup.env` on the Pi
-(`DATADEN_VM`, `DATADEN_VM_FINGERPRINT`; add your `DATADEN_DOMAIN`) and the
-setup code. Run `sudo bash setup.sh dataden` on the Pi, open DATA-DEN
+(`GATEWAY_UPSTREAM`, `GATEWAY_UPSTREAM_PORT`, `GATEWAY_UPSTREAM_NAME`,
+`GATEWAY_UPSTREAM_FINGERPRINT`; add your `GATEWAY_DOMAIN`) and the setup
+code. Run `sudo bash setup.sh gateway` on the Pi, open DATA-DEN
 through it and create the owner's account on the setup page
 ([First run](../README.md#first-run)). `vm/install.sh --pi-settings
 ~/data-den` prints the Pi's lines again.
