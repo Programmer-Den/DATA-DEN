@@ -188,6 +188,11 @@ func (f *Files) list(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// The server's own folders, the other accounts' spaces among them.
+	if hidden(name) {
+		writeError(w, http.StatusNotFound, "Nicht gefunden")
+		return
+	}
 	listed := "/"
 	if name != "." {
 		listed += name
