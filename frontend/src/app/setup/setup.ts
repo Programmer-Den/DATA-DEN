@@ -53,7 +53,7 @@ export function checkList(checks: Checks, origin: string): Check[] {
     list.push({
       ok: false,
       text: 'Kein RAID gefunden: die Daten liegen nur auf einer Platte',
-      hint: 'In der VM: vm/setup-raid.sh (vm/README.md, Schritt 4)',
+      hint: 'In der VM: sudo vm/install.sh (vm/README.md, Schritt 4)',
     });
   }
   for (const array of arrays) {
