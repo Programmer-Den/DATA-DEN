@@ -319,6 +319,11 @@ func (s *Spaces) serveDavShared(w http.ResponseWriter, r *http.Request) {
 		f.quota.Store(s.cfg.Quota(g.Owner))
 	}
 	d := davFS{f: f, dir: g.dir(), readOnly: !g.Write}
+	if d.readOnly && r.Method == "LOCK" {
+		// A lock would keep the owner and the others from writing.
+		http.Error(w, "Nur zum Lesen geteilt", http.StatusForbidden)
+		return
+	}
 	s.davMu.Lock()
 	if s.davShared == nil {
 		s.davShared = map[string]davShared{}
@@ -332,7 +337,7 @@ func (s *Spaces) serveDavShared(w http.ResponseWriter, r *http.Request) {
 	}
 	s.davMu.Unlock()
 	r = r.WithContext(context.WithValue(r.Context(), actingKey{}, acting{user: user, owner: g.Owner}))
-	shared.h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestKey{}, r)))
+	shared.h.ServeHTTP(w, davRequest(r))
 }
 
 // RegisterShares adds ShareRoutes to mux behind require, each account's

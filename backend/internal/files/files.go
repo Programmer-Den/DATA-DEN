@@ -101,7 +101,7 @@ type Files struct {
 	davOnce sync.Once
 	// davLocks are the WebDAV locks on the files of this space, from its
 	// own drive and from the drives of its shared folders alike.
-	davLocks     webdav.LockSystem
+	davLocks     *spaceLocks
 	davLocksOnce sync.Once
 	// damaged is told about the files a check found damaged; nil tells no one.
 	damaged func(account string, paths []string)
