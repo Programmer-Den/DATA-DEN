@@ -1,8 +1,8 @@
 # DATA-DEN for Android
 
 Uploads new photos and videos from the phone to DATA-DEN in the background,
-which the PWA cannot do. Everything else (browsing, sharing, downloads) stays
-in the web interface.
+which the PWA cannot do, and opens the end-to-end encrypted vault (Tresor).
+Everything else (browsing, sharing, downloads) stays in the web interface.
 
 ## Set up
 
@@ -52,6 +52,31 @@ and never deletes anything on the phone or on the server.
 When the app password stops working, the space is full, or the photo
 permission was taken away, the app stops and shows a notification; it
 resumes after the problem is fixed in the app.
+
+## Vault (Tresor)
+
+**Tresor öffnen** opens the account's vault with its passphrase or recovery
+key, typed in each time and never stored. The phone decrypts and encrypts
+itself, in the same format as the website, so the server sees only
+ciphertext, as with the browser. Set the vault up, and change its passphrase
+or recovery key, on the website.
+
+- Tap a folder to go in, **Hoch** or Back to go up. Tap a file to open a
+  decrypted copy in the app for its type; long press for **Entschlüsselt
+  speichern unter …** (a place the person picks, kept), **Umbenennen** and
+  **Löschen** (for good, after a question).
+- **Datei** encrypts a file from the phone into the folder (up to 1 GB),
+  **Ordner** adds a folder.
+- Copies opened in other apps are in the app's cache and only those apps
+  get read access, through the app's own content provider. They are deleted
+  when the vault locks: **Sperren**, 15 minutes without use, signing out, or
+  the end of the app's process. Changes made to such a copy do not go back
+  into the vault; add the changed file again.
+- The screen is left out of screenshots and the recent apps preview.
+- The app password needs to be allowed to write for anything but opening
+  and saving.
+- The passphrase takes 600 000 rounds of PBKDF2, which takes a few seconds
+  on a phone.
 
 ## Install
 
@@ -106,4 +131,8 @@ Needs JDK 17 and the Android SDK (or Android Studio). From this folder:
 - `core/`: the client for the API and the chunked, resumable upload, plain
   Kotlin with OkHttp. Its tests run against an in-memory copy of the
   server's upload API.
-- `app/`: the screen, the media store scan and the WorkManager jobs.
+- `core/.../vault/`: the vault's format with the platform's crypto
+  (PBKDF2, HMAC-SHA256 for HKDF, AES-GCM) and its API, tested against a
+  vault the website made (`src/test/resources/vault-web.json`).
+- `app/`: the screens, the media store scan, the WorkManager jobs and the
+  provider for decrypted copies.

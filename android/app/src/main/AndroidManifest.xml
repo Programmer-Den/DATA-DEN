@@ -35,6 +35,21 @@
             </intent-filter>
         </activity>
 
+        <!-- The vault: kept on its own screen so a rotation does not lose a running transfer. -->
+        <activity
+            android:name=".TresorActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:exported="false"
+            android:label="@string/tresor_title"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Decrypted copies from the vault, only for the app an intent grants one to. -->
+        <provider
+            android:name=".TresorFiles"
+            android:authorities="${applicationId}.tresor"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
