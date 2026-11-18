@@ -1,7 +1,13 @@
 .hint,
 .empty,
-.missing {
+.missing,
+.dav {
   opacity: 0.7;
+}
+
+.dav {
+  font-size: 0.85em;
+  user-select: all;
 }
 
 .error {

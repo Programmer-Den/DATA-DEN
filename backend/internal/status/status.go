@@ -133,7 +133,7 @@ func (s *Status) Report() Report {
 }
 
 func (s *Status) disk() (*Disk, error) {
-	total, free, err := space(s.cfg.DataDir)
+	total, free, err := Space(s.cfg.DataDir)
 	if err != nil {
 		return nil, err
 	}

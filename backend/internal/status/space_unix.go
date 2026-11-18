@@ -4,9 +4,9 @@ package status
 
 import "golang.org/x/sys/unix"
 
-// space is the size of the file system that holds dir, and the space on it
+// Space is the size of the file system that holds dir, and the space on it
 // that an unprivileged user can still write.
-func space(dir string) (total, free int64, err error) {
+func Space(dir string) (total, free int64, err error) {
 	var st unix.Statfs_t
 	if err := unix.Statfs(dir, &st); err != nil {
 		return 0, 0, err

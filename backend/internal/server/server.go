@@ -94,6 +94,7 @@ func New(cfg Config) http.Handler {
 			}
 			mux.HandleFunc("/api/s/", missing)
 			mux.HandleFunc(files.DavPrefix+"/", cfg.Auth.RequireToken(missing))
+			mux.HandleFunc(files.DavSharedPrefix+"/", cfg.Auth.RequireToken(missing))
 		}
 	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
