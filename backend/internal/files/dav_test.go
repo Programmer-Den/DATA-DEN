@@ -334,6 +334,20 @@ func TestDavBrokenUploadKeepsTheFile(t *testing.T) {
 	if got := readFile(t, filepath.Join(data, "a.txt")); got != "alt" {
 		t.Errorf("the file holds %q, want the old one", got)
 	}
+	// COPY and LOCK write files too, with a body of their own or none.
+	if rec := dav(h, "chef", "COPY", "/dav/a.txt", "", map[string]string{"Destination": "/dav/b.txt"}); rec.Code != http.StatusCreated {
+		t.Errorf("COPY: status %d", rec.Code)
+	}
+	if got := readFile(t, filepath.Join(data, "b.txt")); got != "alt" {
+		t.Errorf("the copy holds %q", got)
+	}
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	if rec := dav(h, "chef", "LOCK", "/dav/neu.txt", lock, map[string]string{"Depth": "0"}); rec.Code != http.StatusCreated {
+		t.Errorf("LOCK of a new name: status %d", rec.Code)
+	}
+	if !exists(data, "neu.txt") {
+		t.Error("LOCK of a new name made no file")
+	}
 }
 
 func TestDavSharedFolderWrite(t *testing.T) {

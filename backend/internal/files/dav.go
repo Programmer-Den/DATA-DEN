@@ -260,9 +260,10 @@ func (b *davBody) Read(p []byte) (int, error) {
 
 // complete reports whether the upload of size bytes for the request in ctx
 // arrived whole: its body was read without an error, and to its length.
+// Only a PUT writes its body; COPY and LOCK write other content.
 func complete(ctx context.Context, size int64) bool {
 	r, ok := ctx.Value(requestKey{}).(*http.Request)
-	if !ok {
+	if !ok || r.Method != http.MethodPut {
 		return true
 	}
 	if b, ok := r.Body.(*davBody); ok && b.err != nil {
