@@ -63,6 +63,10 @@ type Files struct {
 	quota atomic.Int64
 	// used caches what usage found.
 	used usedCache
+	// reserved is what the vault uploads under way will add; reserveMu
+	// makes checking and reserving one step.
+	reserved  atomic.Int64
+	reserveMu sync.Mutex
 	// mux serves the API of this space alone, for Spaces.
 	mux  *http.ServeMux
 	sums sums

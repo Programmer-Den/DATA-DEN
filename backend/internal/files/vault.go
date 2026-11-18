@@ -324,13 +324,15 @@ func (f *Files) vaultUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "Existiert bereits")
 		return
 	}
-	if fits, err := f.fits(size); err != nil {
+	release, fits, err := f.reserve(size)
+	if err != nil {
 		f.diskError(w, "counting the usage", err)
 		return
 	} else if !fits {
 		writeError(w, http.StatusInsufficientStorage, "Nicht genug Platz im eigenen Kontingent")
 		return
 	}
+	defer release()
 	body := http.MaxBytesReader(w, r.Body, size)
 	head := make([]byte, len(vaultMagic))
 	if _, err := io.ReadFull(body, head); err != nil || string(head) != vaultMagic {

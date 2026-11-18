@@ -71,11 +71,24 @@ func (f *Files) forgetUsage() {
 func (f *Files) pending() int64 {
 	f.uploads.mu.Lock()
 	defer f.uploads.mu.Unlock()
-	var total int64
+	total := f.reserved.Load()
 	for _, u := range f.uploads.byID {
 		total += u.size
 	}
 	return total
+}
+
+// reserve holds size bytes of the quota for a write under way, when they
+// fit, so writes at the same time cannot all take the same room. release
+// gives them back; call it after addUsage.
+func (f *Files) reserve(size int64) (release func(), ok bool, err error) {
+	f.reserveMu.Lock()
+	defer f.reserveMu.Unlock()
+	if ok, err := f.fits(size); err != nil || !ok {
+		return nil, false, err
+	}
+	f.reserved.Add(size)
+	return func() { f.reserved.Add(-size) }, true, nil
 }
 
 // fits reports whether size more bytes fit into the quota.
