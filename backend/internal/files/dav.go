@@ -107,6 +107,11 @@ func (s *spaceLocks) lock(token string) (spaceLock, bool) {
 	return l, ok
 }
 
+// sharedLockMax is the longest a lock taken through a shared folder's drive
+// lasts before it is refreshed. A lock that release cannot undo, as a
+// request still uses it or was taking it at that moment, runs out by then.
+const sharedLockMax = time.Hour
+
 // release unlocks every lock taken through the drive of grant, when the
 // grant ends or may no longer change the folder; nobody else knows their
 // tokens.
@@ -169,8 +174,17 @@ func (l lockIn) Confirm(now time.Time, name0, name1 string, conditions ...webdav
 	return l.s.ls.Confirm(now, l.full(name0), l.full(name1), inner...)
 }
 
+// duration is how long a lock taken or refreshed through this drive lasts.
+func (l lockIn) duration(d time.Duration) time.Duration {
+	if l.grant != "" && (d < 0 || d > sharedLockMax) {
+		return sharedLockMax
+	}
+	return d
+}
+
 func (l lockIn) Create(now time.Time, details webdav.LockDetails) (string, error) {
 	details.Root = l.full(details.Root)
+	details.Duration = l.duration(details.Duration)
 	inner, err := l.s.ls.Create(now, details)
 	if err != nil {
 		return "", err
@@ -198,6 +212,7 @@ func (l lockIn) Refresh(now time.Time, token string, duration time.Duration) (we
 	if !ok {
 		return webdav.LockDetails{}, webdav.ErrNoSuchLock
 	}
+	duration = l.duration(duration)
 	details, err := l.s.ls.Refresh(now, lock.token, duration)
 	if err != nil {
 		if errors.Is(err, webdav.ErrNoSuchLock) {
@@ -598,16 +613,10 @@ type davUpload struct {
 }
 
 func (u *davUpload) Write(p []byte) (int, error) {
-	// Holding the room, so uploads at the same time cannot all take it.
-	_, ok, err := u.d.f.reserve(int64(len(p)))
-	if err != nil || !ok {
+	if err := u.hold(int64(len(p))); err != nil {
 		u.failed = true
-		if err == nil {
-			err = errQuota
-		}
 		return 0, err
 	}
-	u.held += int64(len(p))
 	n, err := u.file.Write(p)
 	u.size += int64(n)
 	u.hash.Write(p[:n])
@@ -615,6 +624,35 @@ func (u *davUpload) Write(p []byte) (int, error) {
 		u.failed = true
 	}
 	return n, err
+}
+
+// davHoldBlock is how much quota an upload holds at a time, so it does not
+// take the quota's lock for every piece it writes.
+const davHoldBlock = 8 << 20
+
+// hold makes sure the upload holds room for n more bytes, so uploads at the
+// same time cannot all take the same room. Without a quota there is nothing
+// to hold.
+func (u *davUpload) hold(n int64) error {
+	if u.d.f.quota.Load() <= 0 || u.size+n <= u.held {
+		return nil
+	}
+	need := u.size + n - u.held
+	block := max(need, davHoldBlock)
+	_, ok, err := u.d.f.reserve(block)
+	if err == nil && !ok && block > need {
+		// Near the quota, only what is needed.
+		block = need
+		_, ok, err = u.d.f.reserve(block)
+	}
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errQuota
+	}
+	u.held += block
+	return nil
 }
 
 func (u *davUpload) Read(p []byte) (int, error) { return u.file.Read(p) }

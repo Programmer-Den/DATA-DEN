@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 )
 
 // davSetup serves WebDAV with Spaces like spacesSetup: the account is the
@@ -486,18 +487,27 @@ func TestDavGrantEndReleasesItsLocks(t *testing.T) {
 	}
 }
 
-// A refresh through a shared drive answers the lock root as the drive sees it,
-// and a drive cannot refresh a lock outside its folder.
+// A lock through a shared drive runs out within sharedLockMax, a refresh
+// answers the lock root as the drive sees it, and a drive cannot refresh a
+// lock outside its folder.
 func TestDavRefreshStaysWithTheDrive(t *testing.T) {
-	_, h, _, _ := davGrantsSetup(t)
+	sp, h, _, _ := davGrantsSetup(t)
 	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
 	root := "/dav-shared/" + g.ID + "/"
 	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
-	rec := dav(h, "anna", "LOCK", root+"a.txt", lock, map[string]string{"Depth": "0"})
+	rec := dav(h, "anna", "LOCK", root+"a.txt", lock, map[string]string{"Depth": "0", "Timeout": "Infinite"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("anna LOCK: status %d", rec.Code)
 	}
 	token := rec.Header().Get("Lock-Token")
+	// A lock through a shared folder always runs out.
+	f, err := sp.space("chef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, ok := f.locks().lock(strings.Trim(token, "<>")); !ok || l.until.IsZero() || time.Until(l.until) > sharedLockMax {
+		t.Errorf("a shared folder's lock without an end: %+v %v", l, ok)
+	}
 	rec = dav(h, "anna", "LOCK", root+"a.txt", "", map[string]string{"If": "(" + token + ")", "Timeout": "Second-600"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("anna refresh: status %d %s", rec.Code, rec.Body)
@@ -543,5 +553,41 @@ func TestDavParallelUploadsKeepTheQuota(t *testing.T) {
 	_ = b.Close()
 	if got := f.reserved.Load(); got != 0 {
 		t.Errorf("still held after the uploads: %d bytes", got)
+	}
+}
+
+// Taking a member out of a team releases the locks of their team drive.
+func TestDavTeamMemberLeavesReleasesLocks(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	admin := func(method, target, body string) int {
+		code, _ := do(h, method, target, "application/json", body, as("chef"))
+		return code
+	}
+	if code := admin(http.MethodPost, "/api/teams", `{"name":"familie"}`); code != http.StatusCreated {
+		t.Fatalf("create: status %d", code)
+	}
+	for _, to := range []string{"anna", "bob"} {
+		if code := admin(http.MethodPost, "/api/teams/familie/members", `{"to":"`+to+`","write":true}`); code != http.StatusOK {
+			t.Fatalf("member %s: status %d", to, code)
+		}
+	}
+	_, withMe := grants(t, h, "anna")
+	_, bobs := grants(t, h, "bob")
+	if len(withMe) != 1 || len(bobs) != 1 {
+		t.Fatalf("grants: %+v %+v", withMe, bobs)
+	}
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	if rec := dav(h, "anna", "LOCK", "/dav-shared/"+withMe[0].ID+"/a.txt", lock, map[string]string{"Depth": "0"}); rec.Code >= 300 {
+		t.Fatalf("anna LOCK: status %d", rec.Code)
+	}
+	bob := "/dav-shared/" + bobs[0].ID + "/a.txt"
+	if rec := dav(h, "bob", http.MethodPut, bob, "bob", nil); rec.Code != http.StatusLocked {
+		t.Fatalf("bob PUT on anna's lock: status %d, want 423", rec.Code)
+	}
+	if code := admin(http.MethodPost, "/api/teams/familie/members/delete", `{"to":"anna"}`); code != http.StatusOK {
+		t.Fatalf("remove anna: status %d", code)
+	}
+	if rec := dav(h, "bob", http.MethodPut, bob, "bob", nil); rec.Code >= 400 {
+		t.Errorf("bob PUT after anna left: status %d", rec.Code)
 	}
 }

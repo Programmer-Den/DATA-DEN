@@ -280,7 +280,8 @@ func (s *store) purgeDeleted(a account, cutoff time.Time) {
 		size := dirSize(a.root, path.Join(deletedDir, e.Name()))
 		if err := a.root.RemoveAll(path.Join(deletedDir, e.Name())); err != nil {
 			slog.Warn("removing a deleted collection", "account", a.name, "name", e.Name(), "err", err)
-			continue
+			// Some of it may be gone.
+			size -= dirSize(a.root, path.Join(deletedDir, e.Name()))
 		}
 		if a.added != nil {
 			a.added(-size)
