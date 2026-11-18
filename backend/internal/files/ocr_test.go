@@ -275,6 +275,23 @@ func TestTika(t *testing.T) {
 	}
 }
 
+// A file that makes Tika drop the connection is that file's error, as long
+// as Tika still takes connections.
+func TestTikaDropsOneFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	_, err := NewTika(u).Text(t.Context(), "Scans/kaputt.pdf", strings.NewReader("pdf"), 3)
+	if err == nil || errors.Is(err, ErrRecognizerDown) {
+		t.Errorf("dropped: %v", err)
+	}
+}
+
 func TestDropNoise(t *testing.T) {
 	if got := dropNoise("~ | Rechnung — 4711 a Nr. € 12"); got != "Rechnung 4711 Nr. 12" {
 		t.Errorf("got %q", got)
