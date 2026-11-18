@@ -437,6 +437,12 @@ func TestCreateCountsAgainstTheQuota(t *testing.T) {
 		added: func(n int64) { used += n },
 	}
 	var s store
+	// The default calendar comes even when the quota is full.
+	full := a
+	full.fits = func(int64) (bool, error) { return false, nil }
+	if err := s.ensure(full, calendars); err != nil {
+		t.Fatalf("ensure on a full quota: %v", err)
+	}
 	if err := s.create(a, calendars, collection{ID: "klein"}); err != nil || used == 0 {
 		t.Fatalf("small: %v, used %d", err, used)
 	}

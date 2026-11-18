@@ -156,6 +156,10 @@ func (s *store) ensure(a account, k kind) error {
 	if _, err := a.root.Stat(path.Join(dir, k.dir)); !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	// The default collection is a few bytes and comes with every request,
+	// so it is made even when the quota is full: else a full account could
+	// not even list its calendars.
+	a.fits = nil
 	err := s.create(a, k, collection{ID: defaultCollection, Name: k.defaultName})
 	if errors.Is(err, errExists) {
 		return nil
