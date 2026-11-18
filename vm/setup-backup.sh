@@ -149,6 +149,8 @@ switch_off() {
 	if [[ -f /etc/systemd/system/data-den-backup.timer ]]; then
 		systemctl disable --now data-den-backup.timer
 	fi
+	# Without it den-watcher would soon report the backup as too old.
+	rm -f /var/lib/data-den/backup-result
 	echo "The backup is off. The settings in $config_dir and the snapshots in the repository are kept;"
 	echo "switch it on again with the same repository to go on with them."
 }

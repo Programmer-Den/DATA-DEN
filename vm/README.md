@@ -7,7 +7,7 @@ the PC cannot be read. Only the Pi gets into the VM.
 
 ```mermaid
 flowchart LR
-    pi["Raspberry Pi"] -- "8443, 22" --> acl["Hyper-V port ACLs"]
+    pi["Raspberry Pi"] -- "8443, 9393, 22" --> acl["Hyper-V port ACLs"]
     acl --> nft["nftables in the VM"]
     nft --> vm["Debian VM<br/>/srv/data-den on LUKS on RAID 1"]
 ```
@@ -22,7 +22,7 @@ optional backup: [Backup (optional)](#backup-optional).
 | File | Runs on | Does |
 |---|---|---|
 | `New-DataDenVM.ps1` | Windows, as administrator | Creates the VM with a virtual TPM, takes both disks offline in Windows and passes them through |
-| `Set-DataDenNetwork.ps1` | Windows, as administrator | Port ACLs: only the Pi gets in (HTTPS, SSH, ping), the VM may connect out |
+| `Set-DataDenNetwork.ps1` | Windows, as administrator | Port ACLs: only the Pi gets in (HTTPS, den-watcher, SSH, ping), the VM may connect out |
 | `setup-raid.sh` | the VM, as root | RAID 1 over both disks with mdadm, encrypted with LUKS, mounted at `/srv/data-den` |
 | `disk-key.sh` | the VM, as root | Unlocks the mirror by hand, binds it to the TPM again, replaces the recovery key |
 | `encrypt-raid.sh` | the VM, as root | Encrypts a mirror set up before the encryption, without losing data |
@@ -181,7 +181,8 @@ The encryption sits on top of the mirror, so the new disk needs nothing
 else. The failed disk only ever held encrypted data; it can go back to the
 seller as it is.
 
-Den-Watcher will report the RAID state as an alarm in a later step.
+With [monitoring](../deploy/README.md#monitoring-with-den-watcher-optional)
+on, den-watcher on the Pi raises an alert for the missing disk too.
 
 ## Disk health
 

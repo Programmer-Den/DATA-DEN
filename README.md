@@ -79,6 +79,9 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_GEOCODER` | The Nominatim server that names the towns of the photos, default `https://nominatim.openstreetmap.org`; `off` sends no positions anywhere |
 | `DATA_DEN_VISION` | Immich's machine learning service on the VM, such as `http://127.0.0.1:3003`, which recognises faces and things in the photos ([deploy/README.md](deploy/README.md)); without it none are recognised |
 | `DATA_DEN_TILES` | The tile server that draws the photo map (**Karte**), default `https://tile.openstreetmap.org`; `off` fetches no tiles |
+| `DATA_DEN_MONITOR_ADDR` | Where [den-watcher](deploy/README.md#monitoring-with-den-watcher-optional)'s hub reads the state of the NAS, such as `:9393`, over plain HTTP; without it, off |
+| `DATA_DEN_MONITOR_CODE` | The pairing code the hub must send, such as `7KQM-X2RP`; needed with `DATA_DEN_MONITOR_ADDR` |
+| `DATA_DEN_VM_STATE_DIR` | Where the VM's scripts leave the disk health, the backup's and the last deploy's result for den-watcher; `deploy/compose.yaml` sets `/vm-state` |
 | `LISTEN_ADDR` | Where the server listens, default `:8080` |
 | `DATA_DEN_TLS_CERT`, `DATA_DEN_TLS_KEY` | Certificate and key in PEM files: with both the server speaks HTTPS, without them plain HTTP |
 
@@ -651,7 +654,9 @@ the mirror is missing, every page shows a warning; below a quarter of that
 (2.5 %) the warning says the disk is almost full. The web interface checks
 every 5 minutes while someone is logged in. Outside the VM there is no RAID,
 and the page says so. `/api/health` stays as it is, without login, for
-Docker's health check.
+Docker's health check. A den-watcher hub on the Pi can watch the same, and
+the disk health, the backup and the last deploy, with alerts
+([deploy/README.md](deploy/README.md#monitoring-with-den-watcher-optional)).
 
 ## Notifications
 

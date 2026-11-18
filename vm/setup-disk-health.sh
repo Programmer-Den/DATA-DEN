@@ -43,6 +43,8 @@ case "$1" in
 		if [[ -f /etc/systemd/system/data-den-disk-health.timer ]]; then
 			systemctl disable --now data-den-disk-health.timer
 		fi
+		# Without it den-watcher would soon report the check as missing.
+		rm -f /var/lib/data-den/disk-health-report
 		echo "The disk health check is off."
 		;;
 	status)

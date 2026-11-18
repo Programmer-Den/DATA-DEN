@@ -55,7 +55,7 @@ expect 2 'Usage' ./setup-firewall.sh 192.168.1.20 10.0.0.1
 for bad in 256.1.1.1 192.168.1 192.168.1.020x '192.168.1.20 tcp dport 1-65535' 'x/g;s/y' ''; do
 	expect 2 'not an IPv4 address' ./setup-firewall.sh "$bad"
 done
-expect 0 'ip saddr 192.168.1.20 tcp dport { 22, 8443 } accept' ./setup-firewall.sh --print 192.168.1.20
+expect 0 'ip saddr 192.168.1.20 tcp dport { 22, 8443, 9393 } accept' ./setup-firewall.sh --print 192.168.1.20
 
 if ./setup-firewall.sh --print 10.0.0.5 | grep -q '@PI_ADDRESS@'; then
 	echo '[FAIL] setup-firewall.sh --print left @PI_ADDRESS@ in the rules' >&2
@@ -107,9 +107,24 @@ if compgen -G "$events/.*.tmp" >/dev/null; then
 fi
 rm -f "$events"/*.json
 
+backup_state="$(mktemp -d)"
 expect 2 'SERVICE_RESULT is not set' env -u SERVICE_RESULT ./backup-result.sh
-expect 0 '' env SERVICE_RESULT=success DATA_DEN_EVENT=false ./backup-result.sh
-expect 0 '' env SERVICE_RESULT=exit-code EXIT_STATUS=1 INVOCATION_ID= DATA_DEN_EVENTS_DIR="$events" DATA_DEN_EVENT=./event.sh ./backup-result.sh
+expect 0 '' env SERVICE_RESULT=success DATA_DEN_STATE_DIR="$backup_state" DATA_DEN_EVENT=false ./backup-result.sh
+if ! grep -qx 'result=success' "$backup_state/backup-result" || ! grep -q '^success=20' "$backup_state/backup-result"; then
+	echo '[FAIL] backup-result.sh did not keep the successful run' >&2
+	failed=1
+else
+	echo '[PASS] backup-result.sh keeps the successful run'
+fi
+success_line="$(grep '^success=' "$backup_state/backup-result")"
+expect 0 '' env SERVICE_RESULT=exit-code EXIT_STATUS=1 INVOCATION_ID= DATA_DEN_STATE_DIR="$backup_state" DATA_DEN_EVENTS_DIR="$events" DATA_DEN_EVENT=./event.sh ./backup-result.sh
+if ! grep -qx 'result=exit-code' "$backup_state/backup-result" || ! grep -qx "$success_line" "$backup_state/backup-result"; then
+	echo '[FAIL] backup-result.sh did not keep the failed run with the last successful one' >&2
+	failed=1
+else
+	echo '[PASS] backup-result.sh keeps the failed run and the last successful one'
+fi
+rm -rf "$backup_state"
 if ! grep -q '"title": "Backup fehlgeschlagen", "body": "Das nächtliche Backup ist fehlgeschlagen (exit-code, Status 1)' "$events"/*.json; then
 	echo '[FAIL] backup-result.sh did not report the failed run' >&2
 	failed=1
@@ -165,6 +180,12 @@ expect_events 'Platte meldet Probleme'
 if ! grep -q 'Platte 2 (WDC, X1): 3 nicht korrigierbare Lesefehler' "$health/state/disk-health"; then
 	echo '[FAIL] disk-health.sh did not keep the state' >&2
 	failed=1
+fi
+if ! grep -qx 'status=warn' "$health/state/disk-health-report" || ! grep -q '^Platte 2 (WDC, X1)' "$health/state/disk-health-report"; then
+	echo '[FAIL] disk-health.sh did not keep the report for den-watcher' >&2
+	failed=1
+else
+	echo '[PASS] disk-health.sh keeps the report for den-watcher'
 fi
 expect 0 '' check_health
 expect_events

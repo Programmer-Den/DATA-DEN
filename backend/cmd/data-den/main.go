@@ -24,6 +24,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/audit"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/monitor"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/pim"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/places"
@@ -140,6 +141,33 @@ func tlsFiles() (certFile, keyFile string) {
 // defaultWOPIAddr is where the WOPI listener for Collabora listens, unless
 // DATA_DEN_WOPI_ADDR says otherwise: only on the VM itself.
 const defaultWOPIAddr = "127.0.0.1:9981"
+
+// monitorConfig reads DATA_DEN_MONITOR_ADDR, where a den-watcher hub reads
+// the state of the NAS, its pairing code DATA_DEN_MONITOR_CODE and
+// DATA_DEN_VM_STATE_DIR, the VM's /var/lib/data-den. Without an address the
+// monitor is off and addr is "".
+func monitorConfig() (cfg monitor.Config, addr string, err error) {
+	addr = os.Getenv("DATA_DEN_MONITOR_ADDR")
+	if addr == "" {
+		return cfg, "", nil
+	}
+	if _, port, err := net.SplitHostPort(addr); err != nil || port == "" {
+		return cfg, "", fmt.Errorf("DATA_DEN_MONITOR_ADDR must be an address to listen on, such as :9393, not %q", addr)
+	}
+	if addr == listenAddr() {
+		return cfg, "", fmt.Errorf("DATA_DEN_MONITOR_ADDR %q must be another port than LISTEN_ADDR", addr)
+	}
+	code, err := monitor.Code(os.Getenv("DATA_DEN_MONITOR_CODE"))
+	if err != nil {
+		return cfg, "", err
+	}
+	return monitor.Config{
+		Name:     "DATA-DEN",
+		Version:  version.Version,
+		Code:     code,
+		StateDir: os.Getenv("DATA_DEN_VM_STATE_DIR"),
+	}, addr, nil
+}
 
 // officeConfig reads DATA_DEN_OFFICE_URL, where Collabora runs, and
 // DATA_DEN_WOPI_ADDR. Without DATA_DEN_OFFICE_URL office editing is off and
@@ -324,6 +352,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	monitorCfg, monitorAddr, err := monitorConfig()
+	if err != nil {
+		return err
+	}
 	stat := status.New(status.Config{
 		DataDir:     dataDir,
 		WarnPercent: warnPercent,
@@ -476,6 +508,33 @@ func run() error {
 		// The search indexes, built in the background so the server answers
 		// at once, and the recycle bins emptied on time.
 		data.Run(ctx)
+	}
+
+	if monitorAddr != "" {
+		monitorCfg.Status = stat
+		monitorCfg.DataReady = func() bool { return data != nil }
+		watcher := &http.Server{
+			Addr:              monitorAddr,
+			Handler:           monitor.New(monitorCfg).Handler(),
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       2 * time.Minute,
+		}
+		// Only the Pi gets to it (vm/nftables.conf); den-watcher reads its
+		// devices over plain HTTP.
+		listener, err := net.Listen("tcp", monitorAddr)
+		if err != nil {
+			return fmt.Errorf("the listener for den-watcher (DATA_DEN_MONITOR_ADDR): %w", err)
+		}
+		go func() {
+			<-ctx.Done()
+			_ = watcher.Close()
+		}()
+		go func() {
+			if err := watcher.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("the listener for den-watcher stopped", "err", err)
+			}
+		}()
+		slog.Info("den-watcher can read the state of the NAS", "addr", monitorAddr, "vmState", monitorCfg.StateDir)
 	}
 
 	if wopi != nil {
