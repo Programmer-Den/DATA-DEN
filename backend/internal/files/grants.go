@@ -240,12 +240,13 @@ func (s *Spaces) createGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g := Grant{ID: id, Owner: me, Path: "/" + name, Name: info.Name(), To: body.To, Write: body.Write, Created: time.Now().UTC()}
-	status, isNew := http.StatusCreated, true
+	status, isNew, readOnly := http.StatusCreated, true, false
 	err = s.changeGrants(func(list []Grant) []Grant {
 		// Sharing the same folder with the same account again changes the
 		// rights.
 		for i, old := range list {
 			if old.Owner == g.Owner && old.Path == g.Path && old.To == g.To {
+				readOnly = old.Write && !g.Write
 				list[i].Write = g.Write
 				g, status, isNew = list[i], http.StatusOK, false
 				return list
@@ -256,6 +257,9 @@ func (s *Spaces) createGrant(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		f.diskError(w, "sharing a folder", err)
 		return
+	}
+	if readOnly {
+		s.releaseLocks(g)
 	}
 	slog.Info("folder shared", "username", me, "path", g.Path, "to", g.To, "write", g.Write)
 	f.note(r, "grant-create", g.Path+" → "+g.To+" ("+rights(g.Write)+")")
@@ -298,6 +302,7 @@ func (s *Spaces) deleteGrant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Nicht gefunden")
 		return
 	}
+	s.releaseLocks(gone)
 	slog.Info("shared folder ended", "username", me, "owner", gone.Owner, "path", gone.Path, "to", gone.To)
 	if f, err := s.space(me); err == nil {
 		f.note(r, "grant-delete", gone.Owner+":"+gone.Path+" → "+gone.To)
@@ -328,11 +333,37 @@ func (s *Spaces) grantsMoved(owner, from, to string) {
 
 // retireGrants ends every grant from or to the deleted account name.
 func (s *Spaces) retireGrants(name string) {
+	var gone []Grant
 	err := s.changeGrants(func(list []Grant) []Grant {
-		return slices.DeleteFunc(list, func(g Grant) bool { return g.Owner == name || g.To == name })
+		return slices.DeleteFunc(list, func(g Grant) bool {
+			if g.Owner == name || g.To == name {
+				gone = append(gone, g)
+				return true
+			}
+			return false
+		})
 	})
 	if err != nil {
 		slog.Warn("ending the shared folders of a deleted account", "username", name, "err", err)
+		return
+	}
+	for _, g := range gone {
+		s.releaseLocks(g)
+	}
+}
+
+// releaseLocks unlocks the WebDAV locks taken through the drive of g, which
+// ended or may no longer change the folder. Only an open space can hold
+// locks.
+func (s *Spaces) releaseLocks(g Grant) {
+	s.mu.Lock()
+	f, ok := s.byName[g.Owner]
+	s.mu.Unlock()
+	if g.Owner == s.cfg.Owner {
+		f, ok = s.owner, true
+	}
+	if ok {
+		f.locks().release(g.ID)
 	}
 }
 

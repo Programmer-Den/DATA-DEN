@@ -453,3 +453,95 @@ func TestDavProppatchKeepsTheFile(t *testing.T) {
 		t.Errorf("PROPPATCH of another property: status %d, body %s", rec.Code, rec.Body)
 	}
 }
+
+// Ending a grant, or making it read-only, releases the locks taken through
+// its drive: nobody else could ever undo them.
+func TestDavGrantEndReleasesItsLocks(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	for _, end := range []string{"revoke", "read-only"} {
+		g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+		rec := dav(h, "anna", "LOCK", "/dav-shared/"+g.ID+"/a.txt", lock, map[string]string{"Depth": "0"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: anna LOCK: status %d %s", end, rec.Code, rec.Body)
+		}
+		if rec := dav(h, "chef", "LOCK", "/dav/Projekt/"+end+".txt", lock, map[string]string{"Depth": "0"}); rec.Code >= 300 {
+			t.Fatalf("%s: chef LOCK: status %d", end, rec.Code)
+		}
+		if end == "revoke" {
+			if code, _ := do(h, http.MethodPost, "/api/grants/delete", "application/json", `{"id":"`+g.ID+`"}`, as("chef")); code != http.StatusOK {
+				t.Fatalf("revoke: status %d", code)
+			}
+		} else {
+			grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna"}`)
+		}
+		if rec := dav(h, "chef", http.MethodPut, "/dav/Projekt/a.txt", "chef", nil); rec.Code >= 400 {
+			t.Errorf("%s: chef PUT after the grant ended: status %d", end, rec.Code)
+		}
+		// The owner's own lock stays.
+		if rec := dav(h, "chef", http.MethodPut, "/dav/Projekt/"+end+".txt", "chef", nil); rec.Code != http.StatusLocked {
+			t.Errorf("%s: chef's own lock is gone: PUT status %d", end, rec.Code)
+		}
+		do(h, http.MethodPost, "/api/grants/delete", "application/json", `{"id":"`+g.ID+`"}`, as("chef"))
+	}
+}
+
+// A refresh through a shared drive answers the lock root as the drive sees it,
+// and a drive cannot refresh a lock outside its folder.
+func TestDavRefreshStaysWithTheDrive(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+	root := "/dav-shared/" + g.ID + "/"
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	rec := dav(h, "anna", "LOCK", root+"a.txt", lock, map[string]string{"Depth": "0"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anna LOCK: status %d", rec.Code)
+	}
+	token := rec.Header().Get("Lock-Token")
+	rec = dav(h, "anna", "LOCK", root+"a.txt", "", map[string]string{"If": "(" + token + ")", "Timeout": "Second-600"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anna refresh: status %d %s", rec.Code, rec.Body)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "<D:href>/a.txt</D:href>") || strings.Contains(body, "Projekt") {
+		t.Errorf("refresh answers the root outside the drive: %s", body)
+	}
+	rec = dav(h, "chef", "LOCK", "/dav/geheim.txt", lock, map[string]string{"Depth": "0"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chef LOCK: status %d", rec.Code)
+	}
+	outside := rec.Header().Get("Lock-Token")
+	if rec := dav(h, "anna", "LOCK", root+"a.txt", "", map[string]string{"If": "(" + outside + ")"}); rec.Code < 400 {
+		t.Errorf("anna refreshed chef's lock outside the folder: status %d", rec.Code)
+	}
+}
+
+// Uploads at the same time hold their room, so together they cannot go
+// over the quota.
+func TestDavParallelUploadsKeepTheQuota(t *testing.T) {
+	s, _, _ := davSetup(t)
+	f, err := s.space("anna")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.quota.Store(10)
+	d := davFS{f: f, dir: ".", quota: true}
+	a, err := d.create(context.Background(), "a.txt", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := d.create(context.Background(), "b.txt", os.O_CREATE|os.O_RDWR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Write([]byte("012345")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Write([]byte("012345")); err == nil {
+		t.Error("the second upload went over the quota")
+	}
+	_ = a.Close()
+	_ = b.Close()
+	if got := f.reserved.Load(); got != 0 {
+		t.Errorf("still held after the uploads: %d bytes", got)
+	}
+}

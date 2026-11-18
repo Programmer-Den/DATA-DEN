@@ -277,10 +277,29 @@ func (s *store) purgeDeleted(a account, cutoff time.Time) {
 		if err != nil || !at.Before(cutoff) {
 			continue
 		}
+		size := dirSize(a.root, path.Join(deletedDir, e.Name()))
 		if err := a.root.RemoveAll(path.Join(deletedDir, e.Name())); err != nil {
 			slog.Warn("removing a deleted collection", "account", a.name, "name", e.Name(), "err", err)
+			continue
+		}
+		if a.added != nil {
+			a.added(-size)
 		}
 	}
+}
+
+// dirSize is how many bytes the files in the folder name hold.
+func dirSize(root *os.Root, name string) int64 {
+	var total int64
+	_ = fs.WalkDir(root.FS(), name, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	return total
 }
 
 // objects lists the objects in the collection id of k.
@@ -366,10 +385,19 @@ func (s *store) put(a account, k kind, id, name string, data []byte, ifMatch, if
 func (s *store) delete(a account, k kind, id, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, err := s.object(a, k, id, name); err != nil {
+	old, err := s.object(a, k, id, name)
+	if err != nil {
 		return err
 	}
-	return a.root.Remove(path.Join(dir, k.dir, id, name))
+	if err := a.root.Remove(path.Join(dir, k.dir, id, name)); err != nil {
+		return err
+	}
+	// The room is free again at once, not only when the usage is counted
+	// again.
+	if a.added != nil {
+		a.added(-int64(len(old.data)))
+	}
+	return nil
 }
 
 // conditions checks If-Match and If-None-Match against the entity tag of

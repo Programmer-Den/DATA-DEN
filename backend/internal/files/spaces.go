@@ -318,7 +318,7 @@ func (s *Spaces) serveDavShared(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Quota != nil {
 		f.quota.Store(s.cfg.Quota(g.Owner))
 	}
-	d := davFS{f: f, dir: g.dir(), readOnly: !g.Write}
+	d := davFS{f: f, dir: g.dir(), readOnly: !g.Write, grant: g.ID}
 	if d.readOnly && r.Method == "LOCK" {
 		// A lock would keep the owner and the others from writing.
 		http.Error(w, "Nur zum Lesen geteilt", http.StatusForbidden)
