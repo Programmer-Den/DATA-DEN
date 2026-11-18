@@ -398,3 +398,48 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
+
+func TestPurgeDeleted(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	a := account{name: "anna", root: root}
+	old := "calendars-alt-mit-strich-" + time.Now().Add(-31*24*time.Hour).UTC().Format(deletedTime)
+	recent := "calendars-neu-" + time.Now().Add(-time.Hour).UTC().Format(deletedTime)
+	for _, name := range []string{old, recent} {
+		if err := root.MkdirAll(deletedDir+"/"+name, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var s store
+	s.purgeDeleted(a, time.Now().Add(-keepDeleted))
+	if _, err := root.Stat(deletedDir + "/" + old); !os.IsNotExist(err) {
+		t.Errorf("the old one is still there: %v", err)
+	}
+	if _, err := root.Stat(deletedDir + "/" + recent); err != nil {
+		t.Errorf("the recent one is gone: %v", err)
+	}
+}
+
+func TestCreateCountsAgainstTheQuota(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	var used int64
+	a := account{name: "anna", root: root,
+		fits:  func(n int64) (bool, error) { return used+n <= 100, nil },
+		added: func(n int64) { used += n },
+	}
+	var s store
+	if err := s.create(a, calendars, collection{ID: "klein"}); err != nil || used == 0 {
+		t.Fatalf("small: %v, used %d", err, used)
+	}
+	err = s.create(a, calendars, collection{ID: "gross", Description: strings.Repeat("x", 200)})
+	if code, _ := status(err); code != http.StatusInsufficientStorage {
+		t.Errorf("over the quota: %v", err)
+	}
+}

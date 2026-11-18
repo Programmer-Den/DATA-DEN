@@ -225,11 +225,47 @@ func TestDavSharedFolderRefusesSymlinks(t *testing.T) {
 	if rec := dav(h, "anna", "PROPFIND", root+"link/", "", map[string]string{"Depth": "1"}); rec.Code == http.StatusMultiStatus {
 		t.Errorf("PROPFIND through a symlink: %s", rec.Body)
 	}
+	// The folder's listing leaves the links out and shows the rest.
+	rec := dav(h, "anna", "PROPFIND", root, "", map[string]string{"Depth": "1"})
+	if body := rec.Body.String(); rec.Code != http.StatusMultiStatus || !strings.Contains(body, root+"a.txt") ||
+		!strings.HasSuffix(strings.TrimSpace(body), "</D:multistatus>") || strings.Contains(body, root+"link") {
+		t.Errorf("PROPFIND of the folder: status %d, %s", rec.Code, body)
+	}
 	if rec := dav(h, "anna", http.MethodPut, root+"link/neu.txt", "x", nil); rec.Code < 400 {
 		t.Errorf("PUT through a symlink: status %d", rec.Code)
 	}
 	if exists(data, "neu.txt") {
 		t.Error("wrote next to the shared folder")
+	}
+}
+
+// A file locked on the owner's drive is locked on the shared folder's drive
+// too, and the other way round.
+func TestDavLocksAcrossDrives(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+	root := "/dav-shared/" + g.ID + "/"
+	lock := `<?xml version="1.0" encoding="utf-8"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`
+	rec := dav(h, "chef", "LOCK", "/dav/Projekt/a.txt", lock, map[string]string{"Depth": "0"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("chef LOCK: status %d %s", rec.Code, rec.Body)
+	}
+	token := rec.Header().Get("Lock-Token")
+	if rec := dav(h, "anna", http.MethodPut, root+"a.txt", "anna", nil); rec.Code != http.StatusLocked {
+		t.Errorf("anna PUT on chef's lock: status %d, want 423", rec.Code)
+	}
+	if rec := dav(h, "anna", "LOCK", root+"a.txt", lock, map[string]string{"Depth": "0"}); rec.Code != http.StatusLocked {
+		t.Errorf("anna LOCK on chef's lock: status %d, want 423", rec.Code)
+	}
+	if rec := dav(h, "chef", "UNLOCK", "/dav/Projekt/a.txt", "", map[string]string{"Lock-Token": token}); rec.Code != http.StatusNoContent {
+		t.Fatalf("chef UNLOCK: status %d", rec.Code)
+	}
+	rec = dav(h, "anna", "LOCK", root+"a.txt", lock, map[string]string{"Depth": "0"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("anna LOCK: status %d %s", rec.Code, rec.Body)
+	}
+	if rec := dav(h, "chef", http.MethodPut, "/dav/Projekt/a.txt", "chef", nil); rec.Code != http.StatusLocked {
+		t.Errorf("chef PUT on anna's lock: status %d, want 423", rec.Code)
 	}
 }
 
