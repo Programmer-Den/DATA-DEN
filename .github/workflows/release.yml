@@ -3,14 +3,21 @@ name: Release
 # Makes a release: Actions > Release > Run workflow on main, with a version
 # such as 1.2.3. It builds and pushes the image as "1.2.3" and "latest"
 # (image.yml), and only then creates the tag v1.2.3 and the GitHub release
-# with the notes of the pull requests since the last one. "Deploy DATA-DEN"
-# in rpi-deploy-and-update deploys the newest release by default.
+# with the notes of the pull requests since the last one. The release gets
+# the Windows sync client, taken from that image, and the deploy folder as a
+# ZIP. "assets only" adds them again to a release that exists already.
+# "Deploy DATA-DEN" in rpi-deploy-and-update deploys the newest release by
+# default.
 on:
   workflow_dispatch:
     inputs:
       version:
         description: 'Version without v, such as 1.2.3'
         required: true
+      assets_only:
+        description: 'Only attach the files to this existing release again'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,6 +34,7 @@ jobs:
       - name: Check
         env:
           VERSION: ${{ inputs.version }}
+          ASSETS_ONLY: ${{ inputs.assets_only }}
           REF: ${{ github.ref }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -40,7 +48,12 @@ jobs:
             echo "::error::'$VERSION' is not a version such as 1.2.3 (without v)."
             exit 1
           fi
-          if gh api "repos/$REPO/git/ref/tags/v$VERSION" --silent 2>/dev/null; then
+          if [[ "$ASSETS_ONLY" == true ]]; then
+            if ! gh release view "v$VERSION" --repo "$REPO" > /dev/null; then
+              echo "::error::There is no release v$VERSION to attach the files to."
+              exit 1
+            fi
+          elif gh api "repos/$REPO/git/ref/tags/v$VERSION" --silent 2>/dev/null; then
             echo "::error::v$VERSION exists already; pick the next version."
             exit 1
           fi
@@ -48,6 +61,7 @@ jobs:
   image:
     name: Image
     needs: check
+    if: ${{ !inputs.assets_only }}
     uses: ./.github/workflows/image.yml
     with:
       version: ${{ inputs.version }}
@@ -57,12 +71,39 @@ jobs:
 
   release:
     name: Tag and release
-    needs: image
+    needs: [check, image]
+    # Also when the image was skipped for assets only.
+    if: ${{ !cancelled() && needs.check.result == 'success' && (needs.image.result == 'success' || inputs.assets_only) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The sync client exactly as the image of this release serves it.
+      - name: Collect the files
+        env:
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${REPO,,}:$VERSION"
+          mkdir -p assets
+          container="$(docker create "$image")"
+          docker cp "$container:/clients/." assets/
+          docker rm "$container" > /dev/null
+          ls assets/data-den-sync-windows-amd64.exe assets/data-den-sync-windows-arm64.exe
+          git archive --format=zip --prefix="data-den-deploy-$VERSION/" -o "assets/data-den-deploy-$VERSION.zip" HEAD deploy
+
       - name: Create the release
+        if: ${{ !inputs.assets_only }}
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
@@ -70,5 +111,15 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "v$VERSION" --repo "$REPO" --target "$GITHUB_SHA" \
-            --title "DATA-DEN $VERSION" --generate-notes
+            --title "DATA-DEN $VERSION" --generate-notes \
+            --notes "Image: \`ghcr.io/${REPO,,}:$VERSION\` (amd64, arm64). Files: the Windows sync client and the deploy folder (compose files)."
+
+      - name: Attach the files
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release upload "v$VERSION" --repo "$REPO" --clobber assets/*
           echo "Released v$VERSION: ghcr.io/${REPO,,}:$VERSION" >> "$GITHUB_STEP_SUMMARY"

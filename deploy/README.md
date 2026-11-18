@@ -223,8 +223,11 @@ Release › Run workflow** on `main`, enter the version, such as `0.0.2`
 (semantic versioning: the last number for fixes, the middle one for new
 features). It builds and pushes the image as `0.0.2` and
 `latest`, and only then creates the tag `v0.0.2` and the release under
-**Releases** with the pull requests since the last one. A version that
-exists already is refused.
+**Releases** with the pull requests since the last one. The release also
+gets the Windows sync client (`data-den-sync-windows-amd64.exe`, `-arm64.exe`,
+the same as in the image) and this folder as `data-den-deploy-<version>.zip`.
+A version that exists already is refused; **assets only** attaches the files
+to an existing release again.
 
 "Deploy DATA-DEN" in rpi-deploy-and-update deploys the newest release by
 default; `main` there deploys the newest commit instead.
