@@ -22,6 +22,7 @@ describe('AccountView', () => {
     enabled = false,
   ): Promise<ComponentFixture<AccountView>> {
     TestBed.inject(AuthService).owner.set(owner);
+    TestBed.inject(AuthService).fixedPassword.set(owner);
     const fixture = TestBed.createComponent(AccountView);
     http.expectOne('/api/usage').flush({ used: 512 * 1024 ** 2, quota });
     http.expectOne('/api/account/2fa').flush({ enabled, recoveryLeft: enabled ? 9 : 0 });

@@ -22,7 +22,8 @@ import (
 //	POST /api/users/{name}/delete {} -> 200, admins only; the files are moved aside
 //	POST /api/account/password {"current", "password"} -> 200, one's own password
 //
-// The owner's account comes from the settings and cannot be changed here.
+// The owner's account comes from the settings or the setup page and is not
+// managed here; only an owner from the setup page changes its password.
 
 // MinPasswordBytes is the shortest password a new or changed account may
 // have.
@@ -132,6 +133,12 @@ func writeAccounts(file string, stored accountsFile) error {
 	if err != nil {
 		return err
 	}
+	return writeFile(file, data)
+}
+
+// writeFile replaces file with data in one step, readable only by the
+// server.
+func writeFile(file string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
 		return err
 	}
@@ -206,7 +213,8 @@ func (a *Auth) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := Username(r)
-	if name == a.cfg.Username {
+	owner := name == a.cfg.Username
+	if owner && a.cfg.OwnerFile == "" {
 		writeError(w, http.StatusBadRequest, "Das Passwort des Hauptkontos steht in DATA_DEN_PASSWORD_HASH")
 		return
 	}
@@ -228,16 +236,24 @@ func (a *Auth) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	account, ok := a.accounts[name]
-	if !ok {
-		writeError(w, http.StatusNotFound, "Konto nicht gefunden")
-		return
-	}
-	account.PasswordHash = hash
-	a.accounts[name] = account
-	if err := a.save(); err != nil {
-		a.saveError(w, err)
-		return
+	if owner {
+		if err := SaveOwner(a.cfg.OwnerFile, name, hash); err != nil {
+			a.saveError(w, err)
+			return
+		}
+		a.ownerHash = hash
+	} else {
+		account, ok := a.accounts[name]
+		if !ok {
+			writeError(w, http.StatusNotFound, "Konto nicht gefunden")
+			return
+		}
+		account.PasswordHash = hash
+		a.accounts[name] = account
+		if err := a.save(); err != nil {
+			a.saveError(w, err)
+			return
+		}
 	}
 	// Other devices have to log in again with the new password.
 	a.dropSessions(name, keep)

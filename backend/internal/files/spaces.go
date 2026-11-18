@@ -72,6 +72,14 @@ var Routes = []string{
 	"GET /api/people/face",
 	"POST /api/people/rename",
 	"POST /api/people/merge",
+	"GET /api/vault",
+	"POST /api/vault/keys",
+	"GET /api/vault/files",
+	"POST /api/vault/folders",
+	"PUT /api/vault/file",
+	"GET /api/vault/file",
+	"POST /api/vault/move",
+	"POST /api/vault/delete",
 }
 
 // ShareRoutes are the API paths behind the login for share links.

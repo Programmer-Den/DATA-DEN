@@ -1,15 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/setup"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 )
 
 func serveHealth(status int) http.Handler {
@@ -210,5 +217,85 @@ func TestOCRConfig(t *testing.T) {
 		if _, err := ocrConfig(); err == nil {
 			t.Errorf("%q: no error", bad)
 		}
+	}
+}
+
+func TestOwnerAccount(t *testing.T) {
+	dir := t.TempDir()
+	stat := status.New(status.Config{DataDir: dir})
+
+	// From the settings, when the hash is set.
+	t.Setenv("DATA_DEN_USERNAME", "chriszly")
+	t.Setenv("DATA_DEN_PASSWORD_HASH", "$2a$04$settings")
+	owner, file, err := ownerAccount(t.Context(), dir, stat)
+	if err != nil || owner == nil || owner.Name != "chriszly" || owner.PasswordHash != "$2a$04$settings" || file != "" {
+		t.Errorf("settings: %+v %q %v", owner, file, err)
+	}
+
+	// Else from the setup page's file.
+	t.Setenv("DATA_DEN_PASSWORD_HASH", "")
+	if err := auth.SaveOwner(ownerFile(dir), "anna", "$2a$04$file"); err != nil {
+		t.Fatal(err)
+	}
+	owner, file, err = ownerAccount(t.Context(), dir, stat)
+	if err != nil || owner == nil || owner.Name != "anna" || owner.PasswordHash != "$2a$04$file" || file != ownerFile(dir) {
+		t.Errorf("file: %+v %q %v", owner, file, err)
+	}
+}
+
+func TestOwnerAccountSetup(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DATA_DEN_PASSWORD_HASH", "")
+	t.Setenv("DATA_DEN_TLS_CERT", "")
+	t.Setenv("DATA_DEN_TLS_KEY", "")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+	t.Setenv("LISTEN_ADDR", addr)
+
+	type result struct {
+		owner *setup.Owner
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		owner, _, err := ownerAccount(t.Context(), dir, status.New(status.Config{DataDir: dir}))
+		done <- result{owner, err}
+	}()
+	var health map[string]any
+	for i := 0; ; i++ {
+		resp, err := http.Get("http://" + addr + "/api/health")
+		if err == nil {
+			_ = json.NewDecoder(resp.Body).Decode(&health)
+			_ = resp.Body.Close()
+			break
+		}
+		if i == 100 {
+			t.Fatal(err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if health["setup"] != true {
+		t.Errorf("health %v, want setup", health)
+	}
+	code, err := os.ReadFile(filepath.Join(dir, ".data-den-accounts", "setup-code")) //nolint:gosec // the test's own directory
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"code":"` + strings.TrimSpace(string(code)) + `","username":"chriszly","password":"ein-langes-passwort"}`
+	resp, err := http.Post("http://"+addr+"/api/setup", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("setup: status %d", resp.StatusCode)
+	}
+	r := <-done
+	if r.err != nil || r.owner == nil || r.owner.Name != "chriszly" {
+		t.Errorf("owner %+v, err %v", r.owner, r.err)
 	}
 }

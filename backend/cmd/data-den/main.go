@@ -28,6 +28,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/pim"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/places"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/server"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/setup"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/version"
@@ -317,6 +318,25 @@ func run() error {
 		return errors.New("set both DATA_DEN_TLS_CERT and DATA_DEN_TLS_KEY, or neither")
 	}
 	dataDir := dataDir()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// Runs before data.Close, which waits for the checks to stop.
+	defer stop()
+	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
+	if err != nil {
+		return err
+	}
+	stat := status.New(status.Config{
+		DataDir:     dataDir,
+		WarnPercent: warnPercent,
+		MDStat:      "/proc/mdstat",
+		Uptime:      "/proc/uptime",
+		Version:     version.Version,
+		Started:     time.Now(),
+	})
+	owner, ownerFile, err := ownerAccount(ctx, dataDir, stat)
+	if err != nil || owner == nil {
+		return err
+	}
 	var login *auth.Auth
 	// The audit log only writes once the data directory is known to be there.
 	auditCfg := audit.Config{
@@ -339,7 +359,7 @@ func run() error {
 		return err
 	}
 	data, err := files.OpenSpaces(dataDir, files.SpacesConfig{
-		Owner: os.Getenv("DATA_DEN_USERNAME"),
+		Owner: owner.Name,
 		User:  auth.Username,
 		Quota: func(name string) int64 { return login.Quota(name) },
 		Audit: func(r *http.Request, user, action, target string) { auditLog.Record(r, user, action, target) },
@@ -386,21 +406,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	warnPercent, err := status.WarnPercent(os.Getenv("DATA_DEN_DISK_WARN_PERCENT"))
-	if err != nil {
-		return err
-	}
-	stat := status.New(status.Config{
-		DataDir:     dataDir,
-		WarnPercent: warnPercent,
-		MDStat:      "/proc/mdstat",
-		Uptime:      "/proc/uptime",
-		Version:     version.Version,
-		Started:     time.Now(),
-	})
 	login, err = auth.New(auth.Config{
-		Username:     os.Getenv("DATA_DEN_USERNAME"),
-		PasswordHash: os.Getenv("DATA_DEN_PASSWORD_HASH"),
+		Username:     owner.Name,
+		PasswordHash: owner.PasswordHash,
+		OwnerFile:    ownerFile,
 		TrustedProxy: os.Getenv("DATA_DEN_TRUSTED_PROXY"),
 		AccountsFile: accounts,
 		Usage: func(name string) (int64, error) {
@@ -420,9 +429,6 @@ func run() error {
 	})
 	if err != nil {
 		return err
-	}
-	if os.Getenv("DATA_DEN_PASSWORD_HASH") == "" {
-		slog.Warn("no DATA_DEN_PASSWORD_HASH set, so nobody can log in; create one with: data-den hash-password")
 	}
 	var mapTiles *tiles.Tiles
 	if data != nil {
@@ -448,26 +454,16 @@ func run() error {
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 	}
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir(), Tiles: mapTiles, PIM: calendars}),
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       2 * time.Minute,
-		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
-	}
+	srv := newServer(server.New(server.Config{Files: web.Files(), Version: version.Version, Auth: login, Data: data, Status: stat, Audit: auditLog, Notify: notifier, Office: office, Clients: clientsDir(), Tiles: mapTiles, PIM: calendars}))
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	// Runs before data.Close, which waits for the checks to stop.
-	defer stop()
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutdown)
-		if wopi != nil {
+	if wopi != nil {
+		go func() {
+			<-ctx.Done()
+			shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
 			_ = wopi.Shutdown(shutdown)
-		}
-	}()
+		}()
+	}
 	if geocoder != nil && data != nil {
 		go geocoder.Run(ctx)
 	}
@@ -494,13 +490,96 @@ func run() error {
 	}
 
 	slog.Info("DATA-DEN listening", "addr", addr, "https", certFile != "", "version", version.Version)
-	if certFile != "" {
+	return serve(ctx, srv)
+}
+
+// newServer is the HTTP server for handler on DATA_DEN's address.
+func newServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              listenAddr(),
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+	}
+}
+
+// serve runs srv, with HTTPS when tlsFiles are set, until ctx ends.
+func serve(ctx context.Context, srv *http.Server) error {
+	go func() {
+		<-ctx.Done()
+		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdown)
+	}()
+	var err error
+	if certFile, keyFile := tlsFiles(); certFile != "" {
 		err = srv.ListenAndServeTLS(certFile, keyFile)
 	} else {
 		err = srv.ListenAndServe()
 	}
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
 	}
-	return nil
+	return err
+}
+
+// ownerFile keeps the owner's account created on the setup page, next to
+// the other accounts.
+func ownerFile(dataDir string) string {
+	return filepath.Join(dataDir, ".data-den-accounts", "owner.json")
+}
+
+// ownerAccount is the owner's account: from DATA_DEN_USERNAME and
+// DATA_DEN_PASSWORD_HASH when the hash is set, else from the setup page's
+// file. Without either it serves the setup page until the owner creates
+// the account there. file is where the account is kept, "" for the
+// settings; owner is nil when ctx ended first.
+func ownerAccount(ctx context.Context, dataDir string, stat *status.Status) (owner *setup.Owner, file string, err error) {
+	if hash := os.Getenv("DATA_DEN_PASSWORD_HASH"); hash != "" {
+		return &setup.Owner{Name: os.Getenv("DATA_DEN_USERNAME"), PasswordHash: hash}, "", nil
+	}
+	file = ownerFile(dataDir)
+	name, hash, err := auth.LoadOwner(file)
+	if err != nil {
+		return nil, "", err
+	}
+	if name != "" {
+		return &setup.Owner{Name: name, PasswordHash: hash}, file, nil
+	}
+	certFile, _ := tlsFiles()
+	first, err := setup.New(setup.Config{
+		OwnerFile:    file,
+		CodeFile:     filepath.Join(dataDir, ".data-den-accounts", "setup-code"),
+		DataDir:      dataDir,
+		Status:       stat,
+		HTTPS:        certFile != "",
+		TrustedProxy: os.Getenv("DATA_DEN_TRUSTED_PROXY"),
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	// The setup's server stops once the account is created; the full one
+	// then starts on the same address.
+	setupCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	created := make(chan *setup.Owner, 1)
+	go func() {
+		select {
+		case o := <-first.Done():
+			created <- &o
+		case <-setupCtx.Done():
+			created <- nil
+		}
+		cancel()
+	}()
+	srv := newServer(server.New(server.Config{Files: web.Files(), Version: version.Version, Setup: first}))
+	slog.Info("DATA-DEN listening for its setup", "addr", srv.Addr, "https", certFile != "", "version", version.Version)
+	if err := serve(setupCtx, srv); err != nil {
+		return nil, "", err
+	}
+	if owner = <-created; owner == nil {
+		return nil, "", nil
+	}
+	return owner, file, nil
 }

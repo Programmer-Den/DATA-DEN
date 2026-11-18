@@ -13,6 +13,7 @@ import { OfficeFormats } from './office/formats';
 import { StartFolder } from './files/start-folder';
 import { PublicShare } from './public/public-share';
 import { SearchView } from './search/search';
+import { SetupView } from './setup/setup';
 import { SharesView } from './shares/shares';
 import { Shared } from './shared/shared';
 import { StatusView } from './status/status';
@@ -20,11 +21,13 @@ import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
 import { TeamsView } from './teams/teams';
 import { UsersView } from './users/users';
+import { VaultView } from './vault/vault';
 
 type View =
   | 'files'
   | 'marks'
   | Kind
+  | 'vault'
   | 'shares'
   | 'shared'
   | 'trash'
@@ -43,7 +46,12 @@ export const STATUS_INTERVAL = 5 * 60 * 1000;
 interface Health {
   status: string;
   version: string;
+  /** True before there is an owner's account. */
+  setup?: boolean;
 }
+
+/** How often the page asks whether the server is back after the setup. */
+export const SETUP_POLL = 1000;
 
 @Component({
   selector: 'app-root',
@@ -53,6 +61,7 @@ interface Health {
     MediaView,
     PublicShare,
     SearchView,
+    SetupView,
     SharesView,
     Shared,
     TrashView,
@@ -63,6 +72,7 @@ interface Health {
     TeamsView,
     AuditView,
     NotificationsView,
+    VaultView,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -73,6 +83,10 @@ export class App {
   /** The server's version, or null until it answered. */
   protected readonly version = signal<string | null>(null);
   protected readonly offline = signal(false);
+  /** Whether the server waits for its setup. */
+  protected readonly setup = signal(false);
+  /** The owner's name right after the setup, for the login form. */
+  protected readonly newOwner = signal('');
   /** Why the last login failed, or null. */
   protected readonly loginError = signal<string | null>(null);
   protected readonly busy = signal(false);
@@ -84,6 +98,7 @@ export class App {
     { view: 'photo', name: 'Fotos' },
     { view: 'video', name: 'Videos' },
     { view: 'document', name: 'Dokumente' },
+    { view: 'vault', name: 'Tresor' },
     { view: 'shares', name: 'Freigaben' },
     { view: 'shared', name: 'Geteilt mit mir' },
     { view: 'trash', name: 'Papierkorb' },
@@ -108,18 +123,20 @@ export class App {
   protected readonly tag = signal('');
   private readonly startFolder = inject(StartFolder);
   private readonly office = inject(OfficeFormats);
+  private readonly http = inject(HttpClient);
 
   constructor() {
     if (this.shareId) {
       // Someone with a link: no login, no version.
       return;
     }
-    inject(HttpClient)
-      .get<Health>('/api/health')
-      .subscribe({
-        next: (health) => this.version.set(health.version),
-        error: () => this.offline.set(true),
-      });
+    this.http.get<Health>('/api/health').subscribe({
+      next: (health) => {
+        this.version.set(health.version);
+        this.setup.set(health.setup === true);
+      },
+      error: () => this.offline.set(true),
+    });
     this.auth.check();
 
     // Warn about low space or a broken mirror on every page, not only on the
@@ -162,6 +179,25 @@ export class App {
         this.loginError.set(errorMessage(err));
       },
     });
+  }
+
+  /** The owner's account is created: waits for the full server, then shows the login. */
+  protected setupDone(username: string): void {
+    this.newOwner.set(username);
+    const poll = () =>
+      this.http.get<Health>('/api/health').subscribe({
+        next: (health) => {
+          if (health.setup) {
+            setTimeout(poll, SETUP_POLL);
+            return;
+          }
+          this.setup.set(false);
+          this.auth.check();
+        },
+        // Between the setup's server and the full one.
+        error: () => setTimeout(poll, SETUP_POLL),
+      });
+    poll();
   }
 
   protected search(event: Event, query: string): void {
