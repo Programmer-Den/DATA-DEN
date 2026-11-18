@@ -450,7 +450,8 @@ stands, so a broken connection costs at most one chunk. Folders in the path
 are created, and an existing file is never overwritten: the upload stops
 with "Datei existiert bereits". Unfinished chunks wait in
 `.data-den-uploads/` in the data directory, which the folder view hides; a
-restart of the server removes them.
+restart of the server removes them, and so does a day without a new chunk.
+Until then an unfinished upload counts against the quota with its full size.
 
 ## Android app
 
