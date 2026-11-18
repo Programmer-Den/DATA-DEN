@@ -44,6 +44,10 @@ type Config struct {
 	// always an admin. Without a hash, no one can log in.
 	Username     string
 	PasswordHash string
+	// OwnerFile keeps the owner's account when it was created on the setup
+	// page; then the owner can change its password there. Empty means the
+	// account comes from the settings and cannot be changed.
+	OwnerFile string
 	// AccountsFile keeps the other accounts; empty keeps them in memory only.
 	AccountsFile string
 	// Usage is how many bytes an account stores, for the list of accounts;
@@ -65,10 +69,12 @@ type Config struct {
 // Auth holds the accounts, the sessions and the failed logins. Sessions and
 // failures live in memory, so a restart logs everyone out.
 type Auth struct {
-	cfg      Config
-	dummy    []byte
-	mu       sync.Mutex
-	accounts map[string]Account
+	cfg   Config
+	dummy []byte
+	mu    sync.Mutex
+	// ownerHash is the owner's password hash, which changes with OwnerFile.
+	ownerHash string
+	accounts  map[string]Account
 	// twoFactor holds the accounts with a second factor, the owner's too.
 	twoFactor map[string]TwoFactor
 	// pendingSecrets are secrets being set up, until the first code fits.
@@ -124,6 +130,7 @@ func New(cfg Config) (*Auth, error) {
 	return &Auth{
 		cfg:            cfg,
 		dummy:          dummy,
+		ownerHash:      cfg.PasswordHash,
 		accounts:       stored.accounts,
 		twoFactor:      stored.twoFactor,
 		pendingSecrets: map[string]pendingSecret{},
@@ -274,14 +281,19 @@ type sessionInfo struct {
 	Admin     bool   `json:"admin"`
 	Owner     bool   `json:"owner"`
 	TwoFactor bool   `json:"twoFactor"`
+	// FixedPassword is true for the owner whose password is in the
+	// server's settings, so it cannot be changed on the page.
+	FixedPassword bool `json:"fixedPassword,omitempty"`
 }
 
 func (a *Auth) sessionInfo(account Account) sessionInfo {
+	owner := account.Name == a.cfg.Username
 	return sessionInfo{
-		Username:  account.Name,
-		Admin:     account.Admin,
-		Owner:     account.Name == a.cfg.Username,
-		TwoFactor: a.hasSecondFactor(account.Name),
+		Username:      account.Name,
+		Admin:         account.Admin,
+		Owner:         owner,
+		TwoFactor:     a.hasSecondFactor(account.Name),
+		FixedPassword: owner && a.cfg.OwnerFile == "",
 	}
 }
 
@@ -445,11 +457,11 @@ func (a *Auth) account(name string) (Account, bool) {
 	if name == "" {
 		return Account{}, false
 	}
-	if subtle.ConstantTimeCompare([]byte(name), []byte(a.cfg.Username)) == 1 {
-		return Account{Name: a.cfg.Username, PasswordHash: a.cfg.PasswordHash, Admin: true}, true
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if subtle.ConstantTimeCompare([]byte(name), []byte(a.cfg.Username)) == 1 {
+		return Account{Name: a.cfg.Username, PasswordHash: a.ownerHash, Admin: true}, true
+	}
 	account, ok := a.accounts[name]
 	return account, ok
 }

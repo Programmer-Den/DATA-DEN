@@ -1,0 +1,98 @@
+<section class="setup">
+  <h2>Einrichtung</h2>
+  @switch (step()) {
+    @case ('code') {
+      <p>
+        DATA-DEN hat noch kein Hauptkonto. Der Einrichtungscode beweist, dass du Zugang zur VM hast.
+        Er steht im Log von DATA-DEN und in einer Datei im Datenordner, in der VM:
+      </p>
+      <pre>
+sudo docker compose logs data-den | grep code
+sudo cat /srv/data-den/.data-den-accounts/setup-code</pre>
+      <form (submit)="check($event, codeField.value)">
+        <label>
+          Einrichtungscode
+          <input
+            #codeField
+            name="code"
+            autocomplete="off"
+            autocapitalize="characters"
+            placeholder="XXXX-XXXX-XXXX"
+            required
+          />
+        </label>
+        @if (error(); as error) {
+          <p class="error" role="alert">{{ error }}</p>
+        }
+        <button type="submit" [disabled]="busy()">Weiter</button>
+      </form>
+    }
+    @case ('checks') {
+      <p>Prüfung der Installation:</p>
+      <ul class="checks">
+        @for (item of checks(); track item.text) {
+          <li [class.ok]="item.ok" [class.warn]="!item.ok">
+            {{ item.ok ? '✓' : '⚠' }} {{ item.text }}
+            @if (item.hint) {
+              <br /><span class="hint">{{ item.hint }}</span>
+            }
+          </li>
+        }
+      </ul>
+      @if (error(); as error) {
+        <p class="error" role="alert">{{ error }}</p>
+      }
+      <p class="actions">
+        <button type="button" (click)="recheck()" [disabled]="busy()">Erneut prüfen</button>
+        <button type="button" (click)="step.set('account')" [disabled]="!ready()">Weiter</button>
+      </p>
+      @if (!ready()) {
+        <p class="hint">Ohne beschreibbaren Datenordner kann das Konto nicht gespeichert werden.</p>
+      } @else {
+        <p class="hint">Warnungen lassen sich auch später beheben.</p>
+      }
+    }
+    @case ('account') {
+      <p>Das Hauptkonto ist immer Admin und legt später weitere Konten an.</p>
+      <form (submit)="create($event, username.value, password.value, repeat.value)">
+        <label>
+          Benutzername
+          <input
+            #username
+            name="username"
+            autocomplete="username"
+            pattern="[a-z0-9][a-z0-9._\-]{0,31}"
+            title="Kleinbuchstaben, Ziffern, Punkt, Binde- und Unterstrich, höchstens 32 Zeichen"
+            required
+          />
+        </label>
+        <label>
+          Passwort
+          <input
+            #password
+            name="password"
+            type="password"
+            autocomplete="new-password"
+            minlength="10"
+            required
+          />
+        </label>
+        <label>
+          Passwort wiederholen
+          <input
+            #repeat
+            name="repeat"
+            type="password"
+            autocomplete="new-password"
+            minlength="10"
+            required
+          />
+        </label>
+        @if (error(); as error) {
+          <p class="error" role="alert">{{ error }}</p>
+        }
+        <button type="submit" [disabled]="busy()">Konto anlegen</button>
+      </form>
+    }
+  }
+</section>

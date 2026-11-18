@@ -60,19 +60,19 @@ Copy `tls/cert.pem` (never the key) to the Pi for its gateway.
 
 ## 5. Settings
 
-Create the hash of the password and the `.env` with the settings from the
-main [README](../README.md#login):
+Create the `.env` with the settings from the main
+[README](../README.md#login):
 
 ```bash
-sudo docker run --rm -i ghcr.io/programmer-den/data-den:main hash-password
 nano .env && chmod 600 .env
 ```
 
 ```bash
-DATA_DEN_USERNAME=<name>
-DATA_DEN_PASSWORD_HASH='$2a$12$...'
 DATA_DEN_TRUSTED_PROXY=192.168.1.20      # the Pi's address
 ```
+
+The owner's account is created on the setup page after the start
+([First run](../README.md#first-run)), so no password goes into the `.env`.
 
 For notifications by email, add the mail server
 ([README](../README.md#notifications)), for example:
@@ -102,6 +102,13 @@ curl -k https://localhost:8443/api/health
 
 It starts again with the VM. From another device than the Pi, port 8443 is
 not reachable.
+
+Then open DATA-DEN through the Pi, such as `https://nas.example.de`, and
+create the owner's account on the setup page with the code from
+
+```bash
+sudo cat /srv/data-den/.data-den-accounts/setup-code
+```
 
 If a pull says *denied* or *unauthorized*, the login is missing or its token
 has expired: log in again as in step 2.

@@ -16,6 +16,7 @@ import (
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/files"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/notify"
+	"github.com/Programmer-Den/DATA-DEN/backend/internal/setup"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/tiles"
 )
@@ -47,6 +48,9 @@ type Config struct {
 	Clients fs.FS
 	// Tiles adds the map tiles behind the login; nil leaves them out.
 	Tiles *tiles.Tiles
+	// Setup serves the setup page instead of the login, before there is an
+	// owner's account; /api/health then reports "setup": true.
+	Setup *setup.Setup
 }
 
 // clientName is what /api/sync/client serves, such as
@@ -57,8 +61,15 @@ var clientName = regexp.MustCompile(`^data-den-sync-(windows|linux|darwin)-(amd6
 func New(cfg Config) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": cfg.Version})
+		health := map[string]any{"status": "ok", "version": cfg.Version}
+		if cfg.Setup != nil {
+			health["setup"] = true
+		}
+		writeJSON(w, http.StatusOK, health)
 	})
+	if cfg.Setup != nil {
+		cfg.Setup.Register(mux)
+	}
 	if cfg.Auth != nil {
 		cfg.Auth.Register(mux)
 		if cfg.Status != nil {
