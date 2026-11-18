@@ -305,4 +305,28 @@ done
 expect 2 'has . or ..' ./setup-deploy.sh on --print /home/den/../root
 expect 0 'DATA_DEN_COMPOSE_DIR=/home/den/data-den' ./setup-deploy.sh on --print /home/den/data-den/
 
+expect 2 'Usage' ./install.sh --yes
+expect 2 'Usage' ./install.sh --pi
+expect 2 'Usage' ./install.sh --pi-settings
+expect 2 'Usage' ./install.sh --pi-settings /a /b
+for bad in 192.168.1 256.1.1.1 '192.168.1.20 x'; do
+	expect 2 'not an IPv4 address' ./install.sh --pi "$bad"
+done
+for bad in relative/data-den /home/den/../root '/home/den data'; do
+	expect 2 'not an absolute folder' ./install.sh --dir "$bad"
+	expect 2 'not an absolute folder' ./install.sh --pi-settings "$bad"
+done
+expect 1 'No certificate' ./install.sh --pi-settings /nonexistent
+# The settings for the Pi, from a certificate like the one install.sh makes.
+tmp="$(mktemp -d)"
+mkdir "$tmp/tls" "$tmp/bin"
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+	-subj /CN=data-den -keyout "$tmp/tls/key.pem" -out "$tmp/tls/cert.pem" 2>/dev/null
+fp="$(openssl x509 -noout -fingerprint -sha256 -in "$tmp/tls/cert.pem" | sed 's/^.*=//')"
+printf '#!/bin/sh\necho "1.1.1.1 via 192.168.1.1 dev eth0 src 192.168.1.30 uid 1000"\n' > "$tmp/bin/ip"
+chmod +x "$tmp/bin/ip"
+expect 0 "DATADEN_VM_FINGERPRINT=$fp" env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
+expect 0 'DATADEN_VM=192.168.1.30' env PATH="$tmp/bin:$PATH" ./install.sh --pi-settings "$tmp"
+rm -rf "$tmp"
+
 exit "$failed"

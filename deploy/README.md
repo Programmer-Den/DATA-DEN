@@ -15,6 +15,9 @@ release also as `1.2.3` and `latest`. In the storage VM it runs with
 
 Before this, set up the VM, its RAID 1 and its firewall: [vm/README.md](../vm/README.md).
 
+`sudo vm/install.sh` does the steps 1 to 6 below together with the VM's own
+([Guided install](../vm/README.md#4-guided-install)); this page is the same by hand.
+
 ## 1. Install Docker in the VM
 
 From Debian's own packages:

@@ -35,6 +35,7 @@ optional backup: [Backup (optional)](#backup-optional).
 | `disk-health.sh`, `data-den-disk-health.service`, `data-den-disk-health.timer` | the VM, installed by `setup-disk-health.sh` | Reads the disk health from Windows and notifies the admins when it changes |
 | `backup.sh`, `data-den-backup.service`, `data-den-backup.timer` | the VM, installed by `setup-backup.sh` | The nightly backup run with restic |
 | `backup-result.sh`, `event.sh` | the VM, installed by `setup-backup.sh` (`event.sh` also by `setup-disk-health.sh`) | Hand a failed backup run or a bad disk to DATA-DEN, which notifies the admins |
+| `install.sh` | the VM, as root | The guided install: the mirror, firewall, updates and DATA-DEN ([deploy/README.md](../deploy/README.md)) in one run; skips what is done and prints the settings for the Pi |
 | `Deploy-DataDen.ps1` | Windows, as administrator | Hands a new DATA-DEN version to the VM and waits for its answer; `-Install` lets a runner's account start deploys ([deploy/README.md](../deploy/README.md#deploy-from-windows)) |
 | `setup-deploy.sh` | the VM, as root | Switches deploys from Windows on or off, or shows the last one |
 | `deploy.sh`, `data-den-deploy.path`, `data-den-deploy.service` | the VM, installed by `setup-deploy.sh` | Pulls the version Windows handed over, restarts DATA-DEN with it, goes back when it does not get healthy |
@@ -89,7 +90,42 @@ Start-VM -Name DATA-DEN; vmconnect localhost DATA-DEN
 Until the next step, SSH works only from the Pi:
 `ssh -J <user>@<pi> <user>@<vm>`. The console in `vmconnect` always works.
 
-## 4. RAID 1 and firewall in the VM
+## 4. Guided install
+
+Copy this folder and `deploy` into the VM (the repository, or the `vm`
+folder and the deploy zip of a release), then in the VM:
+
+```bash
+scp -J <user>@<pi> -r vm deploy <user>@<vm>:
+sudo vm/install.sh --pi 192.168.1.20         # the Pi's address
+```
+
+It asks for what it needs and runs, one after the other, the steps
+described below and in [deploy/README.md](../deploy/README.md):
+
+1. the mirror: it lists the free whole disks and asks for the numbers of
+   the two data disks, then runs `setup-raid.sh` (which asks again before it
+   erases them, and shows the recovery key once)
+2. the firewall (`setup-firewall.sh`)
+3. automatic security updates (`setup-updates.sh on`)
+4. Docker from Debian
+5. the login at ghcr.io, with a `read:packages` token
+6. `~/data-den` with `compose.yaml` and a `.env` with `DATA_DEN_TRUSTED_PROXY`
+7. the certificate for the way from the Pi
+8. DATA-DEN itself, until it answers on port 8443
+9. deploys from Windows (`setup-deploy.sh on`)
+
+A step that is already done is skipped, so after a stop it simply runs
+again. At the end it prints the lines for `config/rpi-setup.env` on the Pi
+(`DATADEN_VM`, `DATADEN_VM_FINGERPRINT`; add your `DATADEN_DOMAIN`) and the
+setup code. Run `sudo bash setup.sh dataden` on the Pi, open DATA-DEN
+through it and create the owner's account on the setup page
+([First run](../README.md#first-run)). `vm/install.sh --pi-settings
+~/data-den` prints the Pi's lines again.
+
+The sections below are the same steps by hand.
+
+### RAID 1 and firewall by hand
 
 Copy this folder into the VM (`scp -J <user>@<pi> -r vm <user>@<vm>:`), then
 in the VM:
