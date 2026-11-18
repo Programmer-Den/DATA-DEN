@@ -22,6 +22,11 @@ export class Shared {
   protected readonly rights = rights;
   protected readonly from = from;
 
+  /** Where grant is served as a network drive (WebDAV). */
+  protected davUrl(grant: Grant): string {
+    return `${location.origin}/dav-shared/${grant.id}/`;
+  }
+
   constructor() {
     this.load();
   }

@@ -151,3 +151,162 @@ func TestDavRefusesSymlinksOut(t *testing.T) {
 		t.Errorf("served a file outside the data directory: %q", rec.Body)
 	}
 }
+
+// davGrantsSetup is grantsSetup with WebDAV.
+func davGrantsSetup(t *testing.T) (*Spaces, http.Handler, string, *[]string) {
+	t.Helper()
+	s, h, data, _, audited := grantsSetup(t)
+	s.RegisterDAV(h.(*http.ServeMux), func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			next(w, r.WithContext(context.WithValue(r.Context(), userKey{}, r.Header.Get("X-User"))))
+		}
+	})
+	return s, h, data, audited
+}
+
+func TestDavSharedFolderRead(t *testing.T) {
+	_, h, data, _ := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna"}`)
+	root := "/dav-shared/" + g.ID + "/"
+	rec := dav(h, "anna", "PROPFIND", root, "", map[string]string{"Depth": "1"})
+	if rec.Code != http.StatusMultiStatus {
+		t.Fatalf("PROPFIND: status %d", rec.Code)
+	}
+	for _, want := range []string{root + "a.txt", root + "2026/"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("PROPFIND lacks %s: %s", want, rec.Body)
+		}
+	}
+	if strings.Contains(rec.Body.String(), "geheim") {
+		t.Errorf("PROPFIND shows what is next to the folder: %s", rec.Body)
+	}
+	if rec := dav(h, "anna", http.MethodGet, root+"2026/b.txt", "", nil); rec.Code != http.StatusOK || rec.Body.String() != "Projekt/2026/b.txt" {
+		t.Errorf("GET: status %d, body %q", rec.Code, rec.Body)
+	}
+	if rec := dav(h, "anna", http.MethodGet, root+"%2e%2e/geheim.txt", "", nil); rec.Code == http.StatusOK {
+		t.Errorf("GET out of the folder: %q", rec.Body)
+	}
+	// Only reading.
+	if rec := dav(h, "anna", http.MethodPut, root+"neu.txt", "x", nil); rec.Code < 400 {
+		t.Errorf("PUT: status %d", rec.Code)
+	}
+	if rec := dav(h, "anna", http.MethodDelete, root+"a.txt", "", nil); rec.Code < 400 {
+		t.Errorf("DELETE: status %d", rec.Code)
+	}
+	if rec := dav(h, "anna", "MKCOL", root+"Neu", "", nil); rec.Code < 400 {
+		t.Errorf("MKCOL: status %d", rec.Code)
+	}
+	if exists(data, "Projekt/neu.txt") || !exists(data, "Projekt/a.txt") || exists(data, "Projekt/Neu") {
+		t.Error("changed a folder shared only to read")
+	}
+	// Nobody else, and no unknown grant.
+	for user, target := range map[string]string{"bob": root, "chef": root, "anna": "/dav-shared/" + strings.Repeat("0", 32) + "/"} {
+		if rec := dav(h, user, "PROPFIND", target, "", nil); rec.Code != http.StatusNotFound {
+			t.Errorf("%s PROPFIND %s: status %d, want 404", user, target, rec.Code)
+		}
+	}
+}
+
+func TestDavSharedFolderWrite(t *testing.T) {
+	_, h, data, audited := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna","write":true}`)
+	root := "/dav-shared/" + g.ID + "/"
+	// anna's quota of 10 bytes does not apply in chef's folder.
+	if rec := dav(h, "anna", http.MethodPut, root+"neu.txt", "mehr als zehn Bytes", nil); rec.Code != http.StatusCreated {
+		t.Fatalf("PUT: status %d", rec.Code)
+	}
+	if got := readFile(t, filepath.Join(data, "Projekt", "neu.txt")); got != "mehr als zehn Bytes" {
+		t.Errorf("the file holds %q", got)
+	}
+	if rec := dav(h, "anna", "MOVE", root+"a.txt", "", map[string]string{"Destination": root + "2026/a.txt"}); rec.Code != http.StatusCreated {
+		t.Errorf("MOVE: status %d", rec.Code)
+	}
+	if rec := dav(h, "anna", http.MethodDelete, root+"2026", "", nil); rec.Code != http.StatusNoContent {
+		t.Errorf("DELETE: status %d", rec.Code)
+	}
+	if items := chefTrash(t, h); len(items) != 1 || items[0] != "/Projekt/2026" {
+		t.Errorf("chef's recycle bin %v", items)
+	}
+	// Never the shared folder itself, nor out of it.
+	if rec := dav(h, "anna", http.MethodDelete, root, "", nil); rec.Code < 400 {
+		t.Errorf("DELETE of the folder: status %d", rec.Code)
+	}
+	if rec := dav(h, "anna", "MOVE", root+"neu.txt", "", map[string]string{"Destination": root + "../neu.txt"}); rec.Code == http.StatusCreated {
+		t.Errorf("MOVE out of the folder: status %d", rec.Code)
+	}
+	if !exists(data, "Projekt") || !exists(data, "Projekt/neu.txt") || exists(data, "neu.txt") {
+		t.Error("the folder or a file in it left the folder")
+	}
+	want := []string{
+		"chef grant-create /Projekt → anna (lesen und schreiben)",
+		"anna upload chef:/Projekt/neu.txt",
+		"anna move chef:/Projekt/a.txt → /Projekt/2026/a.txt",
+		"anna delete chef:/Projekt/2026",
+	}
+	if strings.Join(*audited, "|") != strings.Join(want, "|") {
+		t.Errorf("audit:\n%s\nwant\n%s", strings.Join(*audited, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestDavMoveKeepsTheGrant(t *testing.T) {
+	_, h, _, _ := davGrantsSetup(t)
+	g := grantTo(t, h, "chef", `{"path":"/Projekt","to":"anna"}`)
+	if rec := dav(h, "chef", "MOVE", "/dav/Projekt", "", map[string]string{"Destination": "/dav/Arbeit"}); rec.Code != http.StatusCreated {
+		t.Fatalf("MOVE: status %d", rec.Code)
+	}
+	if _, withMe := grants(t, h, "anna"); len(withMe) != 1 || withMe[0].Path != "/Arbeit" {
+		t.Errorf("anna's shared folders after the move: %+v", withMe)
+	}
+	if rec := dav(h, "anna", http.MethodGet, "/dav-shared/"+g.ID+"/a.txt", "", nil); rec.Code != http.StatusOK {
+		t.Errorf("GET after the move: status %d", rec.Code)
+	}
+}
+
+func TestDavQuotaProperties(t *testing.T) {
+	_, h, _ := davSetup(t)
+	if rec := dav(h, "anna", http.MethodPut, "/dav/klein.txt", "0123", nil); rec.Code != http.StatusCreated {
+		t.Fatalf("PUT: status %d", rec.Code)
+	}
+	body := `<?xml version="1.0"?><propfind xmlns="DAV:"><prop><quota-used-bytes/><quota-available-bytes/></prop></propfind>`
+	rec := dav(h, "anna", "PROPFIND", "/dav/", body, map[string]string{"Depth": "0"})
+	if rec.Code != http.StatusMultiStatus {
+		t.Fatalf("PROPFIND: status %d", rec.Code)
+	}
+	for _, want := range []string{">4</D:quota-used-bytes>", ">6</D:quota-available-bytes>"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("PROPFIND lacks %s: %s", want, rec.Body)
+		}
+	}
+	// A file has none, and the quota cannot be changed.
+	rec = dav(h, "anna", "PROPFIND", "/dav/klein.txt", body, map[string]string{"Depth": "0"})
+	if strings.Contains(rec.Body.String(), ">6<") {
+		t.Errorf("PROPFIND of a file: %s", rec.Body)
+	}
+	patch := `<?xml version="1.0"?><propertyupdate xmlns="DAV:"><set><prop><quota-available-bytes>999</quota-available-bytes></prop></set></propertyupdate>`
+	rec = dav(h, "anna", "PROPPATCH", "/dav/", patch, nil)
+	if !strings.Contains(rec.Body.String(), "403") {
+		t.Errorf("PROPPATCH: status %d, body %s", rec.Code, rec.Body)
+	}
+}
+
+func TestDavProppatchKeepsTheFile(t *testing.T) {
+	_, h, data := davSetup(t)
+	if rec := dav(h, "chef", http.MethodPut, "/dav/a.txt", "inhalt", nil); rec.Code != http.StatusCreated {
+		t.Fatalf("PUT: status %d", rec.Code)
+	}
+	// What Explorer sends after copying a file.
+	patch := `<?xml version="1.0"?><propertyupdate xmlns="DAV:" xmlns:Z="urn:schemas-microsoft-com:"><set><prop>` +
+		`<Z:Win32LastModifiedTime>Wed, 18 Nov 2026 10:00:00 GMT</Z:Win32LastModifiedTime>` +
+		`<Z:Win32FileAttributes>00000020</Z:Win32FileAttributes></prop></set></propertyupdate>`
+	rec := dav(h, "chef", "PROPPATCH", "/dav/a.txt", patch, nil)
+	if rec.Code != http.StatusMultiStatus || !strings.Contains(rec.Body.String(), "200 OK") {
+		t.Errorf("PROPPATCH: status %d, body %s", rec.Code, rec.Body)
+	}
+	if got := readFile(t, filepath.Join(data, "a.txt")); got != "inhalt" {
+		t.Errorf("after PROPPATCH the file holds %q", got)
+	}
+	other := `<?xml version="1.0"?><propertyupdate xmlns="DAV:"><set><prop><displayname>b</displayname></prop></set></propertyupdate>`
+	if rec := dav(h, "chef", "PROPPATCH", "/dav/a.txt", other, nil); !strings.Contains(rec.Body.String(), "403") {
+		t.Errorf("PROPPATCH of another property: status %d, body %s", rec.Code, rec.Body)
+	}
+}

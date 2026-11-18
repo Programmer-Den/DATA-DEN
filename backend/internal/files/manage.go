@@ -119,6 +119,15 @@ func (f *Files) move(w http.ResponseWriter, r *http.Request) {
 		f.diskError(w, "moving", err)
 		return
 	}
+	f.moveRecords(from, to)
+	slog.Info("moved", "from", "/"+from, "to", "/"+to)
+	f.note(r, "move", "/"+from+" → /"+to)
+	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + to})
+}
+
+// moveRecords moves what the server keeps about from along with it to to:
+// share links, checksums, versions, albums, marks and shared folders.
+func (f *Files) moveRecords(from, to string) {
 	f.moveShares(from, to)
 	f.sumMoved(from, to)
 	f.versionsMoved(from, to)
@@ -127,9 +136,6 @@ func (f *Files) move(w http.ResponseWriter, r *http.Request) {
 		f.moved(from, to)
 	}
 	f.marksMoved(from, to)
-	slog.Info("moved", "from", "/"+from, "to", "/"+to)
-	f.note(r, "move", "/"+from+" → /"+to)
-	writeJSON(w, http.StatusOK, map[string]string{"path": "/" + to})
 }
 
 // rename moves a file or folder. A file is hard-linked and the old name

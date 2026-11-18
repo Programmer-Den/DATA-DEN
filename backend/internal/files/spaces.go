@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/webdav"
 )
 
 // Every account has its own space. The owner's (the account from
@@ -134,6 +136,17 @@ type Spaces struct {
 	stop map[string]context.CancelFunc
 	// grantsMu orders the changes to grantsFile.
 	grantsMu sync.Mutex
+	// davMu guards davShared, the WebDAV handler of each shared folder by
+	// the id of its grant.
+	davMu     sync.Mutex
+	davShared map[string]davShared
+}
+
+// davShared serves a shared folder over WebDAV, for the folder and rights it
+// was made for.
+type davShared struct {
+	d davFS
+	h *webdav.Handler
 }
 
 // OpenSpaces opens the data directory dir.
@@ -269,6 +282,47 @@ func (s *Spaces) RegisterDAV(mux *http.ServeMux, require func(http.HandlerFunc) 
 	})
 	mux.HandleFunc(DavPrefix, handler)
 	mux.HandleFunc(DavPrefix+"/", handler)
+	mux.HandleFunc(DavSharedPrefix+"/", require(s.serveDavShared))
+}
+
+// serveDavShared answers a WebDAV request to the shared folder whose grant id
+// starts the path, with every path within the folder and the grant's rights.
+func (s *Spaces) serveDavShared(w http.ResponseWriter, r *http.Request) {
+	user := s.cfg.User(r)
+	id, _, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, DavSharedPrefix+"/"), "/")
+	g, ok := s.grant(id)
+	if !ok {
+		s.davMu.Lock()
+		delete(s.davShared, id)
+		s.davMu.Unlock()
+	}
+	if !ok || g.To != user || !s.grantFolderThere(g) {
+		http.Error(w, "Geteilter Ordner nicht gefunden", http.StatusNotFound)
+		return
+	}
+	f, err := s.space(g.Owner)
+	if err != nil {
+		slog.Error("opening a space", "username", g.Owner, "err", err)
+		http.Error(w, "Speicherbereich nicht verfügbar", http.StatusInternalServerError)
+		return
+	}
+	if s.cfg.Quota != nil {
+		f.quota.Store(s.cfg.Quota(g.Owner))
+	}
+	d := davFS{f: f, dir: g.dir(), readOnly: !g.Write}
+	s.davMu.Lock()
+	if s.davShared == nil {
+		s.davShared = map[string]davShared{}
+	}
+	// A grant that was moved or changed gets a new handler; its locks go.
+	shared, ok := s.davShared[g.ID]
+	if !ok || shared.d != d {
+		shared = davShared{d: d, h: newDavHandler(DavSharedPrefix+"/"+g.ID, d)}
+		s.davShared[g.ID] = shared
+	}
+	s.davMu.Unlock()
+	r = r.WithContext(context.WithValue(r.Context(), actingKey{}, acting{user: user, owner: g.Owner}))
+	shared.h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestKey{}, r)))
 }
 
 // RegisterShares adds ShareRoutes to mux behind require, each account's
