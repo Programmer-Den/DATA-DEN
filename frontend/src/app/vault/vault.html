@@ -1,0 +1,216 @@
+@if (done(); as done) {
+  <p class="done" role="status">{{ done }}</p>
+}
+@if (error(); as error) {
+  <p class="error" role="alert">{{ error }}</p>
+}
+
+@if (pending(); as pending) {
+  <section class="recovery">
+    <h2>Wiederherstellungsschlüssel</h2>
+    <p>
+      Schreib diesen Schlüssel auf oder speichere ihn in einem Passwort-Manager. Er öffnet den
+      Tresor, wenn die Passphrase vergessen ist. Er wird nur jetzt angezeigt.
+    </p>
+    <p class="key">
+      <code>{{ pending.recovery }}</code>
+    </p>
+    <form (submit)="$event.preventDefault(); confirm()">
+      <label>
+        <input type="checkbox" name="noted" required />
+        Ich habe den Schlüssel sicher aufbewahrt
+      </label>
+      <button type="submit" [disabled]="busy()">Weiter</button>
+    </form>
+  </section>
+} @else if (keys() === null) {
+  <section>
+    <h2>Tresor einrichten</h2>
+    <p>
+      Dateien im Tresor werden in diesem Browser verschlüsselt, bevor sie ihn verlassen, Namen
+      eingeschlossen. Der Server, ein Admin oder wer die Festplatten hat, sieht nur Datensalat.
+    </p>
+    <ul class="hint">
+      <li>
+        Ohne Passphrase und Wiederherstellungsschlüssel sind die Dateien verloren. Niemand kann sie
+        zurückholen, auch kein Admin.
+      </li>
+      <li>
+        Im Tresor gibt es keine Suche, Vorschau, Texterkennung, Freigaben, Versionen und keinen
+        Papierkorb. Die Sync-App, die Android-App und das Netzlaufwerk sehen ihn nicht.
+      </li>
+      <li>Höchstens 1 GB je Datei, da der Browser sie im Speicher ver- und entschlüsselt.</li>
+    </ul>
+    <form class="form" (submit)="create($event, passphrase.value, repeat.value)">
+      <label>
+        Passphrase (mindestens {{ minPassphrase }} Zeichen, nicht das Anmeldepasswort)
+        <input #passphrase name="passphrase" type="password" autocomplete="new-password" required />
+      </label>
+      <label>
+        Passphrase wiederholen
+        <input #repeat name="repeat" type="password" autocomplete="new-password" required />
+      </label>
+      <button type="submit" [disabled]="busy()">Tresor einrichten</button>
+    </form>
+  </section>
+} @else if (keys() && !unlocked()) {
+  <section>
+    <h2>Tresor gesperrt</h2>
+    <form class="form" (submit)="unlock($event, unlockSecret.value)">
+      <label>
+        {{ byRecovery() ? 'Wiederherstellungsschlüssel' : 'Passphrase' }}
+        <input
+          #unlockSecret
+          [attr.name]="byRecovery() ? 'recovery' : 'passphrase'"
+          [type]="byRecovery() ? 'text' : 'password'"
+          [attr.autocomplete]="byRecovery() ? 'off' : 'current-password'"
+          spellcheck="false"
+          required
+        />
+      </label>
+      <button type="submit" [disabled]="busy()">{{ busy() ? 'Öffne …' : 'Entsperren' }}</button>
+    </form>
+    <button type="button" class="link" (click)="byRecovery.set(!byRecovery())">
+      {{ byRecovery() ? 'Mit der Passphrase öffnen' : 'Passphrase vergessen?' }}
+    </button>
+  </section>
+} @else if (unlocked()) {
+  <div class="toolbar">
+    <nav class="crumbs" aria-label="Ordner">
+      <button type="button" class="link" (click)="up(0)">Tresor</button>
+      @for (crumb of path(); track crumb.sealed; let i = $index) {
+        / <button type="button" class="link" (click)="up(i + 1)">{{ crumb.name }}</button>
+      }
+    </nav>
+    <button type="button" (click)="lock()">Sperren</button>
+  </div>
+  @if (recovered()) {
+    <p class="warning" role="alert">
+      Mit dem Wiederherstellungsschlüssel geöffnet: bitte unten eine neue Passphrase setzen.
+    </p>
+  }
+  <div class="actions-bar">
+    <label class="upload">
+      Dateien verschlüsselt hochladen
+      <input #files type="file" multiple [disabled]="busy()" (change)="upload(files)" />
+    </label>
+    <form (submit)="createFolder($event, folder)">
+      <input #folder name="folder" aria-label="Neuer Ordner" placeholder="Neuer Ordner" />
+      <button type="submit" [disabled]="busy()">Anlegen</button>
+    </form>
+  </div>
+  @if (entries(); as entries) {
+    @if (entries.length === 0) {
+      <p class="hint">Dieser Ordner ist leer.</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col" class="size">Größe</th>
+            <th scope="col">Geändert</th>
+            <th scope="col"><span class="visually-hidden">Aktionen</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (entry of entries; track entry.sealed) {
+            <tr>
+              <td>
+                @if (entry.dir) {
+                  <button type="button" class="link" (click)="openFolder(entry)">
+                    📁 {{ entry.name }}
+                  </button>
+                } @else {
+                  {{ entry.name }}
+                }
+              </td>
+              <td class="size">{{ entry.dir ? '' : formatSize(plainSize(entry.size)) }}</td>
+              <td>{{ modified(entry) }}</td>
+              <td class="actions">
+                @if (!entry.dir) {
+                  <button type="button" [disabled]="busy()" (click)="download(entry)">
+                    Herunterladen
+                  </button>
+                }
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  [attr.aria-label]="entry.name + ' umbenennen'"
+                  (click)="rename(entry)"
+                >
+                  Umbenennen
+                </button>
+                <button
+                  type="button"
+                  [disabled]="busy()"
+                  [attr.aria-label]="entry.name + ' löschen'"
+                  (click)="remove(entry)"
+                >
+                  Löschen
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+    @if (unreadable() > 0) {
+      <p class="hint">
+        {{ unreadable() }} Einträge lassen sich mit diesem Schlüssel nicht lesen und sind
+        ausgeblendet.
+      </p>
+    }
+  } @else {
+    <p>Lade …</p>
+  }
+
+  <section class="settings">
+    <button type="button" class="link" (click)="settings.set(!settings())">
+      {{ settings() ? 'Einstellungen ausblenden' : 'Passphrase und Wiederherstellung' }}
+    </button>
+    @if (settings()) {
+      <form
+        class="form"
+        (submit)="changePassphrase($event, current.value, passphrase.value, repeat.value)"
+      >
+        <h3>Passphrase ändern</h3>
+        <label>
+          {{ recovered() ? 'Wiederherstellungsschlüssel' : 'Bisherige Passphrase' }}
+          <input #current name="current" type="password" autocomplete="current-password" required />
+        </label>
+        <label>
+          Neue Passphrase (mindestens {{ minPassphrase }} Zeichen)
+          <input
+            #passphrase
+            name="passphrase"
+            type="password"
+            autocomplete="new-password"
+            required
+          />
+        </label>
+        <label>
+          Neue Passphrase wiederholen
+          <input #repeat name="repeat" type="password" autocomplete="new-password" required />
+        </label>
+        <button type="submit" [disabled]="busy()">Passphrase ändern</button>
+      </form>
+      <form class="form" (submit)="renewRecovery($event, renewSecret.value)">
+        <h3>Neuer Wiederherstellungsschlüssel</h3>
+        <p class="hint">Der bisherige gilt danach nicht mehr.</p>
+        <label>
+          {{ recovered() ? 'Wiederherstellungsschlüssel' : 'Passphrase' }}
+          <input
+            #renewSecret
+            name="secret"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+        <button type="submit" [disabled]="busy()">Neuen Schlüssel erzeugen</button>
+      </form>
+    }
+  </section>
+} @else if (!error()) {
+  <p>Lade …</p>
+}

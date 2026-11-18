@@ -1,0 +1,92 @@
+section {
+  margin-bottom: 1.5rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.hint {
+  opacity: 0.7;
+}
+
+.done {
+  color: #2e7d32;
+}
+
+.error,
+.warning {
+  color: #c62828;
+}
+
+.form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 24rem;
+  margin-bottom: 1rem;
+}
+
+.form label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.key code {
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.toolbar,
+.actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.size {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.actions {
+  text-align: right;
+}
+
+.actions button {
+  margin: 0.1rem 0 0.1rem 0.3rem;
+}
+
+.settings {
+  margin-top: 1.5rem;
+}

@@ -57,6 +57,9 @@
       @case ('marks') {
         <app-marks [tag]="tag()" (openFolder)="showFolder($event)" />
       }
+      @case ('vault') {
+        <app-vault />
+      }
       @case ('shares') {
         <app-shares />
       }
