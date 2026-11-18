@@ -41,6 +41,12 @@ type Config struct {
 	User func(*http.Request) string
 	// Space opens the root of an account's space.
 	Space func(name string) (*os.Root, error)
+	// Fits reports whether n more bytes fit into the quota of the account
+	// name; nil sets no limit.
+	Fits func(name string, n int64) (bool, error)
+	// Added counts n bytes stored in the space of the account name; nil
+	// counts nothing.
+	Added func(name string, n int64)
 }
 
 // PIM serves the calendars and contacts of every account.
@@ -89,6 +95,12 @@ func (p *PIM) serve(h http.Handler) http.HandlerFunc {
 			return
 		}
 		a := account{name: name, root: root}
+		if p.cfg.Fits != nil {
+			a.fits = func(n int64) (bool, error) { return p.cfg.Fits(name, n) }
+		}
+		if p.cfg.Added != nil {
+			a.added = func(n int64) { p.cfg.Added(name, n) }
+		}
 		for _, k := range []kind{calendars, contacts} {
 			if err := p.store.ensure(a, k); err != nil {
 				code, err := status(err)

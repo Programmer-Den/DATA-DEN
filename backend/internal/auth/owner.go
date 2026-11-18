@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // ownerFile is the owner's account as the setup page stores it, for
@@ -34,7 +36,7 @@ func LoadOwner(file string) (name, passwordHash string, err error) {
 	if err := json.Unmarshal(data, &owner); err != nil {
 		return "", "", errors.New(file + " is not valid JSON: " + err.Error())
 	}
-	if !ValidName(owner.Name) || owner.PasswordHash == "" {
+	if _, err := bcrypt.Cost([]byte(owner.PasswordHash)); !ValidName(owner.Name) || err != nil {
 		return "", "", errors.New(file + " holds no valid account; delete it to set the owner up again")
 	}
 	return owner.Name, owner.PasswordHash, nil

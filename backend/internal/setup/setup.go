@@ -15,13 +15,16 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/auth"
 	"github.com/Programmer-Den/DATA-DEN/backend/internal/status"
 )
 
-// MaxFailures wrong codes replace the code with a new one.
-const MaxFailures = 10
+// wrongCodeDelay holds back the answer to a wrong code. The code has 60
+// bits, so guessing it is hopeless anyway; the code is never replaced, so
+// nobody can keep the admin's code from working by sending wrong ones.
+var wrongCodeDelay = time.Second
 
 // codeAlphabet leaves out letters and digits that look alike.
 const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -52,12 +55,11 @@ type Owner struct {
 
 // Setup serves the setup page's API until the owner's account is created.
 type Setup struct {
-	cfg      Config
-	mu       sync.Mutex
-	code     string
-	failures int
-	created  bool
-	done     chan Owner
+	cfg     Config
+	mu      sync.Mutex
+	code    string
+	created bool
+	done    chan Owner
 }
 
 // New makes a setup code, writes it to the log and to CodeFile.
@@ -83,8 +85,7 @@ func (s *Setup) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/setup", s.create)
 }
 
-// newCode replaces the setup code. The caller holds mu, or nobody else
-// has s yet.
+// newCode makes the setup code. Nobody else has s yet.
 func (s *Setup) newCode() error {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
@@ -97,7 +98,7 @@ func (s *Setup) newCode() error {
 		}
 		code.WriteByte(codeAlphabet[int(v)%len(codeAlphabet)])
 	}
-	s.code, s.failures = code.String(), 0
+	s.code = code.String()
 	slog.Warn("DATA-DEN is not set up yet: open the website and enter the setup code", "code", s.code)
 	if s.cfg.CodeFile == "" {
 		return nil
@@ -210,21 +211,17 @@ func (s *Setup) create(w http.ResponseWriter, r *http.Request) {
 }
 
 // checkCode answers the request itself and returns false when code is not
-// the setup code. Too many wrong codes replace it.
+// the setup code.
 func (s *Setup) checkCode(w http.ResponseWriter, code string) bool {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if subtle.ConstantTimeCompare([]byte(code), []byte(s.code)) == 1 {
+	ok := subtle.ConstantTimeCompare([]byte(code), []byte(s.code)) == 1
+	s.mu.Unlock()
+	if ok {
 		return true
 	}
-	s.failures++
 	slog.Warn("wrong setup code")
-	if s.failures >= MaxFailures {
-		if err := s.newCode(); err != nil {
-			slog.Error("making a new setup code", "err", err)
-		}
-	}
+	time.Sleep(wrongCodeDelay)
 	writeError(w, http.StatusForbidden, "Der Einrichtungscode stimmt nicht")
 	return false
 }

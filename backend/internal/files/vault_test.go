@@ -229,3 +229,28 @@ func TestVaultQuota(t *testing.T) {
 		t.Errorf("within: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// Uploads at the same time cannot take the same room twice.
+func TestReserve(t *testing.T) {
+	f, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	used, err := f.usage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.quota.Store(used + 100)
+	release, ok, err := f.reserve(60)
+	if err != nil || !ok {
+		t.Fatalf("first: %v %v", ok, err)
+	}
+	if _, ok, _ := f.reserve(60); ok {
+		t.Error("the second fit into the room the first holds")
+	}
+	release()
+	if _, ok, _ := f.reserve(60); !ok {
+		t.Error("the room was not given back")
+	}
+}

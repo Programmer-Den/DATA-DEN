@@ -129,21 +129,22 @@ func TestCreate(t *testing.T) {
 	}
 }
 
-func TestWrongCodesReplaceIt(t *testing.T) {
+func TestWrongCodesKeepIt(t *testing.T) {
+	delay := wrongCodeDelay
+	wrongCodeDelay = 0
+	t.Cleanup(func() { wrongCodeDelay = delay })
 	_, mux, cfg := newSetup(t)
-	first := codeFile(t, cfg)
-	for range MaxFailures {
-		post(mux, "/api/setup/check", `{"code":"AAAA-AAAA-AAAA"}`)
+	code := codeFile(t, cfg)
+	for range 50 {
+		if status, _ := post(mux, "/api/setup/check", `{"code":"AAAA-AAAA-AAAA"}`); status != http.StatusForbidden {
+			t.Fatalf("wrong code: status %d, want 403", status)
+		}
 	}
-	second := codeFile(t, cfg)
-	if second == first {
-		t.Fatal("the code stayed the same")
+	if codeFile(t, cfg) != code {
+		t.Error("wrong codes replaced the code")
 	}
-	if status, _ := post(mux, "/api/setup/check", `{"code":"`+first+`"}`); status != http.StatusForbidden {
-		t.Errorf("old code: status %d, want 403", status)
-	}
-	if status, _ := post(mux, "/api/setup/check", `{"code":"`+second+`"}`); status != http.StatusOK {
-		t.Errorf("new code: status %d, want 200", status)
+	if status, _ := post(mux, "/api/setup/check", `{"code":"`+code+`"}`); status != http.StatusOK {
+		t.Errorf("the code after wrong ones: status %d, want 200", status)
 	}
 }
 

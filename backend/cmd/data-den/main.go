@@ -442,7 +442,7 @@ func run() error {
 	}
 	var calendars *pim.PIM
 	if data != nil {
-		calendars = pim.New(pim.Config{User: auth.Username, Space: data.Root})
+		calendars = pim.New(pim.Config{User: auth.Username, Space: data.Root, Fits: data.Fits, Added: data.Added})
 	}
 	var office *files.Office
 	var wopi *http.Server

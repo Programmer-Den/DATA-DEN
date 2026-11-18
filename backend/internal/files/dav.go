@@ -86,13 +86,14 @@ type davFS struct {
 }
 
 // name turns a WebDAV path into a name within the root, refusing the
-// server's own folders.
+// server's own folders. In a shared folder it also refuses a path through a
+// symlink, which could lead out of the folder, as the web interface does.
 func (d davFS) name(name string) (string, error) {
 	if strings.ContainsRune(name, 0) || strings.Contains(name, "\\") {
 		return "", fs.ErrInvalid
 	}
 	clean := path.Join(d.dir, strings.TrimPrefix(path.Clean("/"+name), "/"))
-	if hidden(clean) {
+	if hidden(clean) || (d.dir != "." && d.f.symlinkIn(clean)) {
 		return "", fs.ErrNotExist
 	}
 	return clean, nil

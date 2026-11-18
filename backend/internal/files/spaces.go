@@ -501,3 +501,24 @@ func (s *Spaces) Root(name string) (*os.Root, error) {
 	}
 	return f.root, nil
 }
+
+// Fits reports whether n more bytes fit into the quota of the account name,
+// for data kept in its space outside the files, such as its calendars.
+func (s *Spaces) Fits(name string, n int64) (bool, error) {
+	f, err := s.space(name)
+	if err != nil {
+		return false, err
+	}
+	if s.cfg.Quota != nil {
+		f.quota.Store(s.cfg.Quota(name))
+	}
+	return f.fits(n)
+}
+
+// Added counts n bytes stored in the space of the account name outside the
+// files, until the usage is counted again.
+func (s *Spaces) Added(name string, n int64) {
+	if f, err := s.space(name); err == nil {
+		f.addUsage(n)
+	}
+}

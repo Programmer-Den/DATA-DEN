@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -93,10 +94,11 @@ func (t *Tika) Text(ctx context.Context, name string, r io.Reader, size int64) (
 	resp, err := t.client.Do(req)
 	if err != nil {
 		// No answer at all: Tika is not running, or it closed the kept-alive
-		// connection as it stopped. A timeout is this file's, as is the
-		// caller giving up.
+		// connection as it stopped. When it still takes connections, the
+		// file broke the request, so that one file does not hold up all
+		// others. A timeout is this file's, as is the caller giving up.
 		var uerr *url.Error
-		if ctx.Err() == nil && errors.As(err, &uerr) && !uerr.Timeout() {
+		if ctx.Err() == nil && errors.As(err, &uerr) && !uerr.Timeout() && !t.reachable(ctx) {
 			return "", fmt.Errorf("%w: %w", ErrRecognizerDown, err)
 		}
 		return "", err
@@ -113,6 +115,25 @@ func (t *Tika) Text(ctx context.Context, name string, r io.Reader, size int64) (
 	default:
 		return "", fmt.Errorf("tika: status %d", resp.StatusCode)
 	}
+}
+
+// reachable is true when Tika's server takes a connection.
+func (t *Tika) reachable(ctx context.Context) bool {
+	host := t.url.Host
+	if t.url.Port() == "" {
+		port := "80"
+		if t.url.Scheme == "https" {
+			port = "443"
+		}
+		host = net.JoinHostPort(t.url.Hostname(), port)
+	}
+	dialer := net.Dialer{Timeout: 5 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", host)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 // needsOCR is true when the file name with the text read so far goes to the

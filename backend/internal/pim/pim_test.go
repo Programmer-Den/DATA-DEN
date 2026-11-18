@@ -22,9 +22,17 @@ import (
 // username, each with its own folder under the returned directory.
 func setup(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
+	return setupWith(t, Config{})
+}
+
+// setupWith is setup with the quota of cfg.
+func setupWith(t *testing.T, cfg Config) (*httptest.Server, string) {
+	t.Helper()
 	data := t.TempDir()
 	roots := map[string]*os.Root{}
 	p := New(Config{
+		Fits:  cfg.Fits,
+		Added: cfg.Added,
 		User: func(r *http.Request) string {
 			name, _, _ := r.BasicAuth()
 			return name
@@ -217,6 +225,35 @@ func TestPutConditionsAndValidation(t *testing.T) {
 		if resp := request(t, srv, "anna", http.MethodPut, tc.target, tc.body, tc.header); resp.StatusCode != tc.want {
 			t.Errorf("%s: %d, want %d", tc.name, resp.StatusCode, tc.want)
 		}
+	}
+}
+
+func TestQuota(t *testing.T) {
+	var used int64
+	srv, _ := setupWith(t, Config{
+		Fits:  func(name string, n int64) (bool, error) { return name == "anna" && used+n <= 600, nil },
+		Added: func(_ string, n int64) { used += n },
+	})
+	body := func(summary string) string {
+		return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:a@test\r\nDTSTAMP:20261118T120000Z\r\nDTSTART:20261224T180000Z\r\nSUMMARY:" + summary + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	}
+	ics := map[string]string{"Content-Type": "text/calendar"}
+	if resp := request(t, srv, "anna", http.MethodPut, "/caldav/anna/calendars/default/a.ics", body("A"), ics); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("first: %d", resp.StatusCode)
+	}
+	if used == 0 {
+		t.Error("the event was not counted")
+	}
+	if resp := request(t, srv, "anna", http.MethodPut, "/caldav/anna/calendars/default/b.ics", body(strings.Repeat("B", 600)), ics); resp.StatusCode != http.StatusInsufficientStorage {
+		t.Errorf("over the quota: %d, want 507", resp.StatusCode)
+	}
+	// A smaller version of an event always fits.
+	before := used
+	if resp := request(t, srv, "anna", http.MethodPut, "/caldav/anna/calendars/default/a.ics", body(""), ics); resp.StatusCode >= 300 {
+		t.Errorf("smaller: %d", resp.StatusCode)
+	}
+	if used != before-1 {
+		t.Errorf("used %d after making it smaller, want %d", used, before-1)
 	}
 }
 

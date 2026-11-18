@@ -59,6 +59,7 @@ var (
 	errExists    = errors.New("already exists")
 	errNoParent  = errors.New("the collection does not exist")
 	errForbidden = errors.New("not allowed here")
+	errQuota     = errors.New("the quota is full")
 )
 
 // collection is what collectionFile holds.
@@ -91,6 +92,10 @@ func segment(s string) bool {
 type account struct {
 	name string
 	root *os.Root
+	// fits reports whether n more bytes fit into the account's quota, and
+	// added counts them once stored; both may be nil.
+	fits  func(n int64) (bool, error)
+	added func(n int64)
 }
 
 // home is the URL of k's home set of a.
@@ -287,9 +292,21 @@ func (s *store) put(a account, k kind, id, name string, data []byte, ifMatch, if
 	if err := conditions(current, ifMatch, ifNoneMatch); err != nil {
 		return object{}, err
 	}
+	// Calendars and contacts count against the quota like files.
+	more := int64(len(data) - len(old.data))
+	if more > 0 && a.fits != nil {
+		if ok, err := a.fits(more); err != nil {
+			return object{}, err
+		} else if !ok {
+			return object{}, statusError{http.StatusInsufficientStorage, errQuota}
+		}
+	}
 	file := path.Join(dir, k.dir, id, name)
 	if err := writeFile(a.root, file, data); err != nil {
 		return object{}, err
+	}
+	if a.added != nil {
+		a.added(more)
 	}
 	return s.object(a, k, id, name)
 }

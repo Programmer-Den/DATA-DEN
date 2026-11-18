@@ -50,8 +50,9 @@ jobs:
             echo "::error::Releases come from main; run this workflow on main, not $REF."
             exit 1
           fi
-          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::'$VERSION' is not a version such as 1.2.3 (without v)."
+          # Each part below 1000, as the Android app's version code needs.
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]]; then
+            echo "::error::'$VERSION' is not a version such as 1.2.3 (without v, each part below 1000)."
             exit 1
           fi
           if [[ -z "$KEYSTORE" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
