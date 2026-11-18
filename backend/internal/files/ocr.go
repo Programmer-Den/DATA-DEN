@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -93,8 +92,11 @@ func (t *Tika) Text(ctx context.Context, name string, r io.Reader, size int64) (
 	req.Header.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": path.Base(name)}))
 	resp, err := t.client.Do(req)
 	if err != nil {
-		var dial *net.OpError
-		if errors.As(err, &dial) && dial.Op == "dial" {
+		// No answer at all: Tika is not running, or it closed the kept-alive
+		// connection as it stopped. A timeout is this file's, as is the
+		// caller giving up.
+		var uerr *url.Error
+		if ctx.Err() == nil && errors.As(err, &uerr) && !uerr.Timeout() {
 			return "", fmt.Errorf("%w: %w", ErrRecognizerDown, err)
 		}
 		return "", err
