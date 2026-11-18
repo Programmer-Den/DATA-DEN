@@ -203,6 +203,31 @@ func TestOfficeConfig(t *testing.T) {
 	}
 }
 
+func TestMonitorConfig(t *testing.T) {
+	t.Setenv("LISTEN_ADDR", ":8443")
+	t.Setenv("DATA_DEN_MONITOR_ADDR", "")
+	t.Setenv("DATA_DEN_MONITOR_CODE", "")
+	t.Setenv("DATA_DEN_VM_STATE_DIR", "/vm-state")
+	if _, addr, err := monitorConfig(); err != nil || addr != "" {
+		t.Errorf("unset: %q, %v", addr, err)
+	}
+	t.Setenv("DATA_DEN_MONITOR_ADDR", ":9393")
+	if _, _, err := monitorConfig(); err == nil || !strings.Contains(err.Error(), "DATA_DEN_MONITOR_CODE") {
+		t.Errorf("without a code: %v, want an error that asks for one", err)
+	}
+	t.Setenv("DATA_DEN_MONITOR_CODE", "7kqm x2rp")
+	cfg, addr, err := monitorConfig()
+	if err != nil || addr != ":9393" || cfg.Code != "7KQM-X2RP" || cfg.StateDir != "/vm-state" || cfg.Name != "DATA-DEN" {
+		t.Errorf("set: %+v, %q, %v", cfg, addr, err)
+	}
+	for _, bad := range []string{"9393", ":8443", "localhost"} {
+		t.Setenv("DATA_DEN_MONITOR_ADDR", bad)
+		if _, _, err := monitorConfig(); err == nil {
+			t.Errorf("DATA_DEN_MONITOR_ADDR %q: no error", bad)
+		}
+	}
+}
+
 func TestOCRConfig(t *testing.T) {
 	t.Setenv("DATA_DEN_OCR_URL", "")
 	if r, err := ocrConfig(); err != nil || r != nil {

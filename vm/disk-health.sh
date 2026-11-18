@@ -11,6 +11,8 @@ set -euo pipefail
 
 pool="${DATA_DEN_KVP_POOL:-/var/lib/hyperv/.kvp_pool_0}"
 state_file="${DATA_DEN_STATE_DIR:-/var/lib/data-den}/disk-health"
+# What Windows handed over last, for den-watcher (DATA_DEN_MONITOR_ADDR).
+report_file="${DATA_DEN_STATE_DIR:-/var/lib/data-den}/disk-health-report"
 event="${DATA_DEN_EVENT:-/usr/local/sbin/data-den-event}"
 key=DataDenDiskHealth
 # hv_kvp_daemon's records: a 512-byte key and a 2048-byte value, both padded
@@ -39,6 +41,12 @@ if [[ -z "$current" ]]; then
 	echo "Windows has not handed over the disk health yet (run vm/Watch-DataDenDisks.ps1 -Install on the PC)." >&2
 	exit 0
 fi
+# Kept on every run, also when it is not understood, so den-watcher tells
+# that too. Written under another name first, so it is never read half.
+{ mkdir -p "$(dirname "$report_file")" &&
+	printf '%s\n' "$current" > "$report_file.tmp" &&
+	mv -f "$report_file.tmp" "$report_file"; } ||
+	echo "Could not keep the report for den-watcher." >&2
 status="$(sed -n 's/^status=//p' <<< "$current" | head -n 1)"
 checked="$(sed -n 's/^checked=//p' <<< "$current" | head -n 1)"
 problems="$(grep -v -e '^status=' -e '^checked=' <<< "$current" || true)"

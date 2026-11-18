@@ -14,9 +14,13 @@ services:
       DATA_DEN_DATA_DIR: /data
       DATA_DEN_TLS_CERT: /tls/cert.pem
       DATA_DEN_TLS_KEY: /tls/key.pem
+      # What the VM's scripts report (disk health, backup, deploy), for
+      # den-watcher; only read when DATA_DEN_MONITOR_ADDR is set in .env.
+      DATA_DEN_VM_STATE_DIR: /vm-state
     volumes:
       - /srv/data-den:/data
       - ./tls:/tls:ro
+      - /var/lib/data-den:/vm-state:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: ['no-new-privileges:true']

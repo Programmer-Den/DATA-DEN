@@ -208,6 +208,58 @@ Use the same `-f` files for `pull`, `up`, `ps` and `logs` from then on; with
 office documents too, list all three. Without `compose.vision.yaml`,
 **Personen** and **Dinge** say that the recognition is off.
 
+## Monitoring with den-watcher (optional)
+
+[den-watcher](https://github.com/Programmer-Den/den-watcher)'s hub on the Pi
+can watch the NAS like any other device: DATA-DEN answers it on a port of
+its own, 9393, with the VM's CPU, memory and uptime, the free space of the
+mirror, and as extras the state of the RAID, the disk health from Windows,
+the nightly backup and the last deploy. Only the Pi gets to that port
+(`vm/nftables.conf`, `vm/Set-DataDenNetwork.ps1`), and it tells nothing but
+the state of the NAS: no file names, no accounts.
+
+1. Copy the newest `compose.yaml` into the VM: it gives DATA-DEN read-only
+   access to `/var/lib/data-den`, where the VM's scripts leave their
+   results. With the disk health check or the backup on, copy the newest
+   `vm` folder into the VM and run `sudo vm/setup-disk-health.sh on` and
+   `sudo vm/setup-backup.sh on <repository>` again, which install the
+   scripts that leave their results there. Run `sudo vm/setup-firewall.sh <the
+   Pi's address>` in the VM and `vm\Set-DataDenNetwork.ps1 -PiAddress <the
+   Pi's address>` on the PC, which let the Pi in on 9393.
+2. Choose a pairing code, 8 digits and capital letters without 0, 1, I and
+   O, such as `7KQM-X2RP` (DATA-DEN suggests one when it is missing), and
+   add to `.env`:
+
+   ```bash
+   DATA_DEN_MONITOR_ADDR=:9393
+   DATA_DEN_MONITOR_CODE=7KQM-X2RP
+   ```
+
+3. `sudo docker compose up -d`, then add `<the VM's address>:9393` in
+   den-watcher's **Devices** dialog (or `HUB_DEVICES`) as a server, with the
+   pairing code.
+
+What the hub shows and alerts on:
+
+| What | Where on the hub's page | Alert in den-watcher today |
+|---|---|---|
+| DATA-DEN or the VM down | the device | after 2 minutes without an answer |
+| Free space on the mirror | disk `/srv/data-den` | from 90 % used, alert from 95 % |
+| A disk missing from the RAID, a stopped RAID | *Disks and RAID*: `RAID md127` | yes, as a failed disk check |
+| Windows finds a disk bad (SMART, read and write errors, temperature, wear) | *Disks and RAID*: the disk | yes, as a failed disk check |
+| Windows has not checked the disks for a day | *DATA-DEN*: *Disk check by Windows* | not yet |
+| The files cannot be read (mirror locked) | *DATA-DEN*: *Files* | not yet |
+| The last backup failed, or none for 2 days | *DATA-DEN*: *Backup*, with the hours since the last one as a chart | not yet |
+| The last deploy failed | *DATA-DEN*: *Last deploy* | not yet |
+
+The values marked *not yet* carry `"alert": "warning"` or `"critical"` in
+the answer, so a den-watcher that reads that field can raise them too. The
+port speaks plain HTTP, as den-watcher reads all its devices; the hub sends
+the code with every request, and without it the answer is 403. A wrong code
+is answered a second late, so codes cannot be tried quickly. `GET
+/api/minutes` answers 404, so the hub keeps its own averages for the
+history.
+
 ## Update
 
 ```bash

@@ -5,7 +5,8 @@ Lets only the Pi into the DATA-DEN VM, at the Hyper-V switch port.
 .DESCRIPTION
 The Windows Firewall does not see the traffic of a VM on an external switch,
 so the VM's network adapter gets extended port ACLs instead: from the Pi only
-DATA-DEN's HTTPS (8443), SSH (22) and ping get in, plus DHCP. The VM may
+DATA-DEN's HTTPS (8443), den-watcher's port (9393), SSH (22) and ping get
+in, plus DHCP. The VM may
 connect out (for updates and images), and the answers to that come back in.
 Run it again when the Pi's address changes. Guide: vm/README.md
 
@@ -46,6 +47,8 @@ $rules = @(
     @{ Direction = 'Inbound'; Action = 'Allow'; Weight = 20; Protocol = 'UDP'; LocalPort = '68'; RemotePort = '67' }
     @{ Direction = 'Inbound'; Action = 'Allow'; Weight = 30; Protocol = 'TCP'; RemoteIPAddress = $pi; LocalPort = '8443' }
     @{ Direction = 'Inbound'; Action = 'Allow'; Weight = 31; Protocol = 'TCP'; RemoteIPAddress = $pi; LocalPort = '22' }
+    # The state of the NAS for den-watcher's hub on the Pi (DATA_DEN_MONITOR_ADDR).
+    @{ Direction = 'Inbound'; Action = 'Allow'; Weight = 33; Protocol = 'TCP'; RemoteIPAddress = $pi; LocalPort = '9393' }
     @{ Direction = 'Inbound'; Action = 'Allow'; Weight = 32; Protocol = '1'; RemoteIPAddress = $pi }
     @{ Direction = 'Outbound'; Action = 'Allow'; Weight = 32; Protocol = '1'; RemoteIPAddress = $pi }
 )
