@@ -5,11 +5,13 @@ import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
@@ -19,6 +21,8 @@ import android.widget.EditText
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import io.github.programmerden.dataden.sync.DataDenClient
 import io.github.programmerden.dataden.vault.Vault
 import io.github.programmerden.dataden.vault.VaultApi
@@ -50,6 +54,9 @@ class TresorActivity : Activity() {
     private var saving: VaultItem? = null
     private var busy = false
 
+    /** The OnBackInvokedCallback on Android 13 and newer. */
+    private var backCallback: Any? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
@@ -68,7 +75,7 @@ class TresorActivity : Activity() {
         secret.setOnEditorActionListener { _, action, _ ->
             (action == EditorInfo.IME_ACTION_DONE).also { if (it) unlock() }
         }
-        up.setOnClickListener { work(null, { it.up() }) { refresh() } }
+        up.setOnClickListener { goUp() }
         findViewById<Button>(R.id.add_file).setOnClickListener {
             pick(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), REQUEST_ADD)
         }
@@ -88,6 +95,7 @@ class TresorActivity : Activity() {
         super.onStart()
         Tresor.onLocked = {
             items = emptyList()
+            backGoesUp(false)
             message.setText(R.string.tresor_locked)
             show()
         }
@@ -100,14 +108,25 @@ class TresorActivity : Activity() {
         super.onStop()
     }
 
-    @Deprecated("The platform's back handling, as the rest of the app uses Activity")
-    override fun onBackPressed() {
-        if (Tresor.session != null && up.isEnabled) {
-            work(null, { it.up() }) { refresh() }
-        } else {
-            @Suppress("DEPRECATION")
-            super.onBackPressed()
+    /** Back goes one folder up while there is one; at the top it leaves the screen. */
+    private fun backGoesUp(on: Boolean) {
+        up.isEnabled = on
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val callback = backCallback as? OnBackInvokedCallback ?: OnBackInvokedCallback { goUp() }.also { backCallback = it }
+            onBackInvokedDispatcher.unregisterOnBackInvokedCallback(callback)
+            if (on) onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback)
         }
+    }
+
+    private fun goUp() = work(null, { it.up() }) { refresh() }
+
+    // Android 12 and older: the back key, as there is no back callback yet.
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && Tresor.session != null && up.isEnabled) {
+            goUp()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     private fun show() {
@@ -192,7 +211,7 @@ class TresorActivity : Activity() {
         if (items.isEmpty()) message.setText(R.string.tresor_loading)
         work(null, { Triple(it.path, it.atTop, it.list()) }) { (where, top, loaded) ->
             path.text = where
-            up.isEnabled = !top
+            backGoesUp(!top)
             items = loaded
             list.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, loaded.map(::label))
             message.text = if (loaded.isEmpty()) getString(R.string.tresor_empty) else ""
