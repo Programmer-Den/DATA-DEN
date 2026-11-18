@@ -115,8 +115,11 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      # Only what ships in the image: build and test tools (Angular CLI, Vite,
+      # Vitest) only ever see this repository's own files, and an advisory
+      # without a fix there would block every pull request.
       - name: Check dependencies for known vulnerabilities
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
       - run: npm test
       - run: npm run build
 
