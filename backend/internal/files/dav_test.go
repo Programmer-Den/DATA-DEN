@@ -122,7 +122,7 @@ func TestDavMoveAndDelete(t *testing.T) {
 }
 
 func TestDavSpacesAndQuota(t *testing.T) {
-	_, h, data := davSetup(t)
+	s, h, data := davSetup(t)
 	if rec := dav(h, "anna", http.MethodPut, "/dav/klein.txt", "0123", nil); rec.Code != http.StatusCreated {
 		t.Fatalf("anna's PUT: status %d", rec.Code)
 	}
@@ -134,6 +134,9 @@ func TestDavSpacesAndQuota(t *testing.T) {
 	}
 	if exists(data, ".data-den-users/anna/gross.txt") {
 		t.Error("the file over the quota was kept")
+	}
+	if f, err := s.space("anna"); err != nil || f.reserved.Load() != 0 {
+		t.Errorf("still held after the uploads: %v", err)
 	}
 	entries, _ := os.ReadDir(filepath.Join(data, ".data-den-users", "anna", uploadDir))
 	if len(entries) != 0 {
@@ -499,6 +502,9 @@ func TestDavRefreshStaysWithTheDrive(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("anna LOCK: status %d", rec.Code)
 	}
+	if !strings.Contains(rec.Body.String(), "<D:timeout>Second-3600</D:timeout>") {
+		t.Errorf("the client does not hear how long its lock lasts: %s", rec.Body)
+	}
 	token := rec.Header().Get("Lock-Token")
 	// A lock through a shared folder always runs out.
 	f, err := sp.space("chef")
@@ -589,5 +595,24 @@ func TestDavTeamMemberLeavesReleasesLocks(t *testing.T) {
 	}
 	if rec := dav(h, "bob", http.MethodPut, bob, "bob", nil); rec.Code >= 400 {
 		t.Errorf("bob PUT after anna left: status %d", rec.Code)
+	}
+}
+
+func TestLimitLockTimeout(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                            "Second-3600",
+		"Infinite":                    "Second-3600",
+		"Second-86400":                "Second-3600",
+		"Second-600":                  "Second-600",
+		"Infinite, Second-4100000000": "Second-3600",
+		"Infinite, Second-120":        "Second-120",
+		"Second-x":                    "Second-3600",
+	} {
+		r := httptest.NewRequest("LOCK", "/", nil)
+		r.Header.Set("Timeout", in)
+		limitLockTimeout(r)
+		if got := r.Header.Get("Timeout"); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
 	}
 }

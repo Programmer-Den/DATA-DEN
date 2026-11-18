@@ -135,18 +135,6 @@ func readUploadStart(w http.ResponseWriter, r *http.Request) (uploadStart, bool)
 func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 	u.touched.Store(time.Now().UnixNano())
 	f.dropIdleUploads()
-	if ok, err := f.fits(u.size); err != nil {
-		f.diskError(w, "counting the usage", err)
-		return
-	} else if !ok {
-		message := "Dein Speicherplatz ist voll"
-		if u.share != "" {
-			message = "Kein Speicherplatz mehr frei"
-		}
-		writeError(w, http.StatusInsufficientStorage, message)
-		return
-	}
-
 	id, err := newID()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Upload nicht möglich")
@@ -163,9 +151,34 @@ func (f *Files) beginUpload(w http.ResponseWriter, r *http.Request, u *upload) {
 	}
 	_ = chunks.Close()
 
-	f.uploads.mu.Lock()
-	f.uploads.byID[id] = u
-	f.uploads.mu.Unlock()
+	// Checking the quota and counting the upload as pending are one step,
+	// as for reserve, so writes at the same time cannot take the same room.
+	err = f.countUsage()
+	ok := false
+	if err == nil {
+		f.reserveMu.Lock()
+		ok, err = f.fits(u.size)
+		if err == nil && ok {
+			f.uploads.mu.Lock()
+			f.uploads.byID[id] = u
+			f.uploads.mu.Unlock()
+		}
+		f.reserveMu.Unlock()
+	}
+	if err != nil || !ok {
+		_ = f.root.Remove(path.Join(uploadDir, id))
+	}
+	if err != nil {
+		f.diskError(w, "counting the usage", err)
+		return
+	} else if !ok {
+		message := "Dein Speicherplatz ist voll"
+		if u.share != "" {
+			message = "Kein Speicherplatz mehr frei"
+		}
+		writeError(w, http.StatusInsufficientStorage, message)
+		return
+	}
 
 	answer := map[string]any{"id": id, "offset": u.offset}
 	if u.size == 0 {

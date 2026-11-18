@@ -130,8 +130,9 @@ func (s *Spaces) grant(id string) (Grant, bool) {
 }
 
 // changeGrants applies change to the list of grants and saves it. The
-// WebDAV locks taken through a grant that ended, or may no longer change
-// its folder, are released: nobody else knows their tokens.
+// WebDAV locks taken through a grant that ended, was moved or may no longer
+// change its folder are released: nobody else knows their tokens, and its
+// drive no longer reaches them.
 func (s *Spaces) changeGrants(change func([]Grant) []Grant) error {
 	s.grantsMu.Lock()
 	old := s.readGrants()
@@ -143,7 +144,7 @@ func (s *Spaces) changeGrants(change func([]Grant) []Grant) error {
 	}
 	for _, g := range old {
 		i := slices.IndexFunc(list, func(n Grant) bool { return n.ID == g.ID })
-		if g.Write && (i < 0 || !list[i].Write) {
+		if g.Write && (i < 0 || !list[i].Write || list[i].Path != g.Path) {
 			s.releaseLocks(g)
 		}
 	}

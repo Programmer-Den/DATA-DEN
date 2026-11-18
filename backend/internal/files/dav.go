@@ -289,6 +289,16 @@ func (b *davBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// requestLength is the length of the PUT body of the request in ctx, -1
+// when it is not known.
+func requestLength(ctx context.Context) int64 {
+	r, ok := ctx.Value(requestKey{}).(*http.Request)
+	if !ok || r.Method != http.MethodPut {
+		return -1
+	}
+	return r.ContentLength
+}
+
 // complete reports whether the upload of size bytes for the request in ctx
 // arrived whole: its body was read without an error, and to its length.
 // Only a PUT writes its body; COPY and LOCK write other content.
@@ -626,9 +636,9 @@ func (u *davUpload) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// davHoldBlock is how much quota an upload holds at a time, so it does not
-// take the quota's lock for every piece it writes.
-const davHoldBlock = 8 << 20
+// davHoldBlock is how much quota an upload of unknown length holds at a
+// time, so it does not take the quota's lock for every piece it writes.
+const davHoldBlock = 1 << 20
 
 // hold makes sure the upload holds room for n more bytes, so uploads at the
 // same time cannot all take the same room. Without a quota there is nothing
@@ -638,7 +648,11 @@ func (u *davUpload) hold(n int64) error {
 		return nil
 	}
 	need := u.size + n - u.held
+	// The whole length at once when the request says it.
 	block := max(need, davHoldBlock)
+	if length := requestLength(u.ctx); length >= 0 {
+		block = max(need, length-u.held)
+	}
 	_, ok, err := u.d.f.reserve(block)
 	if err == nil && !ok && block > need {
 		// Near the quota, only what is needed.
