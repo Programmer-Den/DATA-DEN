@@ -1,0 +1,73 @@
+<section>
+  <h2>Passkeys</h2>
+  <p class="hint">
+    Anmelden mit Fingerabdruck, Gesicht oder PIN des Handys oder Computers, ohne Passwort und Code
+    aus der App. Ein Passkey gilt nur für die Adresse von DATA-DEN, eine gefälschte Anmeldeseite
+    kann damit nichts anfangen.
+  </p>
+  @if (passkeys(); as passkeys) {
+    @if (!available()) {
+      <p class="hint">
+        Auf diesem Server nicht eingerichtet: dafür muss in den Einstellungen
+        <code>DATA_DEN_ORIGIN</code> stehen, die Adresse, unter der DATA-DEN geöffnet wird.
+      </p>
+    }
+    @if (added(); as name) {
+      <p class="ok" role="status">Passkey „{{ name }}“ angelegt.</p>
+    }
+    @if (passkeys.length > 0) {
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Angelegt</th>
+            <th>Zuletzt genutzt</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (passkey of passkeys; track passkey.id) {
+            <tr>
+              <td>{{ passkey.name }}</td>
+              <td>{{ formatDay(passkey.created) }}</td>
+              <td>{{ formatDay(passkey.lastUsed) }}</td>
+              <td>
+                <button type="button" [disabled]="busy()" (click)="remove(passkey)">
+                  Entfernen
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else if (available()) {
+      <p class="hint">Noch keine.</p>
+    }
+    @if (available()) {
+      @if (supported) {
+        <form #form class="password new-passkey" (submit)="add($event, form)">
+          <label>
+            Name, etwa „Handy“ oder „Laptop“
+            <input name="name" maxlength="64" required />
+          </label>
+          <label>
+            Eigenes Passwort zur Bestätigung
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          @if (auth.twoFactor()) {
+            <label>
+              Code aus der App (oder Wiederherstellungscode)
+              <input name="code" autocomplete="one-time-code" required />
+            </label>
+          }
+          <button type="submit" [disabled]="busy()">Passkey anlegen</button>
+        </form>
+      } @else {
+        <p class="hint">Dieser Browser kann keine Passkeys anlegen.</p>
+      }
+    }
+  }
+  @if (error(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+</section>

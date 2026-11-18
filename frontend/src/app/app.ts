@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { AccountView } from './account/account';
 import { AuditView } from './audit/audit';
@@ -10,6 +10,7 @@ import { MediaView } from './media/media';
 import { NotificationsView } from './notifications/notifications';
 import { ChecksView } from './checks/checks';
 import { OfficeFormats } from './office/formats';
+import { passkeyError, passkeysSupported } from './passkey';
 import { StartFolder } from './files/start-folder';
 import { PublicShare } from './public/public-share';
 import { SearchView } from './search/search';
@@ -92,6 +93,8 @@ export class App {
   protected readonly busy = signal(false);
   /** Whether the login form asks for the code of the second factor. */
   protected readonly askCode = signal(false);
+  /** Whether the login form offers a passkey. */
+  protected readonly passkeys = signal(false);
   protected readonly tabs = computed<{ view: View; name: string }[]>(() => [
     { view: 'files', name: 'Dateien' },
     { view: 'marks', name: 'Favoriten' },
@@ -139,6 +142,18 @@ export class App {
     });
     this.auth.check();
 
+    // Whether the login form offers a passkey, asked once it is shown.
+    let askedPasskeys = false;
+    effect(() => {
+      if (this.auth.user() === null && !askedPasskeys && passkeysSupported()) {
+        askedPasskeys = true;
+        this.auth.passkeysOffered().subscribe({
+          next: (offered) => this.passkeys.set(offered),
+          error: () => this.passkeys.set(false),
+        });
+      }
+    });
+
     // Warn about low space or a broken mirror on every page, not only on the
     // status page.
     effect(() => {
@@ -177,6 +192,23 @@ export class App {
           this.askCode.set(true);
         }
         this.loginError.set(errorMessage(err));
+      },
+    });
+  }
+
+  protected loginWithPasskey(): void {
+    this.busy.set(true);
+    this.loginError.set(null);
+    this.auth.loginWithPasskey().subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.askCode.set(false);
+      },
+      error: (err: unknown) => {
+        this.busy.set(false);
+        this.loginError.set(
+          err instanceof HttpErrorResponse ? errorMessage(err) : passkeyError(err),
+        );
       },
     });
   }

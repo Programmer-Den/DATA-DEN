@@ -24,7 +24,11 @@ describe('App', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // The login form asks whether passkeys are offered.
+    for (const options of http.match('/api/login/options')) options.flush({ passkeys: false });
+    http.verify();
+  });
 
   /** Starts the app; session null means nobody is logged in. */
   async function start(
@@ -172,6 +176,61 @@ describe('App', () => {
     await fixture.whenStable();
     expect(page(fixture).querySelector('[role=alert]')?.textContent).toContain('Passwort falsch');
     expect(page(fixture).querySelector('form')).not.toBeNull();
+  });
+
+  it('logs in with a passkey', async () => {
+    vi.stubGlobal('isSecureContext', true);
+    vi.stubGlobal('PublicKeyCredential', class {});
+    const fixture = await start(null);
+    http.expectOne('/api/login/options').flush({ passkeys: true });
+    await fixture.whenStable();
+    const credential = {
+      id: 'AQID',
+      rawId: new Uint8Array([1, 2, 3]).buffer,
+      type: 'public-key',
+      authenticatorAttachment: 'platform',
+      getClientExtensionResults: () => ({}),
+      response: {
+        clientDataJSON: new Uint8Array([4]).buffer,
+        authenticatorData: new Uint8Array([5]).buffer,
+        signature: new Uint8Array([6]).buffer,
+        userHandle: new Uint8Array([7]).buffer,
+      },
+    };
+    const get = vi.fn().mockResolvedValue(credential);
+    vi.stubGlobal('navigator', { ...navigator, credentials: { get } });
+    try {
+      page(fixture).querySelector<HTMLButtonElement>('button.passkey')!.click();
+      http
+        .expectOne('/api/login/passkey/begin')
+        .flush({ id: 'c1', publicKey: { challenge: 'AAEC', userVerification: 'required' } });
+      await fixture.whenStable();
+      const options = get.mock.calls[0][0].publicKey as PublicKeyCredentialRequestOptions;
+      expect(new Uint8Array(options.challenge as ArrayBuffer)).toEqual(new Uint8Array([0, 1, 2]));
+      const finish = http.expectOne('/api/login/passkey');
+      expect(finish.request.body).toEqual({
+        id: 'c1',
+        credential: expect.objectContaining({
+          rawId: 'AQID',
+          response: {
+            clientDataJSON: 'BA',
+            authenticatorData: 'BQ',
+            signature: 'Bg',
+            userHandle: 'Bw',
+          },
+        }),
+      });
+      finish.flush({ username: 'chriszly' });
+      await fixture.whenStable();
+      http.expectOne('/api/files?path=/').flush({ path: '/', entries: [] });
+      http.expectOne('/api/status').flush(fine);
+      http.expectOne('/api/usage').flush(unlimited);
+      for (const office of http.match('/api/office')) office.flush({ extensions: [] });
+      await fixture.whenStable();
+      expect(page(fixture).querySelector('form.login')).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('logs out', async () => {

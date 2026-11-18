@@ -26,6 +26,7 @@ describe('AccountView', () => {
     const fixture = TestBed.createComponent(AccountView);
     http.expectOne('/api/usage').flush({ used: 512 * 1024 ** 2, quota });
     http.expectOne('/api/account/2fa').flush({ enabled, recoveryLeft: enabled ? 9 : 0 });
+    http.expectOne('/api/account/passkeys').flush({ available: true, passkeys: [] });
     http.expectOne('/api/account/tokens').flush({ tokens: [] });
     await fixture.whenStable();
     return fixture;

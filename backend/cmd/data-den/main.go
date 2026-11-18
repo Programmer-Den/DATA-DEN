@@ -413,6 +413,7 @@ func run() error {
 		Username:     owner.Name,
 		PasswordHash: owner.PasswordHash,
 		OwnerFile:    ownerFile,
+		Origin:       os.Getenv("DATA_DEN_ORIGIN"),
 		TrustedProxy: os.Getenv("DATA_DEN_TRUSTED_PROXY"),
 		AccountsFile: accounts,
 		Usage: func(name string) (int64, error) {

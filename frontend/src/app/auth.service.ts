@@ -1,6 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, map, tap } from 'rxjs';
+import { Observable, from, map, switchMap, tap } from 'rxjs';
+import { getPasskey } from './passkey';
 
 export interface Session {
   username: string;
@@ -45,6 +46,30 @@ export class AuthService {
       tap((session) => this.set(session)),
       map(() => undefined),
     );
+  }
+
+  /** Whether the server lets accounts log in with a passkey. */
+  passkeysOffered(): Observable<boolean> {
+    return this.http
+      .get<{ passkeys: boolean }>('/api/login/options')
+      .pipe(map((options) => options.passkeys));
+  }
+
+  /** Logs in with a passkey: the server's challenge, the device's answer, the session. */
+  loginWithPasskey(): Observable<void> {
+    return this.http
+      .post<{ id: string; publicKey: Record<string, unknown> }>('/api/login/passkey/begin', {})
+      .pipe(
+        switchMap((begin) =>
+          from(getPasskey(begin.publicKey)).pipe(
+            switchMap((credential) =>
+              this.http.post<Session>('/api/login/passkey', { id: begin.id, credential }),
+            ),
+          ),
+        ),
+        tap((session) => this.set(session)),
+        map(() => undefined),
+      );
   }
 
   logout(): Observable<void> {

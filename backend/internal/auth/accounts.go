@@ -18,7 +18,7 @@ import (
 //
 //	GET  /api/users                 -> {"users": [...]}, admins only
 //	POST /api/users {"name", "password", "admin", "quota"} -> 201, admins only
-//	POST /api/users/{name} {"password"?, "admin"?, "quota"?, "twoFactor": false?, "tokens": false?} -> 200, admins only
+//	POST /api/users/{name} {"password"?, "admin"?, "quota"?, "twoFactor": false?, "tokens": false?, "passkeys": false?} -> 200, admins only
 //	POST /api/users/{name}/delete {} -> 200, admins only; the files are moved aside
 //	POST /api/account/password {"current", "password"} -> 200, one's own password
 //
@@ -57,24 +57,28 @@ type UserInfo struct {
 	TwoFactor bool `json:"twoFactor"`
 	// Tokens is how many app passwords it has.
 	Tokens int `json:"tokens"`
+	// Passkeys is how many passkeys it has.
+	Passkeys int `json:"passkeys"`
 }
 
 type accountsFile struct {
 	Accounts  []Account            `json:"accounts"`
 	TwoFactor map[string]TwoFactor `json:"twoFactor,omitempty"`
 	Tokens    []Token              `json:"tokens,omitempty"`
+	Passkeys  []Passkey            `json:"passkeys,omitempty"`
 }
 
 type storedAccounts struct {
 	accounts  map[string]Account
 	twoFactor map[string]TwoFactor
 	tokens    map[string]Token
+	passkeys  map[string]Passkey
 }
 
 // loadAccounts reads file, if there is one. An account named like the owner
 // is left out: the settings decide about the owner.
 func loadAccounts(file, owner string) (storedAccounts, error) {
-	stored := storedAccounts{accounts: map[string]Account{}, twoFactor: map[string]TwoFactor{}, tokens: map[string]Token{}}
+	stored := storedAccounts{accounts: map[string]Account{}, twoFactor: map[string]TwoFactor{}, tokens: map[string]Token{}, passkeys: map[string]Passkey{}}
 	if file == "" {
 		return stored, nil
 	}
@@ -104,6 +108,11 @@ func loadAccounts(file, owner string) (storedAccounts, error) {
 	for _, t := range parsed.Tokens {
 		if _, ok := stored.accounts[t.User]; ok || t.User == owner {
 			stored.tokens[t.Hash] = t
+		}
+	}
+	for _, p := range parsed.Passkeys {
+		if _, ok := stored.accounts[p.User]; ok || p.User == owner {
+			stored.passkeys[p.id()] = p
 		}
 	}
 	return stored, nil
@@ -163,6 +172,10 @@ func (a *Auth) save() error {
 		stored.Tokens = append(stored.Tokens, t)
 	}
 	slices.SortFunc(stored.Tokens, func(x, y Token) int { return strings.Compare(x.ID, y.ID) })
+	for _, p := range a.passkeys {
+		stored.Passkeys = append(stored.Passkeys, p)
+	}
+	slices.SortFunc(stored.Passkeys, func(x, y Passkey) int { return strings.Compare(x.id(), y.id()) })
 	return writeAccounts(a.cfg.AccountsFile, stored)
 }
 
@@ -265,10 +278,10 @@ func (a *Auth) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 func (a *Auth) listUsers(w http.ResponseWriter, _ *http.Request) {
 	a.mu.Lock()
 	_, ownerTF := a.twoFactor[a.cfg.Username]
-	users := []UserInfo{{Name: a.cfg.Username, Admin: true, Owner: true, TwoFactor: ownerTF, Tokens: a.tokenCount(a.cfg.Username)}}
+	users := []UserInfo{{Name: a.cfg.Username, Admin: true, Owner: true, TwoFactor: ownerTF, Tokens: a.tokenCount(a.cfg.Username), Passkeys: a.passkeyCount(a.cfg.Username)}}
 	for _, account := range a.accounts {
 		_, tf := a.twoFactor[account.Name]
-		users = append(users, UserInfo{Name: account.Name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf, Tokens: a.tokenCount(account.Name)})
+		users = append(users, UserInfo{Name: account.Name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf, Tokens: a.tokenCount(account.Name), Passkeys: a.passkeyCount(account.Name)})
 	}
 	a.mu.Unlock()
 	for i := range users {
@@ -350,6 +363,9 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 		TwoFactor *bool `json:"twoFactor"`
 		// Tokens false revokes all app passwords of the account.
 		Tokens *bool `json:"tokens"`
+		// Passkeys false removes all passkeys of the account, for a lost
+		// device.
+		Passkeys *bool `json:"passkeys"`
 	}
 	if !readJSON(w, r, &body) {
 		return
@@ -360,6 +376,10 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Tokens != nil && *body.Tokens {
 		writeError(w, http.StatusBadRequest, "App-Passwörter legt jeder selbst an")
+		return
+	}
+	if body.Passkeys != nil && *body.Passkeys {
+		writeError(w, http.StatusBadRequest, "Passkeys richtet jeder selbst ein")
 		return
 	}
 	if body.Quota != nil && *body.Quota < 0 {
@@ -418,7 +438,17 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		revoked = len(dropped)
 	}
-	slog.Info("account changed", "username", name, "admin", account.Admin, "quota", account.Quota, "password", hash != "", "twoFactorOff", resetTF, "tokensRevoked", revoked, "by", Username(r))
+	removed := 0
+	if body.Passkeys != nil {
+		dropped := a.dropPasskeys(name)
+		if err := a.save(); err != nil {
+			maps.Copy(a.passkeys, dropped)
+			a.saveError(w, err)
+			return
+		}
+		removed = len(dropped)
+	}
+	slog.Info("account changed", "username", name, "admin", account.Admin, "quota", account.Quota, "password", hash != "", "twoFactorOff", resetTF, "tokensRevoked", revoked, "passkeysRemoved", removed, "by", Username(r))
 	a.note(r, Username(r), "user-change", name)
 	if resetTF {
 		a.note(r, Username(r), "2fa-reset", name)
@@ -426,8 +456,11 @@ func (a *Auth) updateUser(w http.ResponseWriter, r *http.Request) {
 	if body.Tokens != nil {
 		a.note(r, Username(r), "tokens-revoke", name)
 	}
+	if body.Passkeys != nil {
+		a.note(r, Username(r), "passkeys-remove", name)
+	}
 	_, tf := a.twoFactor[name]
-	writeJSON(w, http.StatusOK, UserInfo{Name: name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf, Tokens: a.tokenCount(name)})
+	writeJSON(w, http.StatusOK, UserInfo{Name: name, Admin: account.Admin, Quota: account.Quota, TwoFactor: tf, Tokens: a.tokenCount(name), Passkeys: a.passkeyCount(name)})
 }
 
 func (a *Auth) deleteUser(w http.ResponseWriter, r *http.Request) {
@@ -461,12 +494,15 @@ func (a *Auth) deleteUser(w http.ResponseWriter, r *http.Request) {
 	delete(a.accounts, name)
 	delete(a.twoFactor, name)
 	tokens := a.dropTokens(name)
+	passkeys := a.dropPasskeys(name)
+	delete(a.pendingPasskeys, name)
 	if err := a.save(); err != nil {
 		a.accounts[name] = account
 		if hadTF {
 			a.twoFactor[name] = tf
 		}
 		maps.Copy(a.tokens, tokens)
+		maps.Copy(a.passkeys, passkeys)
 		a.saveError(w, err)
 		return
 	}
