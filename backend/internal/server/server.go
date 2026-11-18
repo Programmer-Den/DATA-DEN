@@ -101,6 +101,7 @@ func New(cfg Config) http.Handler {
 			}
 			mux.HandleFunc("/api/s/", missing)
 			mux.HandleFunc(files.DavPrefix+"/", cfg.Auth.RequireToken(missing))
+			mux.HandleFunc(files.DavSharedPrefix+"/", cfg.Auth.RequireToken(missing))
 			for _, route := range pim.Routes {
 				mux.HandleFunc(route, cfg.Auth.RequireToken(missing))
 			}

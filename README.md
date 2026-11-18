@@ -134,15 +134,36 @@ so Windows, macOS, Linux file managers or rclone can mount it as a drive.
 It only takes app passwords (username and app password), never the
 account's own password. The same rules hold as in the web interface: the
 server's own folders stay hidden, deleting moves into the recycle bin,
-overwriting keeps the old file as a version, and the quota counts.
+overwriting keeps the old file as a version, and the quota counts. The
+drive shows the quota (or, without one, the free space on the disk) as its
+size.
 
-On Windows, in Explorer: **Dieser PC → Netzlaufwerk verbinden**, folder
-`https://<host>/dav/`, check **Verbindung mit anderen Anmeldeinformationen
-herstellen**, then enter the username and the app password. Windows limits
-WebDAV downloads to 50 MB by default; for larger videos raise
-`FileSizeLimitInBytes` under
-`HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters` (for
-example to `0xFFFFFFFF`, 4 GB) and restart the WebClient service.
+Each folder shared with an account, and each team folder, is a drive of its
+own at `https://<host>/dav-shared/<id>/`, with the same rights as in the web
+interface (only reading, or also changing). **Geteilt mit mir** shows each
+folder's address.
+
+- **Windows**, in Explorer: **Dieser PC → Netzlaufwerk verbinden**, folder
+  `https://<host>/dav/`, check **Verbindung mit anderen Anmeldeinformationen
+  herstellen**, then enter the username and the app password. Windows limits
+  WebDAV downloads to 50 MB by default; for larger videos raise
+  `FileSizeLimitInBytes` under
+  `HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters` (for
+  example to `0xFFFFFFFF`, 4 GB) and restart the WebClient service.
+- **macOS**, in Finder: **Gehe zu → Mit Server verbinden** (⌘K), address
+  `https://<host>/dav/`.
+- **Linux**, in Files (Nautilus) or Dolphin: `davs://<host>/dav/`.
+- **Android and iPhone** have no WebDAV in their own file apps; a file
+  manager app that speaks WebDAV opens the same address. For photos, the
+  Android app uploads by itself.
+- **rclone** (`rclone mount`, also on Windows) with `vendor = other` and
+  the same address, for large files or to keep a folder in sync.
+
+There is no SMB (Windows file sharing): it would have to reach the storage
+VM from the network, which is meant to see nothing but DATA-DEN's HTTPS
+port, and SMB is not safe to open to the internet through the Pi. WebDAV
+goes the same encrypted way as the web interface, with app passwords that
+can be revoked one by one.
 
 ### Calendars and contacts (CalDAV, CardDAV)
 

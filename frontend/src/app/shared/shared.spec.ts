@@ -70,6 +70,10 @@ describe('Shared', () => {
     expect(rows[2].querySelector('button.link')).toBeNull();
     expect(rows[3].textContent).toContain('Team-Ordner');
     expect(rows[3].textContent).not.toContain('@familie');
+    expect(rows[0].querySelector('code.dav')?.textContent).toBe(
+      `${location.origin}/dav-shared/${reading.id}/`,
+    );
+    expect(rows[2].querySelector('code.dav')).toBeNull();
   });
 
   it('opens a folder to read, with nothing to change', async () => {

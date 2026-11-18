@@ -31,6 +31,9 @@
                   <button type="button" class="link" (click)="opened.set(grant)">
                     📁 {{ grant.name }}
                   </button>
+                  <br /><code class="dav" title="Als Netzlaufwerk (WebDAV)">{{
+                    davUrl(grant)
+                  }}</code>
                 }
               </td>
               <td>{{ from(grant) }}</td>
@@ -49,6 +52,10 @@
           }
         </tbody>
       </table>
+      <p class="hint">
+        Jeder Ordner lässt sich unter seiner Adresse auch als eigenes Netzlaufwerk einbinden, mit
+        dem eigenen Benutzernamen und einem App-Passwort (unter Konto).
+      </p>
     }
   } @else if (!error()) {
     <p>Lade …</p>
