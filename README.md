@@ -501,6 +501,67 @@ with "Datei existiert bereits". Unfinished chunks wait in
 restart of the server removes them, and so does a day without a new chunk.
 Until then an unfinished upload counts against the quota with its full size.
 
+## Vault (Tresor)
+
+The **Tresor** tab keeps very sensitive files, such as medical letters, tax
+papers or ID scans, end-to-end encrypted: the browser encrypts each file and
+its name before it leaves the device, and decrypts them again on download.
+The server, an admin, the Pi and anyone with the disks see only ciphertext
+under random-looking names, plus each file's size and time.
+
+Each account sets up its own vault with a passphrase of at least 12
+characters, separate from the login password, and gets a recovery key
+(52 characters) to write down, shown only then. Either one opens the vault.
+After opening it with the recovery key, set a new passphrase in the tab; a
+new recovery key can be made there too, which retires the old one. The
+vault stays open in that browser tab until **Sperren**, a reload, the logout
+or 15 minutes without use.
+
+What this costs:
+
+- **Lost passphrase and recovery key means lost files.** Nobody can open the
+  vault then, not even an admin in the VM. Keep the recovery key in a
+  password manager or on paper somewhere safe.
+- No search, previews, thumbnails, text recognition, share links, shared
+  folders, versions or recycle bin for the vault: the server cannot read
+  what it would need. Deleting there is for good, after a question.
+- The desktop sync client, the Android app and the network drive (WebDAV)
+  do not see the vault; only the website does.
+- At most 1 GB per file, as the browser holds a file in memory to encrypt
+  or decrypt it.
+- It protects against the server side, not against the device the vault is
+  opened on: malware in that browser or a changed website could read the
+  open vault.
+
+The vault counts against the quota and is part of the nightly backup, still
+encrypted. A vault whose keys are both lost can only be removed in the VM, by
+deleting `.data-den-vault` in that account's space.
+
+How it works (all WebCrypto, in `frontend/src/app/vault/vault-crypto.ts`):
+
+- The vault key is 32 random bytes, stored on the server only wrapped with
+  AES-256-GCM: once under a key from the passphrase (PBKDF2-SHA256, 600 000
+  iterations) and once under one from the recovery key (HKDF-SHA256).
+- Names are sealed with AES-256-GCM under a key derived from the vault key,
+  each with a random nonce, and stored as base64url (up to 160 bytes of
+  name).
+- Files use the STREAM construction, as age and Tink's streaming AEAD do:
+  a key per file from HKDF-SHA256 with a random salt, then 1 MiB chunks
+  sealed with AES-256-GCM under a counter nonce with a last-chunk flag, so
+  chunks cannot be swapped, dropped or cut off unnoticed. Layout: `DDV1`,
+  the 32-byte salt, the chunks.
+- The server keeps the wrapped keys in `.data-den-vault/keys.json` with the
+  SHA-256 of a proof derived from the vault key. New wrapped keys (a new
+  passphrase or recovery key) are only accepted with that proof, so a
+  stolen login session cannot lock the account out of its vault. It accepts
+  only encrypted names and files that start like ciphertext.
+
+API (all with sealed names): `GET /api/vault` → `{"keys"}` (null before the
+setup), `POST /api/vault/keys {"keys", "proof"}`, `GET /api/vault/files?path=`,
+`POST /api/vault/folders {"path"}`, `PUT /api/vault/file?path=` with the
+ciphertext as body, `GET /api/vault/file?path=`, `POST /api/vault/move
+{"from", "to"}` and `POST /api/vault/delete {"path"}`.
+
 ## Android app
 
 The PWA cannot upload in the background, so [android/](android/README.md)

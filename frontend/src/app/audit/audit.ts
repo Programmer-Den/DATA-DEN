@@ -51,6 +51,12 @@ export const ACTIONS: Record<string, string> = {
   'integrity-accept': 'Beschädigte Datei als richtig übernommen',
   'version-restore': 'Ältere Version wiederhergestellt',
   'version-delete': 'Ältere Version gelöscht',
+  'vault-setup': 'Tresor eingerichtet',
+  'vault-keys': 'Tresor-Schlüssel geändert',
+  'vault-upload': 'In den Tresor hochgeladen',
+  'vault-folder': 'Ordner im Tresor angelegt',
+  'vault-move': 'Im Tresor umbenannt',
+  'vault-delete': 'Im Tresor gelöscht',
 };
 
 /** The kinds of entries to pick from, each a list of actions. */
@@ -59,11 +65,11 @@ export const KINDS: { name: string; actions: string }[] = [
   {
     name: 'Dateien geändert',
     actions:
-      'upload,replace,share-upload,create,edit,office,folder,move,version-restore,integrity-accept',
+      'upload,replace,share-upload,create,edit,office,folder,move,version-restore,integrity-accept,vault-upload,vault-folder,vault-move',
   },
   {
     name: 'Gelöscht und wiederhergestellt',
-    actions: 'delete,restore,purge,trash-empty,version-delete',
+    actions: 'delete,restore,purge,trash-empty,version-delete,vault-delete',
   },
   {
     name: 'Geteilt',
@@ -74,7 +80,7 @@ export const KINDS: { name: string; actions: string }[] = [
   {
     name: 'Konten',
     actions:
-      'password,2fa-on,2fa-off,2fa-reset,token-create,token-revoke,tokens-revoke,user-create,user-change,user-delete',
+      'password,2fa-on,2fa-off,2fa-reset,token-create,token-revoke,tokens-revoke,user-create,user-change,user-delete,vault-setup,vault-keys',
   },
 ];
 

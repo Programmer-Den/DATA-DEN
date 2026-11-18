@@ -21,11 +21,13 @@ import { StatusService } from './status/status.service';
 import { TrashView } from './trash/trash';
 import { TeamsView } from './teams/teams';
 import { UsersView } from './users/users';
+import { VaultView } from './vault/vault';
 
 type View =
   | 'files'
   | 'marks'
   | Kind
+  | 'vault'
   | 'shares'
   | 'shared'
   | 'trash'
@@ -70,6 +72,7 @@ export const SETUP_POLL = 1000;
     TeamsView,
     AuditView,
     NotificationsView,
+    VaultView,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -95,6 +98,7 @@ export class App {
     { view: 'photo', name: 'Fotos' },
     { view: 'video', name: 'Videos' },
     { view: 'document', name: 'Dokumente' },
+    { view: 'vault', name: 'Tresor' },
     { view: 'shares', name: 'Freigaben' },
     { view: 'shared', name: 'Geteilt mit mir' },
     { view: 'trash', name: 'Papierkorb' },

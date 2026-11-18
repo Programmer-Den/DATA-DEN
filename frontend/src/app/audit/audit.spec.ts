@@ -54,7 +54,9 @@ describe('AuditView', () => {
     page(fixture).querySelector<HTMLInputElement>('input[name=target]')!.value = ' Fotos ';
     page(fixture).querySelector('form')!.dispatchEvent(new Event('submit'));
     http
-      .expectOne('/api/audit?action=delete,restore,purge,trash-empty,version-delete&target=Fotos')
+      .expectOne(
+        '/api/audit?action=delete,restore,purge,trash-empty,version-delete,vault-delete&target=Fotos',
+      )
       .flush({ entries: [] });
     await fixture.whenStable();
     expect(page(fixture).textContent).toContain('Noch keine Einträge');
