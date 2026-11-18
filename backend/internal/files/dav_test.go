@@ -188,14 +188,14 @@ func TestDavSharedFolderRead(t *testing.T) {
 	if rec := dav(h, "anna", http.MethodGet, root+"%2e%2e/geheim.txt", "", nil); rec.Code == http.StatusOK {
 		t.Errorf("GET out of the folder: %q", rec.Body)
 	}
-	// Only reading.
-	if rec := dav(h, "anna", http.MethodPut, root+"neu.txt", "x", nil); rec.Code < 400 {
+	// Only reading, refused as such, not as a server error.
+	if rec := dav(h, "anna", http.MethodPut, root+"neu.txt", "x", nil); rec.Code < 400 || rec.Code >= 500 {
 		t.Errorf("PUT: status %d", rec.Code)
 	}
-	if rec := dav(h, "anna", http.MethodDelete, root+"a.txt", "", nil); rec.Code < 400 {
+	if rec := dav(h, "anna", http.MethodDelete, root+"a.txt", "", nil); rec.Code < 400 || rec.Code >= 500 {
 		t.Errorf("DELETE: status %d", rec.Code)
 	}
-	if rec := dav(h, "anna", "MKCOL", root+"Neu", "", nil); rec.Code < 400 {
+	if rec := dav(h, "anna", "MKCOL", root+"Neu", "", nil); rec.Code < 400 || rec.Code >= 500 {
 		t.Errorf("MKCOL: status %d", rec.Code)
 	}
 	if exists(data, "Projekt/neu.txt") || !exists(data, "Projekt/a.txt") || exists(data, "Projekt/Neu") {

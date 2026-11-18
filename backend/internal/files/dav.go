@@ -60,7 +60,7 @@ func newDavHandler(prefix string, d davFS) *webdav.Handler {
 	return &webdav.Handler{
 		Prefix:     prefix,
 		FileSystem: d,
-		LockSystem: lockIn{s: d.f.locks(), dir: d.dir, readOnly: d.readOnly},
+		LockSystem: lockIn{s: d.f.locks(), dir: d.dir},
 		Logger: func(r *http.Request, err error) {
 			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				slog.Warn("webdav", "method", r.Method, "path", r.URL.Path, "err", err)
@@ -110,9 +110,6 @@ func (s *spaceLocks) lock(token string) (spaceLock, bool) {
 type lockIn struct {
 	s   *spaceLocks
 	dir string
-	// readOnly refuses new locks: a drive that may only be read must not
-	// keep others from writing.
-	readOnly bool
 }
 
 // full is the name within the space of name within dir.
@@ -154,9 +151,6 @@ func (l lockIn) Confirm(now time.Time, name0, name1 string, conditions ...webdav
 }
 
 func (l lockIn) Create(now time.Time, details webdav.LockDetails) (string, error) {
-	if l.readOnly {
-		return "", webdav.ErrForbidden
-	}
 	details.Root = l.full(details.Root)
 	inner, err := l.s.ls.Create(now, details)
 	if err != nil {
