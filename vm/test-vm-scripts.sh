@@ -200,4 +200,109 @@ expect 0 'APT::Periodic::Unattended-Upgrade "1"' ./setup-updates.sh on --print
 # shellcheck disable=SC2016 # the ${distro_codename} is meant literally
 expect 0 'codename=${distro_codename}-security' ./setup-updates.sh on --print
 
+# Deploys from Windows, with a fake docker that logs its calls. The pool()
+# helper above writes the request as hv_kvp_daemon would.
+deploy="$(mktemp -d)"
+trap 'rm -rf "$events" "$health" "$deploy"' EXIT
+mkdir -p "$deploy/compose" "$deploy/bin"
+# shellcheck disable=SC2016 # the ${DATA_DEN_TAG} is meant literally
+printf 'image: ghcr.io/programmer-den/data-den:${DATA_DEN_TAG:-main}\n' > "$deploy/compose/compose.yaml"
+printf 'x\n' > "$deploy/compose/compose.ocr.yaml"
+printf 'DATA_DEN_USERNAME=den\nDATA_DEN_TAG=main\n' > "$deploy/compose/.env"
+chmod 600 "$deploy/compose/.env"
+printf 'DATA_DEN_COMPOSE_DIR=%s\n' "$deploy/compose" > "$deploy/deploy.env"
+cat > "$deploy/bin/docker" <<'FAKE'
+#!/usr/bin/env bash
+# A fake docker: FAKE_PULL and FAKE_HEALTH choose what pull and the health
+# check answer; every call goes to $FAKE_LOG.
+echo "$*" >> "$FAKE_LOG"
+case "$*" in
+	*' pull '*) exit "${FAKE_PULL:-0}" ;;
+	*' ps -q data-den') echo container1 ;;
+	*'{{.State.Health.Status}}'*) echo "${FAKE_HEALTH:-healthy}" ;;
+	*'{{.Image}}'*) echo sha256:old ;;
+	*'{{.Config.Image}}'*) echo ghcr.io/programmer-den/data-den:main ;;
+	*'image.version'*) echo 1.2.3 ;;
+esac
+exit 0
+FAKE
+chmod +x "$deploy/bin/docker"
+fake_pull=0
+fake_health=healthy
+# shellcheck disable=SC2329 # called through expect
+run_deploy() {
+	env FAKE_PULL="$fake_pull" FAKE_HEALTH="$fake_health" DATA_DEN_KVP_POOL="$health/pool" DATA_DEN_KVP_RESULT_POOL="$deploy/result-pool" \
+		DATA_DEN_STATE_DIR="$deploy/state" DATA_DEN_DEPLOY_SETTINGS="$deploy/deploy.env" \
+		DATA_DEN_DOCKER="$deploy/bin/docker" DATA_DEN_HEALTH_SECONDS=0 FAKE_LOG="$deploy/log" ./deploy.sh "$@"
+}
+# expect_result PATTERN: the result handed back to Windows contains PATTERN.
+expect_result() {
+	local got
+	got="$(tr '\0' '\n' < "$deploy/result-pool" | grep -v '^$' || true)"
+	if ! grep -qF -- "$1" <<< "$got"; then
+		printf '[FAIL] deploy.sh handed back\n%s\nwanted "%s"\n' "$got" "$1" >&2
+		failed=1
+	else
+		printf '[PASS] deploy.sh hands back "%s"\n' "$1"
+	fi
+}
+expect 2 'Usage' run_deploy --now
+pool Other x
+expect 0 'not handed over' run_deploy
+pool DataDenDiskHealth x DataDenDeploy "id=../x
+tag=main"
+expect 1 'not understood' run_deploy
+pool DataDenDeploy "id=100-1
+tag=1.2.3"
+expect 0 '1.2.3' run_deploy
+expect_result 'id=100-1'
+expect_result 'status=ok'
+expect_result "runs '1.2.3' (version 1.2.3)"
+expect 0 'DATA_DEN_TAG=1.2.3' cat "$deploy/compose/.env"
+expect 0 'DATA_DEN_USERNAME=den' cat "$deploy/compose/.env"
+expect 0 '600' stat -c %a "$deploy/compose/.env"
+expect 0 'compose -f compose.yaml -f compose.ocr.yaml pull --quiet data-den' cat "$deploy/log"
+# The same request again does nothing.
+: > "$deploy/log"
+expect 0 '' run_deploy
+expect 0 '' test ! -s "$deploy/log"
+pool DataDenDeploy "id=101-1
+tag=Bad;tag"
+expect 1 'not an image tag' run_deploy
+expect_result 'status=failed'
+pool DataDenDeploy "id=102-1
+tag=2.0.0"
+fake_pull=1
+expect 1 'Pulling' run_deploy
+fake_pull=0
+expect 0 'DATA_DEN_TAG=1.2.3' cat "$deploy/compose/.env"
+pool DataDenDeploy "id=103-1
+tag=2.0.0"
+fake_health=unhealthy
+expect 1 "runs 'main' again" run_deploy
+fake_health=healthy
+expect 0 'tag sha256:old ghcr.io/programmer-den/data-den:main' cat "$deploy/log"
+expect 0 'DATA_DEN_TAG=main' cat "$deploy/compose/.env"
+expect_result 'id=103-1'
+if [[ "$(grep -c DataDenDeployResult "$deploy/result-pool")" -ne 1 ]]; then
+	echo '[FAIL] deploy.sh kept more than one result' >&2
+	failed=1
+fi
+pool DataDenDeploy "id=104-1
+tag=3.0.0"
+expect 0 '' run_deploy --skip-current
+expect 0 '' run_deploy
+expect_result 'id=103-1'
+
+expect 2 'Usage' ./setup-deploy.sh
+expect 2 'Usage' ./setup-deploy.sh on
+expect 2 'Usage' ./setup-deploy.sh on /a /b
+expect 2 'Usage' ./setup-deploy.sh off now
+# shellcheck disable=SC2016 # the $(id) is meant literally
+for bad in relative/data-den '/home/den/$(id)' '/home/den data' ''; do
+	expect 2 'not an absolute folder' ./setup-deploy.sh on --print "$bad"
+done
+expect 2 'has . or ..' ./setup-deploy.sh on --print /home/den/../root
+expect 0 'DATA_DEN_COMPOSE_DIR=/home/den/data-den' ./setup-deploy.sh on --print /home/den/data-den/
+
 exit "$failed"

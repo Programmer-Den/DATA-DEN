@@ -35,6 +35,10 @@ optional backup: [Backup (optional)](#backup-optional).
 | `disk-health.sh`, `data-den-disk-health.service`, `data-den-disk-health.timer` | the VM, installed by `setup-disk-health.sh` | Reads the disk health from Windows and notifies the admins when it changes |
 | `backup.sh`, `data-den-backup.service`, `data-den-backup.timer` | the VM, installed by `setup-backup.sh` | The nightly backup run with restic |
 | `backup-result.sh`, `event.sh` | the VM, installed by `setup-backup.sh` (`event.sh` also by `setup-disk-health.sh`) | Hand a failed backup run or a bad disk to DATA-DEN, which notifies the admins |
+| `Deploy-DataDen.ps1` | Windows, as administrator | Hands a new DATA-DEN version to the VM and waits for its answer; `-Install` lets a runner's account start deploys ([deploy/README.md](../deploy/README.md#deploy-from-windows)) |
+| `setup-deploy.sh` | the VM, as root | Switches deploys from Windows on or off, or shows the last one |
+| `deploy.sh`, `data-den-deploy.path`, `data-den-deploy.service` | the VM, installed by `setup-deploy.sh` | Pulls the version Windows handed over, restarts DATA-DEN with it, goes back when it does not get healthy |
+| `DataDenKvp.ps1` | Windows, dot-sourced by `Watch-DataDenDisks.ps1` and `Deploy-DataDen.ps1` | Hyper-V's key-value exchange with the VM |
 | `test-vm-scripts.sh` | CI | Tests the checks of the shell scripts |
 
 ## Before you start

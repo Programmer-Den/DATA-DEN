@@ -206,8 +206,66 @@ sudo docker compose pull && sudo docker compose up -d
 sudo docker image prune -f
 ```
 
+`DATA_DEN_TAG` in `.env` picks the version: `main` (the default), a release
+such as `1.2.3`, or one commit such as `sha-abc1234`. Without SSH into the
+VM, deploy from Windows instead (below).
+
 With office documents, text recognition or faces and things: `sudo docker compose -f compose.yaml -f compose.office.yaml -f compose.ocr.yaml -f compose.vision.yaml pull`
 (only the files you use) and `... up -d` the same way.
 
 `sudo docker compose logs -f` shows what the server does, including the
 failed logins.
+
+## Deploy from Windows
+
+The PC can put a new version into service without any network into the
+VM: `vm/Deploy-DataDen.ps1` hands the image tag over Hyper-V's key-value
+exchange, the same way as the [disk health](../vm/README.md#disk-health).
+In the VM, `vm/deploy.sh` then pulls that image, restarts DATA-DEN with it
+and waits until it is healthy. When it does not get healthy within three
+minutes, it starts the image that ran before again. The answer goes back to
+Windows the same way, so the script shows whether it worked.
+
+Once, in the VM, with the folder that holds `compose.yaml` and `.env` (copy
+the newest `compose.yaml` there first, it takes the version from
+`DATA_DEN_TAG`):
+
+```bash
+sudo vm/setup-deploy.sh on /home/<you>/data-den
+sudo vm/setup-deploy.sh status        # on or off, and the last deploy's answer
+```
+
+Then on the PC, in PowerShell as administrator:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File vm\Deploy-DataDen.ps1 -Tag main        # or 1.2.3, sha-abc1234
+```
+
+It pulls only DATA-DEN's own image; the optional containers are updated as
+above. Each deploy is logged in the VM: `journalctl -u data-den-deploy`.
+
+### From a self-hosted runner
+
+A GitHub Actions runner on the PC can start deploys too, without being an
+administrator and without Hyper-V rights: give it its own local account, and
+let that account start deploys:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File vm\Deploy-DataDen.ps1 -Install -RunnerAccount <the runner's account>
+```
+
+This registers the scheduled task **DATA-DEN deploy**, which runs a copy of
+the script from `C:\Program Files\DATA-DEN` as SYSTEM. The account may only
+start that task and write a request into
+`C:\ProgramData\DATA-DEN\deploy\request\request.txt` (two lines, `id=<run
+id>` and `tag=<image tag>`); it reads the answer from
+`...\deploy\result\result.txt` (its first line `id=`, then
+`status=ok` or `status=failed`). A job does that with:
+
+```powershell
+Set-Content C:\ProgramData\DATA-DEN\deploy\request\request.txt "id=$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT`ntag=main"
+schtasks /Run /TN "DATA-DEN deploy"
+```
+
+Run `-Install` again after pulling a new version of this repository, so the
+task runs the new script. `-Uninstall` removes the task and its folders.

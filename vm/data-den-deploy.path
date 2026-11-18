@@ -1,0 +1,12 @@
+# Starts data-den-deploy.service whenever Windows hands something over
+# through Hyper-V's key-value exchange (Deploy-DataDen.ps1 on the PC).
+# setup-deploy.sh switches it on and off. Guide: deploy/README.md#deploy-from-windows
+[Unit]
+Description=DATA-DEN deploy from Windows
+After=hv-kvp-daemon.service
+
+[Path]
+PathChanged=/var/lib/hyperv/.kvp_pool_0
+
+[Install]
+WantedBy=paths.target

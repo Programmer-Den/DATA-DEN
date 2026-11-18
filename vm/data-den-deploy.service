@@ -1,0 +1,16 @@
+# Puts the DATA-DEN version that Windows hands over into service;
+# data-den-deploy.path starts it. Installed by setup-deploy.sh.
+# Guide: deploy/README.md#deploy-from-windows
+[Unit]
+Description=DATA-DEN deploy from Windows
+After=hv-kvp-daemon.service docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/data-den-deploy
+StateDirectory=data-den
+# Pulling a new image can take a while on a slow line.
+TimeoutStartSec=30min
+PrivateTmp=true
+ProtectSystem=full

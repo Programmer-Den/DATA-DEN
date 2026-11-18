@@ -1,7 +1,9 @@
 # DATA-DEN in the storage VM. Guide: deploy/README.md
 services:
   data-den:
-    image: ghcr.io/programmer-den/data-den:main
+    # DATA_DEN_TAG in .env picks the version, such as 1.2.3 or sha-abc1234;
+    # vm/deploy.sh sets it on a deploy from Windows.
+    image: ghcr.io/programmer-den/data-den:${DATA_DEN_TAG:-main}
     restart: unless-stopped
     # The host's network, not a published port: Docker's rules for published
     # ports would skip the VM's nftables, which only let the Pi in.
