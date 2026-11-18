@@ -234,11 +234,12 @@ func TestOwnerAccount(t *testing.T) {
 
 	// Else from the setup page's file.
 	t.Setenv("DATA_DEN_PASSWORD_HASH", "")
-	if err := auth.SaveOwner(ownerFile(dir), "anna", "$2a$04$file"); err != nil {
+	hash := "$2a$04$" + strings.Repeat("f", 53)
+	if err := auth.SaveOwner(ownerFile(dir), "anna", hash); err != nil {
 		t.Fatal(err)
 	}
 	owner, file, err = ownerAccount(t.Context(), dir, stat)
-	if err != nil || owner == nil || owner.Name != "anna" || owner.PasswordHash != "$2a$04$file" || file != ownerFile(dir) {
+	if err != nil || owner == nil || owner.Name != "anna" || owner.PasswordHash != hash || file != ownerFile(dir) {
 		t.Errorf("file: %+v %q %v", owner, file, err)
 	}
 }

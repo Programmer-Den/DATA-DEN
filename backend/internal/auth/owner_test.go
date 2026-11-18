@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestLoadOwner(t *testing.T) {
@@ -13,16 +15,20 @@ func TestLoadOwner(t *testing.T) {
 	if name, hash, err := LoadOwner(file); err != nil || name != "" || hash != "" {
 		t.Errorf("no file: %q %q %v, want nothing", name, hash, err)
 	}
-	if err := SaveOwner(file, "chriszly", "$2a$04$hash"); err != nil {
+	saved, err := bcrypt.GenerateFromPassword([]byte("richtig"), bcrypt.MinCost)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if name, hash, err := LoadOwner(file); err != nil || name != "chriszly" || hash != "$2a$04$hash" {
+	if err := SaveOwner(file, "chriszly", string(saved)); err != nil {
+		t.Fatal(err)
+	}
+	if name, hash, err := LoadOwner(file); err != nil || name != "chriszly" || hash != string(saved) {
 		t.Errorf("saved: %q %q %v", name, hash, err)
 	}
 	if info, err := os.Stat(file); err != nil || info.Mode().Perm() != 0o600 {
 		t.Errorf("mode %v %v, want 0600", info.Mode(), err)
 	}
-	for _, broken := range []string{"{", `{"name":"Not Valid","passwordHash":"x"}`, `{"name":"chriszly"}`} {
+	for _, broken := range []string{"{", `{"name":"Not Valid","passwordHash":"x"}`, `{"name":"chriszly"}`, `{"name":"chriszly","passwordHash":"$2a$04$cut"}`} {
 		if err := os.WriteFile(file, []byte(broken), 0o600); err != nil {
 			t.Fatal(err)
 		}
