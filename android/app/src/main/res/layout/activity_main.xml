@@ -130,6 +130,12 @@
             android:text="@string/upload_now" />
 
         <Button
+            android:id="@+id/open_tresor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/open_tresor" />
+
+        <Button
             android:id="@+id/sign_out"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

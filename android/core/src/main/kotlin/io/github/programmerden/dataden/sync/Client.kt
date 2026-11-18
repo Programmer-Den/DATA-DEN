@@ -90,18 +90,18 @@ class DataDenClient(
         return call(request).long("offset") ?: throw IOException("Unerwartete Antwort des Servers")
     }
 
-    private fun url(path: String): HttpUrl = base.newBuilder().addPathSegments(path).build()
+    internal fun url(path: String): HttpUrl = base.newBuilder().addPathSegments(path).build()
 
-    private fun execute(request: Request.Builder): Response =
+    internal fun execute(request: Request.Builder): Response =
         http.newCall(request.header("Authorization", "Bearer $token").build()).execute()
 
-    private fun call(request: Request.Builder): JsonObject = execute(request).use { response ->
+    internal fun call(request: Request.Builder): JsonObject = execute(request).use { response ->
         val text = response.body.string()
         if (!response.isSuccessful) throw error(response, text)
         parse(text) ?: throw IOException("Unerwartete Antwort des Servers")
     }
 
-    private fun error(response: Response, text: String): ApiException {
+    internal fun error(response: Response, text: String): ApiException {
         val body = parse(text)
         val message = body?.string("error") ?: "Fehler ${response.code}"
         return when (response.code) {

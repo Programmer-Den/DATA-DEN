@@ -2,6 +2,7 @@ package io.github.programmerden.dataden
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
@@ -36,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var message: TextView
     private lateinit var statusText: TextView
     private lateinit var uploadNow: Button
+    private lateinit var openTresor: Button
     private lateinit var signOut: Button
 
     private val statusChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> showStatus() }
@@ -58,6 +60,7 @@ class MainActivity : Activity() {
         message = findViewById(R.id.message)
         statusText = findViewById(R.id.status)
         uploadNow = findViewById(R.id.upload_now)
+        openTresor = findViewById(R.id.open_tresor)
         signOut = findViewById(R.id.sign_out)
 
         if (savedInstanceState == null) {
@@ -71,8 +74,10 @@ class MainActivity : Activity() {
         }
         save.setOnClickListener { connect() }
         uploadNow.setOnClickListener { background.execute { Sync.kick(applicationContext) } }
+        openTresor.setOnClickListener { startActivity(Intent(this, TresorActivity::class.java)) }
         signOut.setOnClickListener {
             settings.signOut()
+            Tresor.lock()
             status.reset()
             background.execute { Sync.stop(applicationContext) }
             message.setText(R.string.signed_out)
@@ -196,6 +201,7 @@ class MainActivity : Activity() {
         val connected = settings.connected
         token.hint = getString(if (connected) R.string.token_saved else R.string.token_hint)
         uploadNow.visibility = if (connected) View.VISIBLE else View.GONE
+        openTresor.visibility = if (connected) View.VISIBLE else View.GONE
         signOut.visibility = if (connected) View.VISIBLE else View.GONE
         if (connected && message.text.isEmpty()) message.text = getString(R.string.connected, settings.username)
         if (!connected && message.text.isEmpty()) message.setText(R.string.not_connected)
