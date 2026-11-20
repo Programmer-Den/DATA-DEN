@@ -19,6 +19,9 @@ flowchart LR
 - **DATA-DEN:** this repository, the web interface and its API, as one
   Docker image running in the VM: [deploy/README.md](deploy/README.md).
 
+Eine deutsche Schritt-für-Schritt-Anleitung für die ganze Einrichtung, mit
+Checkliste für den ersten Test: [docs/de/einrichtung.md](docs/de/einrichtung.md).
+
 The server serves the website, `/api/health`, the login, the folder view,
 downloads, uploads and a status page.
 
