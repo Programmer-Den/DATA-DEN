@@ -93,7 +93,7 @@ export function checkList(checks: Checks, origin: string): Check[] {
       : {
           ok: false,
           text: `Diese Seite ist ohne HTTPS geöffnet (${url.host})`,
-          hint: 'DATADEN_DOMAIN in der rpi-setup.env des Pi setzen und die Seite über https:// öffnen',
+          hint: 'GATEWAY_DOMAIN in der rpi-setup.env des Pi setzen und die Seite über https:// öffnen',
         },
   );
   return list;
