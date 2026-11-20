@@ -69,7 +69,7 @@ Compose reads its `$` signs as variables.
 | `DATA_DEN_USERNAME` | The owner's account name, used together with the hash |
 | `DATA_DEN_PASSWORD_HASH` | The hash from `hash-password`; without it the owner comes from the [setup page](#first-run) |
 | `DATA_DEN_TRUSTED_PROXY` | The Pi's address; only for requests from it is `X-Forwarded-For` the client's address |
-| `DATA_DEN_ORIGIN` | The address DATA-DEN is opened at, such as `https://nas.example.de` (`https://` and the Pi's `DATADEN_DOMAIN`); [passkeys](#passkeys) only work there. Without it there are no passkeys |
+| `DATA_DEN_ORIGIN` | The address DATA-DEN is opened at, such as `https://nas.example.de` (`https://` and the Pi's `GATEWAY_DOMAIN`); [passkeys](#passkeys) only work there. Without it there are no passkeys |
 | `DATA_DEN_DATA_DIR` | The data directory, default `/data`; in the storage VM the mirror at `/srv/data-den` |
 | `DATA_DEN_TRASH_DAYS` | How many days, 1 to 3650, a deleted item stays in the recycle bin before it is deleted for good; default 30 |
 | `DATA_DEN_DISK_WARN_PERCENT` | Warn when less than this share of the disk is free, in percent; default `10` |
